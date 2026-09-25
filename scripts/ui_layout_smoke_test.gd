@@ -6683,15 +6683,17 @@ func check_top_seat_clearance(scene, viewport_size: Vector2, page_label: String)
 	var seat_shadow := scene.find_child("SeatPanel3DCastShadow_2", true, false) as Control
 	var hud := scene.find_child("TopHud3DShell", true, false) as Control
 	var hud_shadow := scene.find_child("TopHud3DCastShadow", true, false) as Control
-	var top_wall := scene.find_child("WallBackStrip_h_16_0", true, false) as Control
-	check(panel != null and seat_shadow != null and hud != null and hud_shadow != null and top_wall != null, "%s exposes top seat, HUD, and top wall surfaces at %s" % [page_label, viewport_size])
-	if panel == null or seat_shadow == null or hud == null or hud_shadow == null or top_wall == null:
+	check(panel != null and seat_shadow != null and hud != null and hud_shadow != null, "%s exposes top seat and HUD surfaces at %s" % [page_label, viewport_size])
+	if panel == null or seat_shadow == null or hud == null or hud_shadow == null:
 		return
 	var panel_rect := screen_rect(panel)
 	var shadow_rect := screen_rect(seat_shadow)
 	var hud_rect := screen_rect(hud)
 	var hud_shadow_rect := screen_rect(hud_shadow)
-	var top_wall_rect := screen_rect(top_wall)
+	var top_wall_layout: Array = scene.WALL_LAYOUTS[0]
+	var top_wall_local_rect := Rect2(top_wall_layout[0], top_wall_layout[1] - top_wall_layout[0])
+	var top_wall_root_rect: Rect2 = scene.battle_table_anchor_root_rect(top_wall_local_rect, viewport_size)
+	var top_wall_rect := anchor_rect_in_parent(screen_rect(scene.root_layer), top_wall_root_rect)
 	check(not rects_overlap(panel_rect, hud_rect) and not rects_overlap(panel_rect, hud_shadow_rect), "%s top seat plaque clears the HUD and its shadow at %s" % [page_label, viewport_size])
 	check(not rects_overlap(shadow_rect, hud_rect) and not rects_overlap(shadow_rect, hud_shadow_rect), "%s top seat shadow clears the HUD reading surface at %s" % [page_label, viewport_size])
 	check(not rects_overlap(panel_rect, top_wall_rect) and not rects_overlap(shadow_rect, top_wall_rect), "%s top seat plaque clears the upper wall at %s" % [page_label, viewport_size])
