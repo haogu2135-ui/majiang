@@ -52,13 +52,14 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 		terminal_step,
 	])
 	for item in window:
-		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d wait=%d/%d/%.1f thin_guard=%s safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d score=%.1f avoid=%s gain=%.1f hard2=%s safe=%s gap=%.1f gain=%.1f moved=%s fast_safe=%s" % [
+		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f humanRisk=%.1f sh=%d wait=%d/%d/%.1f thin_guard=%s safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/r%.1f/sh%d score=%.1f avoid=%s gain=%.1f hard2=%s safe=%s gap=%.1f gain=%.1f moved=%s fast_safe=%s" % [
 			int(item.get("step", -1)),
 			int(item.get("seat", -1)),
 			str(item.get("tile", "")),
 			float(item.get("risk", 0.0)),
 			float(item.get("feed", 0.0)),
 			float(item.get("human_pressure", 0.0)),
+			float(item.get("human_risk", 0.0)),
 			int(item.get("shanten", -1)),
 			int(item.get("wait_best_points", 0)),
 			int(item.get("wait_total_remaining", 0)),
@@ -74,6 +75,7 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 			float(item.get("safest_risk", 0.0)),
 			float(item.get("safest_feed", 0.0)),
 			float(item.get("safest_human_pressure", 0.0)),
+			float(item.get("safest_human_risk", 0.0)),
 			int(item.get("safest_shanten", -1)),
 			float(item.get("safest_score", 0.0)),
 			str(item.get("avoidable_candidate_tile", "")),
@@ -88,12 +90,13 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 		for guard_candidate in item.get("hard_guard_candidates", []):
 			if typeof(guard_candidate) != TYPE_DICTIONARY:
 				continue
-			print("        guard_candidate=%s sh_delta=%d risk=%.1f feed=%.1f human=%.1f safety=%s gap=%.1f/%.1f gain=%.1f/%.1f reject=%s" % [
+			print("        guard_candidate=%s sh_delta=%d risk=%.1f feed=%.1f human=%.1f humanRisk=%.1f safety=%s gap=%.1f/%.1f gain=%.1f/%.1f reject=%s" % [
 				str(guard_candidate.get("tile", "")),
 				int(guard_candidate.get("shanten_delta", 0)),
 				float(guard_candidate.get("risk", 0.0)),
 				float(guard_candidate.get("feed_risk", 0.0)),
 				float(guard_candidate.get("human_target_pressure", 0.0)),
+				float(guard_candidate.get("human_target_risk", 0.0)),
 				str(guard_candidate.get("safety_label", "")),
 				float(guard_candidate.get("score_gap", 0.0)),
 				float(guard_candidate.get("max_score_gap", 0.0)),
@@ -104,11 +107,12 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 		for fast_candidate in item.get("fast_candidates", []):
 			if typeof(fast_candidate) != TYPE_DICTIONARY:
 				continue
-			print("        fast_candidate=%s sh=%d risk=%.1f human=%.1f feed=%.1f human_feed=%.1f safety=%s rank=%.1f cheap=%.1f retained=%s safest=%s" % [
+			print("        fast_candidate=%s sh=%d risk=%.1f human=%.1f humanRisk=%.1f feed=%.1f human_feed=%.1f safety=%s rank=%.1f cheap=%.1f retained=%s safest=%s" % [
 				str(fast_candidate.get("tile", "")),
 				int(fast_candidate.get("shanten", 8)),
 				float(fast_candidate.get("risk", 0.0)),
 				float(fast_candidate.get("human_pressure", 0.0)),
+				float(fast_candidate.get("human_risk", 0.0)),
 				float(fast_candidate.get("feed_score", 0.0)),
 				float(fast_candidate.get("human_feed", 0.0)),
 				str(fast_candidate.get("safety", "")),
