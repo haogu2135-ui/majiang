@@ -3009,6 +3009,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check_top_hud_buttons(scene, actual_viewport)
 	check_compact_seat_panels(scene, actual_viewport)
+	check_top_seat_clearance(scene, actual_viewport, "offline")
 	check_battle_round_contracts(scene, actual_viewport)
 	check_ui_round_801_830(scene, actual_viewport)
 	check_ui_round_831_860(scene, actual_viewport)
@@ -3032,6 +3033,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	scene.draw_hand(scene.root_layer)
 	scene.draw_actions(scene.root_layer)
 	await process_frame
+	check_top_seat_clearance(scene, actual_viewport, "online pending")
 	check_online_score_strip_contract(scene, actual_viewport)
 	check_pending_claim_action_bar(scene, actual_viewport)
 	await check_online_pending_claim_layout(scene, actual_viewport)
@@ -6675,6 +6677,25 @@ func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(forecast_body).position.y >= claim_rect.end.y + 4.0, "daily login forecast body clears claim button at %s" % viewport_size)
 	if tip_label != null:
 		check(tip_label.clip_text, "daily login compatibility tip label remains clipped at %s" % viewport_size)
+
+func check_top_seat_clearance(scene, viewport_size: Vector2, page_label: String) -> void:
+	var panel := scene.find_child("SeatPanel_2", true, false) as Control
+	var seat_shadow := scene.find_child("SeatPanel3DCastShadow_2", true, false) as Control
+	var hud := scene.find_child("TopHud3DShell", true, false) as Control
+	var hud_shadow := scene.find_child("TopHud3DCastShadow", true, false) as Control
+	var top_wall := scene.find_child("WallBackStrip_h_16_0", true, false) as Control
+	check(panel != null and seat_shadow != null and hud != null and hud_shadow != null and top_wall != null, "%s exposes top seat, HUD, and top wall surfaces at %s" % [page_label, viewport_size])
+	if panel == null or seat_shadow == null or hud == null or hud_shadow == null or top_wall == null:
+		return
+	var panel_rect := screen_rect(panel)
+	var shadow_rect := screen_rect(seat_shadow)
+	var hud_rect := screen_rect(hud)
+	var hud_shadow_rect := screen_rect(hud_shadow)
+	var top_wall_rect := screen_rect(top_wall)
+	check(not rects_overlap(panel_rect, hud_rect) and not rects_overlap(panel_rect, hud_shadow_rect), "%s top seat plaque clears the HUD and its shadow at %s" % [page_label, viewport_size])
+	check(not rects_overlap(shadow_rect, hud_rect) and not rects_overlap(shadow_rect, hud_shadow_rect), "%s top seat shadow clears the HUD reading surface at %s" % [page_label, viewport_size])
+	check(not rects_overlap(panel_rect, top_wall_rect) and not rects_overlap(shadow_rect, top_wall_rect), "%s top seat plaque clears the upper wall at %s" % [page_label, viewport_size])
+
 
 func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 	for seat_layout in scene.SEAT_LAYOUTS:

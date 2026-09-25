@@ -1496,7 +1496,7 @@ const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.
 const TABLE_INNER_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.965, 0.955))
 const TABLE_INNER_TEXTURE_RECT := Rect2(Vector2(0.012, 0.016), Vector2(0.988, 0.984))
 const SEAT_LAYOUTS := [
-	[2, Rect2(Vector2(0.395, 0.050), Vector2(0.605, 0.125)), "top"],
+	[2, Rect2(Vector2(0.720, 0.120), Vector2(0.930, 0.195)), "top"],
 	[3, Rect2(Vector2(0.020, 0.335), Vector2(0.115, 0.505)), "left"],
 	[1, Rect2(Vector2(0.885, 0.335), Vector2(0.980, 0.505)), "right"],
 	[0, Rect2(Vector2(0.020, 0.745), Vector2(0.174, 0.950)), "bottom"],
