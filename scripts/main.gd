@@ -2402,7 +2402,7 @@ func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_re
 	var threat_index := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	var threat_tile := str(TILE_CODES[threat_index]) if threat_index >= 0 and threat_index < TILE_CODES.size() else tile
 	var human_threat := 0.0
-	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0:
+	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0 and not is_passed_win_tile(0, threat_tile):
 		human_threat = opponent_pattern_threat_score(0, threat_tile, visible, eval_context, threat_index)
 	var readiness := float(eval_context.get("discard_report_human_readiness", -1.0)) if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat else -1.0
 	if readiness < 0.0:
@@ -2449,7 +2449,7 @@ func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, sh
 	var visible := visible_override if visible_override >= 0 else visible_tile_count(tile)
 	var threat_tile := str(TILE_CODES[index]) if index >= 0 and index < TILE_CODES.size() else tile
 	var human_threat := 0.0
-	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0:
+	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0 and not is_passed_win_tile(0, threat_tile):
 		human_threat = opponent_pattern_threat_score(0, threat_tile, visible, eval_context, index)
 	if risk < AI_DANGER_RISK_SOFT and readiness < 8.0 and human_threat < 6.0:
 		return 0.0
@@ -5692,7 +5692,7 @@ func opponent_tile_threat_score(tile: String, seat: int, visible_counts_snapshot
 	for other in range(players.size()):
 		if other == seat:
 			continue
-		if opponent_discard_tile_count(other, tile, eval_context) > 0:
+		if opponent_discard_tile_count(other, tile, eval_context) > 0 or is_passed_win_tile(other, tile):
 			continue
 		total += opponent_pattern_threat_score(other, tile, visible, eval_context, tile_index_snapshot)
 	return total
@@ -55881,7 +55881,7 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 		return
 	var tile_index_value := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	var lookup_tile := str(TILE_CODES[tile_index_value]) if tile_index_value >= 0 and tile_index_value < TILE_CODES.size() else tile
-	if opponent_discard_tile_count(opponent, lookup_tile, eval_context) > 0:
+	if opponent_discard_tile_count(opponent, lookup_tile, eval_context) > 0 or is_passed_win_tile(opponent, lookup_tile):
 		return
 	# Report batches already capture visibility once. Reuse that immutable state
 	# instead of repeatedly traversing every live discard and meld collection.

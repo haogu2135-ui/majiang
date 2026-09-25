@@ -7510,7 +7510,7 @@ func write_single_opponent_deal_in_risk_components(result: Dictionary, tile: Str
 		return
 	var tile_index_value := tile_index_snapshot if tile_index_snapshot != -2 else tile_index(tile)
 	var lookup_tile := str(TILE_CODES[tile_index_value]) if tile_index_value >= 0 and tile_index_value < TILE_CODES.size() else tile
-	if opponent_discard_tile_count(opponent, lookup_tile, eval_context) > 0:
+	if opponent_discard_tile_count(opponent, lookup_tile, eval_context) > 0 or is_passed_win_tile(opponent, lookup_tile):
 		return
 	# Report batches already capture visibility once. Reuse that immutable state
 	# instead of repeatedly traversing every live discard and meld collection.

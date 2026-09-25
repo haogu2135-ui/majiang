@@ -81,6 +81,20 @@ func run() -> void:
 	var discarded_full_pressure: float = scene.human_target_discard_pressure(1, "5B", 20.0, {}, 2, discarded_context, human_tile_index)
 	var expected_discarded_full_pressure: float = max(0.0, 20.0 - 10.0) * 0.35 + discarded_readiness * 1.15
 	check(is_equal_approx(discarded_full_pressure, expected_discarded_full_pressure), "full pressure ignores a player-discarded ron tile")
+	scene.players[0]["discards"].clear()
+	scene.offline_passed_win_tiles.clear()
+	scene.record_passed_win_tile(0, "1W")
+	var passed_visible_counts: Array = scene.visible_tile_counts_shared()
+	var passed_context: Dictionary = scene.make_ai_evaluation_context(1, passed_visible_counts)
+	var passed_readiness: float = float(passed_context.get("discard_report_human_readiness", 0.0))
+	var passed_fast_pressure: float = scene.fast_human_target_discard_pressure(1, "5B", 20.0, 2, passed_context, passed_readiness, scene.visible_tile_count("5B"), human_tile_index)
+	var expected_passed_fast_pressure: float = max(0.0, 20.0 - 10.0) * 0.36 + passed_readiness * 1.05
+	check(is_equal_approx(passed_fast_pressure, expected_passed_fast_pressure), "fast pressure ignores a temporarily furiten player")
+	var passed_full_pressure: float = scene.human_target_discard_pressure(1, "5B", 20.0, {}, 2, passed_context, human_tile_index)
+	var expected_passed_full_pressure: float = max(0.0, 20.0 - 10.0) * 0.35 + passed_readiness * 1.15
+	check(is_equal_approx(passed_full_pressure, expected_passed_full_pressure), "full pressure ignores a temporarily furiten player")
+	var passed_risk_components: Dictionary = scene.single_opponent_deal_in_risk_components("5B", 1, 0, scene.visible_tile_count("5B"), passed_visible_counts, passed_context, human_tile_index)
+	check(is_equal_approx(float(passed_risk_components.get("risk", -1.0)), 0.0), "ron-risk vector excludes a temporarily furiten player")
 
 	var high_risk_two_away: Dictionary = {
 		"tile": "3B",
