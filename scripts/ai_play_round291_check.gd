@@ -52,7 +52,7 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 		terminal_step,
 	])
 	for item in window:
-		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d avoid=%s gain=%.1f hard2=%s catastrophe=%s moved=%s fast_safe=%s" % [
+		print("      step=%d seat=%d tile=%s risk=%.1f feed=%.1f human=%.1f sh=%d safety=%s score=%.1f best=%s/%.1f/%.1f/sh%d safest=%s/%.1f/%.1f/h%.1f/sh%d score=%.1f avoid=%s gain=%.1f hard2=%s safe=%s gap=%.1f gain=%.1f moved=%s fast_safe=%s" % [
 			int(item.get("step", -1)),
 			int(item.get("seat", -1)),
 			str(item.get("tile", "")),
@@ -71,10 +71,13 @@ func print_terminal_window(seed_base: int, difficulty: int, hand_index: int, res
 			float(item.get("safest_feed", 0.0)),
 			float(item.get("safest_human_pressure", 0.0)),
 			int(item.get("safest_shanten", -1)),
+			float(item.get("safest_score", 0.0)),
 			str(item.get("avoidable_candidate_tile", "")),
 			float(item.get("avoidable_pressure_gain", 0.0)),
 			str(item.get("hard_guard_two_away", false)),
-			str(item.get("hard_guard_catastrophe_two_away", false)),
+			str(item.get("hard_guard_safe_tile", "")),
+			float(item.get("hard_guard_safe_score_gap", 0.0)),
+			float(item.get("hard_guard_safe_pressure_gain", 0.0)),
 			str(item.get("hard_guard_moved", false)),
 			str(item.get("fast_safety_preserved", false)),
 		])
@@ -94,6 +97,9 @@ func run() -> void:
 	scene.ensure_ai_benchmark_players()
 	scene.ai_sim_trace_enabled = true
 	var seeds: Array[int] = [20260701, 20260753, 20260805, 20260819, 20260843]
+	var requested_seed_arguments := OS.get_cmdline_user_args()
+	if not requested_seed_arguments.is_empty():
+		seeds = [int(requested_seed_arguments[0])]
 	var probe_rons := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
 	for seed_base in seeds:
 		for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
