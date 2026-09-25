@@ -2226,7 +2226,7 @@ func score_context_report_cached(seat: int) -> Dictionary:
 	var lead_gap = score - second_score if rank == 1 else score - leader_score
 	var target_rank := 0
 	var target_seat := -1
-	var target_score := score
+	var target_score: int = score
 	if rank == 1 and ranked.size() > 1:
 		target_rank = 2
 		target_seat = int(ranked[1])
@@ -2235,7 +2235,7 @@ func score_context_report_cached(seat: int) -> Dictionary:
 		target_rank = rank - 1
 		target_seat = int(ranked[rank - 2])
 		target_score = int(players[target_seat].get("score", 0))
-	var target_gap = score - target_score
+	var target_gap: int = score - target_score
 	var late = clamp((float(offline_hand_number) - float(MATCH_MAX_HANDS - 3)) / 3.0, 0.0, 1.0)
 	var strategy = "均衡"
 	if late > 0.0 and rank == 1 and lead_gap >= 1200:
