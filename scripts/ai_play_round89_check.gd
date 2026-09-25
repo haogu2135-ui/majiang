@@ -102,7 +102,7 @@ func run() -> void:
 		var hard_wins: Array = hard_stats.get("wins_by_seat", [])
 		var easy_score_delta: Array = easy_stats.get("score_delta_by_seat", [])
 		var hard_score_delta: Array = hard_stats.get("score_delta_by_seat", [])
-		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f probeWins=%d/%d probeScore=%+d/%+d humanClaimDeclines=%d/%d" % [
+		print("    seed=%s probe=%s/%s ok=%s integrity=%s score=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD=%.3f/%.3f humanRon=%.2f/%.2f probeWins=%d/%d probeScore=%+d/%+d seatWins=%s/%s humanClaimDeclines=%d/%d" % [
 			str(seed_row.get("seed_base", 0)),
 			str(seed_row.get("fixed_probe_seat", -1)),
 			str(seed_row.get("fixed_probe_difficulty", -1)),
@@ -121,6 +121,8 @@ func run() -> void:
 			int(hard_wins[0]) if hard_wins.size() == 4 else -1,
 			int(easy_score_delta[0]) if easy_score_delta.size() == 4 else 0,
 			int(hard_score_delta[0]) if hard_score_delta.size() == 4 else 0,
+			str(easy_wins),
+			str(hard_wins),
 			int(seed_row.get("easy_human_claim_declines", 0)),
 			int(seed_row.get("hard_human_claim_declines", 0)),
 		])
