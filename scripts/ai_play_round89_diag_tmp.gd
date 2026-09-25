@@ -33,12 +33,16 @@ func print_loss_trace(label: String, result: Dictionary) -> void:
 		var entry: Dictionary = trace[index]
 		if int(entry.get("step", -1)) != terminal_step:
 			continue
-		print("  selected tile=%s seat=%d risk=%.1f feed=%.1f pressure=%.1f shanten=%d score=%.1f rank=%d best=%s(%.1f/%.1f) safest=%s(%.1f/%.1f sh=%d) guard=%s catastrophe=%s wait=%d/%d" % [str(entry.get("tile", "")), int(entry.get("seat", -1)), float(entry.get("risk", 0.0)), float(entry.get("feed", 0.0)), float(entry.get("human_pressure", 0.0)), int(entry.get("shanten", -1)), float(entry.get("score", 0.0)), int(entry.get("selected_rank", -1)), str(entry.get("best_tile", "")), float(entry.get("best_risk", 0.0)), float(entry.get("best_feed", 0.0)), str(entry.get("safest_tile", "")), float(entry.get("safest_risk", 0.0)), float(entry.get("safest_feed", 0.0)), int(entry.get("safest_shanten", -1)), str(entry.get("hard_guard_moved", false)), str(entry.get("hard_guard_catastrophe_tenpai", false)), int(entry.get("wait_best_points", 0)), int(entry.get("wait_total_remaining", 0))])
+		print("  selected tile=%s seat=%d risk=%.1f feed=%.1f pressure=%.1f exposure=%.1f shanten=%d score=%.1f rank=%d best=%s(%.1f/%.1f) safest=%s(%.1f/%.1f sh=%d) guard=%s human_emergency=%s wait=%d/%d" % [str(entry.get("tile", "")), int(entry.get("seat", -1)), float(entry.get("risk", 0.0)), float(entry.get("feed", 0.0)), float(entry.get("human_pressure", 0.0)), float(entry.get("human_exposure", 0.0)), int(entry.get("shanten", -1)), float(entry.get("score", 0.0)), int(entry.get("selected_rank", -1)), str(entry.get("best_tile", "")), float(entry.get("best_risk", 0.0)), float(entry.get("best_feed", 0.0)), str(entry.get("safest_tile", "")), float(entry.get("safest_risk", 0.0)), float(entry.get("safest_feed", 0.0)), int(entry.get("safest_shanten", -1)), str(entry.get("hard_guard_moved", false)), str(entry.get("hard_guard_human_exposure_tenpai", false)), int(entry.get("wait_best_points", 0)), int(entry.get("wait_total_remaining", 0))])
 		var fast_candidates: Array = entry.get("fast_candidates", [])
 		for candidate in fast_candidates:
 			if typeof(candidate) != TYPE_DICTIONARY:
 				continue
 			print("    fast tile=%s retained=%s safest=%s sh=%d risk=%.1f feed=%.1f pressure=%.1f" % [str(candidate.get("tile", "")), str(candidate.get("retained_for_full_eval", false)), str(candidate.get("safest_fast_candidate", false)), int(candidate.get("shanten", -1)), float(candidate.get("risk", 0.0)), float(candidate.get("feed_score", 0.0)), float(candidate.get("human_pressure", 0.0))])
+		for candidate in entry.get("hard_guard_candidates", []):
+			if typeof(candidate) != TYPE_DICTIONARY:
+				continue
+			print("    guard tile=%s delta=%d risk=%.1f feed=%.1f exposure=%.1f gap=%.1f gain=%.1f rejected=%s" % [str(candidate.get("tile", "")), int(candidate.get("shanten_delta", -1)), float(candidate.get("risk", 0.0)), float(candidate.get("feed_risk", 0.0)), float(candidate.get("human_target_exposure", 0.0)), float(candidate.get("score_gap", 0.0)), float(candidate.get("pressure_gain", 0.0)), str(candidate.get("rejection_reason", ""))])
 		break
 
 
@@ -54,7 +58,7 @@ func run() -> void:
 	scene.fx_enabled = false
 	scene.ensure_ai_benchmark_players()
 	scene.ai_sim_trace_enabled = true
-	var replay_cases: Array = [[20260701, 0], [20260805, 0], [20260819, 1], [20260843, 0]]
+	var replay_cases: Array = [[20260753, 0], [20260753, 1]]
 	var losses := 0
 	for replay_case in replay_cases:
 		var seed_base := int(replay_case[0])

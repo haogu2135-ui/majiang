@@ -2196,6 +2196,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			safer["hard_guard_two_away"] = two_away_emergency
 			safer["hard_guard_catastrophe_two_away"] = catastrophe_two_away
 			safer["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+			safer["hard_guard_human_exposure_tenpai"] = human_exposure_tenpai
 			safer["hard_guard_extreme_one_away"] = extreme_one_away
 			safer["hard_guard_safe_tile"] = str(best.get("hard_guard_safe_tile", ""))
 			safer["hard_guard_safe_score_gap"] = float(best.get("hard_guard_safe_score_gap", 0.0))

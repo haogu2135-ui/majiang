@@ -3230,6 +3230,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			safer["hard_guard_two_away"] = two_away_emergency
 			safer["hard_guard_catastrophe_two_away"] = catastrophe_two_away
 			safer["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
+			safer["hard_guard_human_exposure_tenpai"] = human_exposure_tenpai
 			safer["hard_guard_extreme_one_away"] = extreme_one_away
 			safer["hard_guard_safe_tile"] = str(best.get("hard_guard_safe_tile", ""))
 			safer["hard_guard_safe_score_gap"] = float(best.get("hard_guard_safe_score_gap", 0.0))
@@ -9042,6 +9043,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"risk": float(selected.get("risk", 0.0)),
 		"feed": float(selected.get("feed_risk", 0.0)),
 		"human_pressure": float(selected.get("human_target_pressure", 0.0)),
+		"human_exposure": float(selected.get("human_target_exposure", selected.get("human_target_pressure", 0.0))),
 		"shanten": int(selected.get("shanten", -1)),
 		"safety": str(selected.get("safety_label", "")),
 		"score": float(selected.get("score", 0.0)),
@@ -9067,6 +9069,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_two_away": bool(selected.get("hard_guard_two_away", false)),
 		"hard_guard_catastrophe_two_away": bool(selected.get("hard_guard_catastrophe_two_away", false)),
 		"hard_guard_catastrophe_tenpai": bool(selected.get("hard_guard_catastrophe_tenpai", false)),
+		"hard_guard_human_exposure_tenpai": bool(selected.get("hard_guard_human_exposure_tenpai", false)),
 		"hard_guard_extreme_one_away": bool(selected.get("hard_guard_extreme_one_away", false)),
 		"hard_guard_safe_tile": str(selected.get("hard_guard_safe_tile", "")),
 		"hard_guard_safe_score_gap": float(selected.get("hard_guard_safe_score_gap", 0.0)),
