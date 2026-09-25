@@ -139,7 +139,9 @@ func run() -> void:
 	var seeds: Array[int] = [20260701, 20260753, 20260805, 20260819, 20260843]
 	var requested_seed_arguments := OS.get_cmdline_user_args()
 	if not requested_seed_arguments.is_empty():
-		seeds = [int(requested_seed_arguments[0])]
+		seeds.clear()
+		for seed_argument in requested_seed_arguments:
+			seeds.append(int(seed_argument))
 	var probe_rons := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
 	for seed_base in seeds:
 		for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
