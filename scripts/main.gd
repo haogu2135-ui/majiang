@@ -2894,6 +2894,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 		candidates.append({"tile": candidate, "hand_index": i, "tile_index": candidate_index})
 	# 快评模式（全 bot 模拟）：先廉价排序，只对 Top-K 做完整报告，显著降复杂度。
 	var use_fast = offline_sim_quiet and candidates.size() > AI_FAST_EVAL_TOP_K
+	var fast_candidate_trace: Array = []
 	if use_fast:
 		var defense_guess = ai_defense_weight(seat, 2, pressure_context, eval_context)
 		var risk_factor = float(eval_context.get("discard_report_risk_factor", -1.0))
@@ -2946,6 +2947,16 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 					fast_safety_value += max(0.0, fast_emergency_defense) * 0.12
 			var safety_rank = risk + human_pressure * 0.72 - fast_safety_value
 			item["fast_safety_rank"] = safety_rank
+			if ai_sim_trace_enabled:
+				fast_candidate_trace.append({
+					"tile": cand,
+					"shanten": shanten,
+					"risk": risk,
+					"human_pressure": human_pressure,
+					"safety": str(item.get("fast_safety_label", "")),
+					"safety_rank": safety_rank,
+					"cheap_score": cheap,
+				})
 			var safest_index := int(safest_candidate.get("tile_index", -1))
 			# Fast candidates are canonical tile codes, so their captured indexes
 			# are already the same order used by tile_sort_index().
@@ -2983,6 +2994,13 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if replace_index >= 0 and safest_rank + 4.0 < replace_rank:
 				safest_candidate["fast_safety_preserved"] = true
 				keep[replace_index] = safest_candidate
+		var retained_fast_tiles: Dictionary = {}
+		for retained_candidate in keep:
+			retained_fast_tiles[str(retained_candidate.get("tile", ""))] = true
+		for trace_candidate in fast_candidate_trace:
+			var traced_tile := str(trace_candidate.get("tile", ""))
+			trace_candidate["retained_for_full_eval"] = retained_fast_tiles.has(traced_tile)
+			trace_candidate["safest_fast_candidate"] = traced_tile == str(safest_candidate.get("tile", ""))
 		candidates = keep
 	for item in candidates:
 		var candidate = str(item.get("tile", ""))
@@ -3007,6 +3025,10 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 		simulated.insert(i, candidate)
 	sort_ai_discard_reports(reports)
 	apply_hard_danger_push_guard(reports, seat)
+	if ai_sim_trace_enabled and use_fast and not reports.is_empty():
+		var trace_choice: Dictionary = reports[0]
+		if float(trace_choice.get("human_target_pressure", 0.0)) >= 6.0:
+			trace_choice["fast_candidate_trace"] = fast_candidate_trace
 	if use_report_cache:
 		store_ai_report_cache(cache_key, reports)
 	# Quiet all-bot callers consume this one-shot ranking immediately and never
@@ -8968,6 +8990,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 	var best: Dictionary = reports[0] if not reports.is_empty() and typeof(reports[0]) == TYPE_DICTIONARY else {}
 	var avoidable: Dictionary = _ai_sim_avoidable_danger_report(selected, reports) if not selected.is_empty() else {}
 	var guard_candidates = selected.get("hard_guard_candidate_trace", [])
+	var fast_candidates = selected.get("fast_candidate_trace", [])
 	var entry := {
 		"step": step,
 		"seat": seat,
@@ -9010,6 +9033,7 @@ func ai_sim_discard_trace_entry(step: int, seat: int, tile: String, reports: Arr
 		"hard_guard_moved": bool(selected.get("hard_guard_moved", false)),
 		"hard_guard_from_tile": str(selected.get("hard_guard_from_tile", "")),
 		"hard_guard_candidates": guard_candidates.duplicate(true) if typeof(guard_candidates) == TYPE_ARRAY else [],
+		"fast_candidates": fast_candidates.duplicate(true) if typeof(fast_candidates) == TYPE_ARRAY else [],
 		"fast_safety_preserved": bool(selected.get("fast_safety_preserved", false)),
 	}
 	(ai_sim_stats.get("discard_trace", []) as Array).append(entry)
