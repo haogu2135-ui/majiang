@@ -6185,6 +6185,7 @@ func duplicate_feed_report(feed_report: Dictionary) -> Dictionary:
 func duplicate_risk_vector(vector: Dictionary) -> Dictionary:
 	var copy: Dictionary = vector.duplicate(false)
 	duplicate_report_dictionary_field(copy, "danger_source")
+	duplicate_report_dictionary_field(copy, "opponent_risks")
 	return copy
 
 func duplicate_chi_choice(choice: Dictionary) -> Dictionary:

@@ -1346,11 +1346,11 @@ func human_readiness_for_defense(wall_count_snapshot: int = -1) -> float:
 	human_readiness_cache_value = score
 	return score
 
-func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0) -> float:
-	return float(human_target_discard_pressure_report(seat, tile, risk, feed_report, shanten, eval_context, tile_index_snapshot, human_feed_snapshot).get("pressure", 0.0))
+func human_target_discard_pressure(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0, human_risk_snapshot: float = -1.0) -> float:
+	return float(human_target_discard_pressure_report(seat, tile, risk, feed_report, shanten, eval_context, tile_index_snapshot, human_feed_snapshot, human_risk_snapshot).get("pressure", 0.0))
 
 
-func human_target_discard_pressure_report(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0) -> Dictionary:
+func human_target_discard_pressure_report(seat: int, tile: String, risk: float, feed_report: Dictionary, shanten: int, eval_context: Dictionary = {}, tile_index_snapshot: int = -2, human_feed_snapshot: float = -1.0, human_risk_snapshot: float = -1.0) -> Dictionary:
 	# 难度无关的「喂玩家」威胁分：用于商用基准遥测，避免全 Bot 采样
 	# 中 seat0 也随难度变化导致实际和牌数污染防守评估。
 	if seat <= 0 or seat >= players.size() or tile == "" or mode != "offline":
@@ -1374,13 +1374,16 @@ func human_target_discard_pressure_report(seat: int, tile: String, risk: float, 
 	var human_threat := 0.0
 	if opponent_discard_tile_count(0, threat_tile, eval_context) <= 0 and not is_passed_win_tile(0, threat_tile):
 		human_threat = opponent_pattern_threat_score(0, threat_tile, visible, eval_context, threat_index)
+	var human_risk := human_risk_snapshot if human_risk_snapshot >= 0.0 else risk
 	var readiness := float(eval_context.get("discard_report_human_readiness", -1.0)) if not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat else -1.0
 	if readiness < 0.0:
 		readiness = human_readiness_for_defense()
 	if human_feed < 8.0 and human_threat < 6.0 and risk < AI_DANGER_RISK_SOFT and readiness < 8.0:
-		return {"pressure": 0.0, "exposure": 0.0}
+		return {"pressure": 0.0, "exposure": 0.0, "human_risk": human_risk}
 	var pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, risk - 10.0) * 0.35
 	pen += readiness * 1.15
+	var exposure_pen = human_feed * 0.55 + human_threat * 0.90 + max(0.0, human_risk - 10.0) * 0.35
+	exposure_pen += readiness * 1.15
 	var adjusted_pen: float = float(pen)
 	if shanten >= 3:
 		adjusted_pen *= 1.18
@@ -1388,7 +1391,7 @@ func human_target_discard_pressure_report(seat: int, tile: String, risk: float, 
 		adjusted_pen *= 0.42
 	elif shanten == 1:
 		adjusted_pen *= 0.72
-	return {"pressure": clamp(adjusted_pen, 0.0, 220.0), "exposure": clamp(pen, 0.0, 220.0)}
+	return {"pressure": clamp(adjusted_pen, 0.0, 220.0), "exposure": clamp(exposure_pen, 0.0, 220.0), "human_risk": human_risk}
 
 
 func human_target_discard_penalty_from_pressure(pressure: float, difficulty_snapshot: int = -1) -> float:
@@ -2589,9 +2592,12 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var diff_idx = int(eval_context.get("discard_report_difficulty", -1)) if context_matches_seat else -1
 	if diff_idx < AI_DIFFICULTY_EASY or diff_idx > AI_DIFFICULTY_HARD:
 		diff_idx = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
-	var human_pressure_report: Dictionary = human_target_discard_pressure_report(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, candidate_tile_index_snapshot)
+	var opponent_risks: Dictionary = risk_vector.get("opponent_risks", {})
+	var human_risk_snapshot := float(opponent_risks.get(0, risk))
+	var human_pressure_report: Dictionary = human_target_discard_pressure_report(seat, tile, risk, feed_report if typeof(feed_report) == TYPE_DICTIONARY else {}, shanten, eval_context, candidate_tile_index_snapshot, -1.0, human_risk_snapshot)
 	var human_pressure = float(human_pressure_report.get("pressure", 0.0))
 	var human_exposure = float(human_pressure_report.get("exposure", human_pressure))
+	var human_risk = human_risk_snapshot
 	var emergency_defense = emergency_defense_adjustment(seat, shanten, safety, risk, feed_risk, pressure_context)
 	var needs_guard_ukeire = false
 	if offline_sim_quiet and diff_idx == AI_DIFFICULTY_HARD and shanten == 2:
@@ -2676,6 +2682,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		"defense": defense,
 		"human_target_pressure": human_pressure,
 		"human_target_exposure": human_exposure,
+		"human_target_risk": human_risk,
 		"human_target_penalty": human_pen,
 		"package_feed_pending": bool(package_report.get("pending", false)),
 		"package_feed_penalty": package_pen,
@@ -4639,7 +4646,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 		var cache = eval_context.get("risk_vectors", {})
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return duplicate_risk_vector(cache[cache_key])
-	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "danger_source": {}}
+	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "danger_source": {}, "opponent_risks": {}}
 	if tile == "" or seat < 0 or seat >= players.size():
 		return vector
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
@@ -4650,6 +4657,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 	vector["visible"] = visible
 	var risk = 0.0
 	var threat = 0.0
+	var opponent_risks: Dictionary = {}
 	var best_opponent = -1
 	var best_risk = 0.0
 	var opponent_vector: Dictionary = {"risk": 0.0, "pattern_threat": 0.0}
@@ -4658,6 +4666,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 			continue
 		write_single_opponent_deal_in_risk_components(opponent_vector, tile, seat, other, visible, known_counts, eval_context, index)
 		var opponent_risk = float(opponent_vector.get("risk", 0.0))
+		opponent_risks[other] = opponent_risk
 		risk += opponent_risk
 		threat += float(opponent_vector.get("pattern_threat", 0.0))
 		if opponent_risk > best_risk:
@@ -4665,6 +4674,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 			best_opponent = other
 	vector["score"] = risk
 	vector["threat"] = threat
+	vector["opponent_risks"] = opponent_risks
 	if best_opponent >= 0 and best_risk >= 10.0:
 		vector["danger_source"] = {
 				"opponent": best_opponent,
