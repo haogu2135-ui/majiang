@@ -142,6 +142,23 @@ func run() -> void:
 			for hand_index in range(2):
 				var result: Dictionary = run_hand(scene, difficulty, seed_base, hand_index)
 				check(bool(result.get("ended", false)), "seed %d diff %d hand %d terminates" % [seed_base, difficulty, hand_index])
+				for trace_item in result.get("discard_trace", []):
+					if typeof(trace_item) != TYPE_DICTIONARY or not bool(trace_item.get("hard_guard_catastrophe_tenpai", false)):
+						continue
+					print("    guard_event seed=%d diff=%d hand=%d step=%d tile=%s moved=%s from=%s risk=%.1f feed=%.1f human=%.1f wait=%d/%d" % [
+						seed_base,
+						difficulty,
+						hand_index,
+						int(trace_item.get("step", -1)),
+						str(trace_item.get("tile", "")),
+						str(trace_item.get("hard_guard_moved", false)),
+						str(trace_item.get("hard_guard_from_tile", "")),
+						float(trace_item.get("risk", 0.0)),
+						float(trace_item.get("feed", 0.0)),
+						float(trace_item.get("human_pressure", 0.0)),
+						int(trace_item.get("wait_best_points", 0)),
+						int(trace_item.get("wait_total_remaining", 0)),
+					])
 				if int(result.get("deal_ins_to_human", 0)) > 0:
 					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
 					print_terminal_window(seed_base, difficulty, hand_index, result)
