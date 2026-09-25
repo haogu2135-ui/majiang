@@ -115,6 +115,19 @@ func run() -> void:
 	check(bool(catastrophe.get("hard_guard_catastrophe_tenpai", false)), "catastrophic thin tenpai activates the dedicated hard guard")
 	check(str(reports[0].get("tile", "")) == "E" and bool(reports[0].get("hard_guard_moved", false)), "hard guard moves the quality-bounded safer discard to the front")
 
+	print("--- C) player-pressure catastrophe can fold a low-value wide wait ---")
+	var wide_catastrophe: Dictionary = catastrophe.duplicate(true)
+	wide_catastrophe["tile"] = "5B"
+	wide_catastrophe["risk"] = scene.AI_DANGER_RISK_HIGH + 28.0
+	wide_catastrophe["feed_risk"] = scene.AI_DANGER_FEED_SOFT + 36.0
+	wide_catastrophe["human_target_pressure"] = 26.0
+	wide_catastrophe["wait_total_remaining"] = 8
+	wide_catastrophe["score"] = 1240.0
+	var wide_reports: Array = [wide_catastrophe, guarded_safe.duplicate(true)]
+	scene.apply_hard_danger_push_guard(wide_reports, -1)
+	check(bool(wide_catastrophe.get("hard_guard_catastrophe_tenpai", false)), "extreme player pressure activates the low-value wide-wait guard")
+	check(str(wide_reports[0].get("tile", "")) == "E" and bool(wide_reports[0].get("hard_guard_moved", false)), "wide-wait guard selects the quality-bounded safer discard")
+
 	scene.ai_sim_trace_enabled = false
 	scene.enable_offline_all_bot_mode(false, false)
 	scene.queue_free()
