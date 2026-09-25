@@ -1190,16 +1190,33 @@ func score_context_report_cached(seat: int) -> Dictionary:
 	if ranked.size() > 1:
 		second_score = int(players[int(ranked[1])].get("score", 0))
 	var lead_gap = score - second_score if rank == 1 else score - leader_score
+	var target_rank := 0
+	var target_seat := -1
+	var target_score := score
+	if rank == 1 and ranked.size() > 1:
+		target_rank = 2
+		target_seat = int(ranked[1])
+		target_score = int(players[target_seat].get("score", 0))
+	elif rank > 1:
+		target_rank = rank - 1
+		target_seat = int(ranked[rank - 2])
+		target_score = int(players[target_seat].get("score", 0))
+	var target_gap = score - target_score
 	var late = clamp((float(offline_hand_number) - float(MATCH_MAX_HANDS - 3)) / 3.0, 0.0, 1.0)
 	var strategy = "均衡"
 	if late > 0.0 and rank == 1 and lead_gap >= 1200:
 		strategy = "守成"
-	elif late > 0.0 and rank >= 2 and lead_gap <= -1800:
+	elif late > 0.0 and rank == 2 and target_gap <= -1800:
+		strategy = "追分"
+	elif late > 0.0 and rank >= 3 and target_gap < 0:
 		strategy = "追分"
 	var report := {
 		"rank": rank,
 		"score": score,
 		"leader_gap": lead_gap,
+		"target_rank": target_rank,
+		"target_seat": target_seat,
+		"target_gap": target_gap,
 		"late": late,
 		"strategy": strategy,
 	}
@@ -1211,7 +1228,7 @@ func score_strategy_text(seat: int) -> String:
 	if report.is_empty():
 		return ""
 	var rank = int(report.get("rank", 0))
-	var gap = int(report.get("leader_gap", 0))
+	var gap = int(report.get("target_gap", report.get("leader_gap", 0)))
 	var strategy = str(report.get("strategy", "均衡"))
 	if rank == 1:
 		return "分势 第1 %s %s" % ["均分" if gap == 0 else "领先%d" % gap, strategy]
@@ -1225,7 +1242,7 @@ func score_defense_adjustment(seat: int) -> float:
 	if late <= 0.0:
 		return 0.0
 	var rank = int(report.get("rank", 0))
-	var gap = int(report.get("leader_gap", 0))
+	var gap = int(report.get("target_gap", report.get("leader_gap", 0)))
 	var adj = 0.0
 	if rank == 1 and gap > 0:
 		adj = min(0.30, 0.08 + float(gap) / 18000.0) * late
@@ -1242,7 +1259,7 @@ func score_attack_multiplier(seat: int) -> float:
 	if late <= 0.0:
 		return 1.0
 	var rank = int(report.get("rank", 0))
-	var gap = int(report.get("leader_gap", 0))
+	var gap = int(report.get("target_gap", report.get("leader_gap", 0)))
 	var mult = 1.0
 	if rank == 1 and gap > 0:
 		mult = clamp(1.0 - (0.06 + float(gap) / 60000.0) * late, 0.84, 1.0)
