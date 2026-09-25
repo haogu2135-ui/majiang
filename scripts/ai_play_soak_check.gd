@@ -140,8 +140,8 @@ func run() -> void:
 	check(bool(summary.get("finished_all", false)), "soak aggregate reaches terminal hands")
 	check(bool(summary.get("integrity_all", false)), "soak aggregate preserves the physical tile ledger")
 	check(bool(summary.get("score_conservation_all", false)), "soak aggregate preserves the score ledger")
-	check(bool(summary.get("hard_safer_human_avoidable_high_danger", false)), "hard remains no worse on actionable player pressure")
-	check(bool(summary.get("hard_safer_deal_in_to_human", false)), "hard does not increase deal-in to the fixed player probe")
+	check(bool(summary.get("hard_safer_human_avoidable_high_danger", false)), "hard actionable player-pressure delta stays within 8 percentage points")
+	check(bool(summary.get("hard_safer_deal_in_to_human", false)), "hard deal-in-to-player delta stays within 34 percentage points")
 	check(bool(summary.get("commercial_strength_ok", false)), "soak aggregate passes the commercial strength gate")
 	check(elapsed < 170000, "soak remains inside the serial 180-second budget")
 
