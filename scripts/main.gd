@@ -3249,7 +3249,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			rejection_reason = "score_gap"
 		if rejection_reason.is_empty() and pressure_gain < minimum_pressure_gain:
 			rejection_reason = "pressure_gain"
-		if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai):
+		if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai or catastrophe_tenpai):
 			trace_candidates.append({
 				"tile": str(candidate.get("tile", "")),
 				"shanten_delta": shanten_delta,
@@ -3271,7 +3271,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		if value > best_value:
 			best_value = value
 			best_index = candidate_index
-	if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai):
+	if ai_sim_trace_enabled and (two_away_emergency or human_exposure_tenpai or catastrophe_tenpai):
 		best["hard_guard_candidate_trace"] = trace_candidates
 	if best_index > 0:
 		var safer = reports[best_index]

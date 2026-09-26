@@ -214,6 +214,23 @@ func run() -> void:
 						int(trace_item.get("wait_best_points", 0)),
 						int(trace_item.get("wait_total_remaining", 0)),
 					])
+					for guard_candidate in trace_item.get("hard_guard_candidates", []):
+						if typeof(guard_candidate) != TYPE_DICTIONARY:
+							continue
+						print("        guard_candidate=%s sh_delta=%d risk=%.1f feed=%.1f human=%.1f exposure=%.1f safety=%s gap=%.1f/%.1f gain=%.1f/%.1f reject=%s" % [
+							str(guard_candidate.get("tile", "")),
+							int(guard_candidate.get("shanten_delta", 0)),
+							float(guard_candidate.get("risk", 0.0)),
+							float(guard_candidate.get("feed_risk", 0.0)),
+							float(guard_candidate.get("human_target_pressure", 0.0)),
+							float(guard_candidate.get("human_target_exposure", 0.0)),
+							str(guard_candidate.get("safety_label", "")),
+							float(guard_candidate.get("score_gap", 0.0)),
+							float(guard_candidate.get("max_score_gap", 0.0)),
+							float(guard_candidate.get("pressure_gain", 0.0)),
+							float(guard_candidate.get("minimum_pressure_gain", 0.0)),
+							str(guard_candidate.get("rejection_reason", "")),
+						])
 				if int(result.get("deal_ins_to_human", 0)) > 0:
 					probe_rons[difficulty] = int(probe_rons.get(difficulty, 0)) + 1
 				if result_winner == 0 or int(result.get("deal_ins_to_human", 0)) > 0:
