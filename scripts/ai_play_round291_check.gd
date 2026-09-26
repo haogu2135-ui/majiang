@@ -15,24 +15,28 @@ func check(condition: bool, message: String) -> void:
 		failed = true
 
 
-func run_hand(scene, difficulty: int, seed_base: int, hand_index: int) -> Dictionary:
+func run_hand(scene, difficulty: int, seed_base: int, hand_index: int, shuffle_profiles: bool = false) -> Dictionary:
 	scene.enable_offline_all_bot_mode(true, true)
 	scene.ai_difficulty = difficulty
 	scene.ai_benchmark_base_difficulty = difficulty
 	scene.ai_benchmark_probe_seat = 0
 	scene.ai_benchmark_probe_difficulty = scene.AI_DIFFICULTY_NORMAL
 	scene.reset_ai_profile_seat_map()
+	if shuffle_profiles:
+		scene.apply_benchmark_profile_shuffle(seed_base + 7919 + hand_index * 17)
 	seed(seed_base + hand_index * 17)
 	scene.offline_skip_ai_profile_reshuffle = true
 	scene.mode = "offline"
 	scene.offline_hand_number = 1
-	scene.dealer_seat = hand_index % 4
+	scene.dealer_seat = posmod(seed_base + hand_index, 4)
 	for seat in range(4):
 		scene.players[seat]["score"] = scene.MATCH_START_SCORE
 	scene.deal_offline_hand()
-	scene.reset_ai_profile_seat_map()
+	if not shuffle_profiles:
+		scene.reset_ai_profile_seat_map()
 	var result: Dictionary = scene.simulate_offline_bot_hand_sync(700)
 	result["probe_score_delta"] = int(scene.players[0].get("score", scene.MATCH_START_SCORE)) - scene.MATCH_START_SCORE
+	result["profile_map"] = scene.ai_profile_seat_map.duplicate()
 	return result
 
 
@@ -158,18 +162,33 @@ func run() -> void:
 	scene.ai_sim_trace_enabled = true
 	var seeds: Array[int] = [20260701, 20260753, 20260805, 20260819, 20260843]
 	var requested_seed_arguments := OS.get_cmdline_user_args()
-	if not requested_seed_arguments.is_empty():
+	var shuffle_profiles := false
+	var seed_arguments: Array = []
+	for argument in requested_seed_arguments:
+		if str(argument) == "--shuffle-profiles":
+			shuffle_profiles = true
+		else:
+			seed_arguments.append(str(argument))
+	if not seed_arguments.is_empty():
 		seeds.clear()
-		for seed_argument in requested_seed_arguments:
+		for seed_argument in seed_arguments:
 			seeds.append(int(seed_argument))
+	print("    profile_policy=%s" % ("paired_full_shuffle" if shuffle_profiles else "fixed_seat_map"))
 	var probe_rons := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
 	var probe_wins := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
 	var probe_score_delta := {scene.AI_DIFFICULTY_EASY: 0, scene.AI_DIFFICULTY_HARD: 0}
+	var profile_maps_by_hand := {}
 	for seed_base in seeds:
 		for difficulty in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
 			for hand_index in range(2):
-				var result: Dictionary = run_hand(scene, difficulty, seed_base, hand_index)
+				var result: Dictionary = run_hand(scene, difficulty, seed_base, hand_index, shuffle_profiles)
 				check(bool(result.get("ended", false)), "seed %d diff %d hand %d terminates" % [seed_base, difficulty, hand_index])
+				var profile_key := "%d|%d" % [seed_base, hand_index]
+				var profile_map: Array = result.get("profile_map", [])
+				if profile_maps_by_hand.has(profile_key):
+					check(profile_map == profile_maps_by_hand[profile_key], "seed %d hand %d pairs the same profile map" % [seed_base, hand_index])
+				else:
+					profile_maps_by_hand[profile_key] = profile_map.duplicate()
 				var result_winner := int(result.get("winner", -1))
 				if result_winner == 0:
 					probe_wins[difficulty] = int(probe_wins.get(difficulty, 0)) + 1
