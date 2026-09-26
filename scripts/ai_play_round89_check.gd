@@ -128,6 +128,10 @@ func run() -> void:
 		])
 		check(int(seed_row.get("fixed_probe_seat", -1)) == 0 and int(seed_row.get("fixed_probe_difficulty", -1)) == scene.AI_DIFFICULTY_NORMAL, "seed %s keeps seat0 at the normal player probe" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("paired_wall_seed", false)) and bool(seed_row.get("paired_profile_seed", false)), "seed %s keeps paired inputs" % str(seed_row.get("seed_base", 0)))
+		var expected_dealer_seats: Array = []
+		for hand_index in range(hands_per_seed):
+			expected_dealer_seats.append(posmod(int(seed_row.get("seed_base", 0)) + hand_index, 4))
+		check(raw.get("dealer_seats", []) == expected_dealer_seats, "seed %s pairs rotated dealer positions" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("integrity_all", false)), "seed %s preserves the physical tile ledger" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("score_conservation_all", false)), "seed %s preserves the score ledger" % str(seed_row.get("seed_base", 0)))
 		for diff in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:

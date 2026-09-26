@@ -9645,9 +9645,11 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 	ensure_ai_benchmark_players()
 	var diff_list: Array = diffs.duplicate() if typeof(diffs) == TYPE_ARRAY and not diffs.is_empty() else [AI_DIFFICULTY_EASY, AI_DIFFICULTY_NORMAL, AI_DIFFICULTY_HARD]
 	var wall_seeds: Array = []
+	var dealer_seats: Array = []
 	var profile_seeds: Array = []
 	for h in range(hands_per_diff):
 		wall_seeds.append(seed_base + h * 17)
+		dealer_seats.append(posmod(seed_base + h, 4))
 		profile_seeds.append(seed_base + 7919 + h * 17)
 	var summary := {
 		"hands_per_diff": hands_per_diff,
@@ -9657,6 +9659,7 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 		"fixed_probe_seat": probe_seat,
 		"fixed_probe_difficulty": probe_difficulty,
 		"wall_seeds": wall_seeds,
+		"dealer_seats": dealer_seats,
 		"profile_seeds": profile_seeds if shuffle_profiles else [],
 		"diffs_sampled": diff_list,
 		"by_diff": {},
@@ -9702,7 +9705,7 @@ func sample_bot_strength_across_difficulties(hands_per_diff: int = 2, seed_base:
 			offline_skip_ai_profile_reshuffle = true
 			mode = "offline"
 			offline_hand_number = 1
-			dealer_seat = h % 4
+			dealer_seat = int(dealer_seats[h])
 			for s in range(4):
 				players[s]["score"] = MATCH_START_SCORE
 			var t0 = Time.get_ticks_msec()
