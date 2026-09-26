@@ -31,9 +31,16 @@ func run() -> void:
 	# per difficulty without relying on one seed's forced tenpai discard.
 	var seeds: Array = [20260701, 20260714, 20260742, 20260753, 20260805, 20260819, 20260843, 20260857]
 	var requested_seed_arguments := OS.get_cmdline_user_args()
-	if not requested_seed_arguments.is_empty():
+	var shuffle_profiles := false
+	var seed_arguments: Array = []
+	for argument in requested_seed_arguments:
+		if str(argument) == "--shuffle-profiles":
+			shuffle_profiles = true
+		else:
+			seed_arguments.append(str(argument))
+	if not seed_arguments.is_empty():
 		seeds.clear()
-		for seed_argument in requested_seed_arguments:
+		for seed_argument in seed_arguments:
 			seeds.append(int(seed_argument))
 	var hands_per_seed := 2
 	var t0 = Time.get_ticks_msec()
@@ -46,7 +53,7 @@ func run() -> void:
 	for seed_base in seeds:
 		# Keep seat 0 at normal difficulty so player-target risk is comparable;
 		# only the three opponents change between easy and hard.
-		var bench = scene.sample_ai_strength_benchmark(hands_per_seed, int(seed_base), false, false, 0, scene.AI_DIFFICULTY_NORMAL)
+		var bench = scene.sample_ai_strength_benchmark(hands_per_seed, int(seed_base), shuffle_profiles, false, 0, scene.AI_DIFFICULTY_NORMAL)
 		rows.append(bench)
 		scene.add_ai_strength_benchmark_to_aggregate(aggregate, bench)
 		var raw: Dictionary = bench.get("raw", {})
@@ -64,6 +71,7 @@ func run() -> void:
 			hard_probe_score_delta += int(hard_score_delta[0])
 	var elapsed = Time.get_ticks_msec() - t0
 	var summary = scene.finalize_ai_strength_aggregate(aggregate)
+	print("    profile_policy=%s" % ("paired_full_shuffle" if shuffle_profiles else "fixed_seat_map"))
 	print("    elapsed=%d rows=%d ok=%s hd(raw/avoid)=%.3f/%.3f %.3f/%.3f humanHD(raw/avoid)=%.3f/%.3f %.3f/%.3f ronToProbe=%.2f/%.2f (%d/%d hands)" % [
 		elapsed,
 		rows.size(),
@@ -132,6 +140,11 @@ func run() -> void:
 		for hand_index in range(hands_per_seed):
 			expected_dealer_seats.append(posmod(int(seed_row.get("seed_base", 0)) + hand_index, 4))
 		check(raw.get("dealer_seats", []) == expected_dealer_seats, "seed %s pairs rotated dealer positions" % str(seed_row.get("seed_base", 0)))
+		var expected_profile_seeds: Array = []
+		if shuffle_profiles:
+			for hand_index in range(hands_per_seed):
+				expected_profile_seeds.append(int(seed_row.get("seed_base", 0)) + 7919 + hand_index * 17)
+		check(raw.get("profile_seeds", []) == expected_profile_seeds, "seed %s pairs deterministic profile mapping" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("integrity_all", false)), "seed %s preserves the physical tile ledger" % str(seed_row.get("seed_base", 0)))
 		check(bool(seed_row.get("score_conservation_all", false)), "seed %s preserves the score ledger" % str(seed_row.get("seed_base", 0)))
 		for diff in [scene.AI_DIFFICULTY_EASY, scene.AI_DIFFICULTY_HARD]:
