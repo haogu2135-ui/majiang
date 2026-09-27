@@ -38793,7 +38793,7 @@ func _show_menu_impl() -> void:
 	add_lucide_icon(tutorial_button, "book-open", rect_full(0.070, 0.230, 0.220, 0.770), Color(0.18, 0.25, 0.20, 0.92))
 
 	if tutorial_available:
-		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.98, 0.88, 0.66, 0.70), "menu_primary_3d_stage_overlay_bright")
+		var tutorial_banner = make_gpt_plate_rect(rect_full(0.070, 0.235, 0.625, 0.380), Color(0.98, 0.88, 0.66, 0.92), "action_gpt_dock_banner_bright")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
@@ -38802,12 +38802,11 @@ func _show_menu_impl() -> void:
 		# fall through instead of presenting a non-functional full-banner target.
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root_layer.add_child(tutorial_banner)
-		draw_menu_tutorial_hint_art(tutorial_banner)
-		var tutorial_title = make_label(tutorial_banner, "新手教学", 14, Color(0.10, 0.15, 0.12), true)
+		var tutorial_title = make_label(tutorial_banner, "新手教学", commercial_ui_font_size(15, 4), Color(0.10, 0.15, 0.12), true)
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 11, Color(0.24, 0.29, 0.23), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, commercial_ui_font_size(12, 4), Color(0.24, 0.29, 0.23), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -38822,6 +38821,7 @@ func _show_menu_impl() -> void:
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
+		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
 		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_rect(tutorial_action, rect_full(0.620, 0.205, 0.810, 0.800))
@@ -38829,6 +38829,7 @@ func _show_menu_impl() -> void:
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
 		tutorial_skip.name = "MenuTutorialSkipButton"
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
+		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
 		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")

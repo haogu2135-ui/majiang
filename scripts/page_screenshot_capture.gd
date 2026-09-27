@@ -573,10 +573,14 @@ func validate_hand_tutorial_fixture(scene: Node) -> bool:
 
 func validate_menu_tutorial_progress_fixture(scene: Node) -> bool:
 	var banner := scene.find_child("MenuTutorialEntryBanner", true, false) as Control
+	var title := scene.find_child("MenuTutorialEntryTitle", true, false) as Label
 	var status := scene.find_child("MenuTutorialEntryStatus", true, false) as Label
 	var continue_button := scene.find_child("MenuTutorialContinueButton", true, false) as Button
 	var skip_button := scene.find_child("MenuTutorialSkipButton", true, false) as Button
-	return banner != null and banner.visible and status != null and status.text == "第1步/4 · 摸牌后出牌" and continue_button != null and continue_button.visible and continue_button.text == "继续" and skip_button != null and skip_button.visible and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD
+	var expected_title_size := scene.accessibility_font_size(scene.commercial_ui_font_size(15, 4))
+	var expected_status_size := scene.accessibility_font_size(scene.commercial_ui_font_size(12, 4))
+	var expected_action_size := scene.accessibility_font_size(scene.commercial_ui_font_size(18, 4))
+	return banner != null and banner.visible and banner.find_child("MenuTutorialHintArt", true, false) == null and title != null and title.get_theme_font_size("font_size") == expected_title_size and status != null and status.text == "第1步/4 · 摸牌后出牌" and status.get_theme_font_size("font_size") == expected_status_size and continue_button != null and continue_button.visible and continue_button.text == "继续" and continue_button.get_theme_font_size("font_size") == expected_action_size and skip_button != null and skip_button.visible and skip_button.get_theme_font_size("font_size") == expected_action_size and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD
 
 func validate_reset_progress_fixture(scene: Node) -> bool:
 	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
