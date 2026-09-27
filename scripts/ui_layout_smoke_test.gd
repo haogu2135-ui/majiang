@@ -6449,10 +6449,13 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 	var narrative_body = scene.find_child("StatsSummaryNarrativeBody", true, false) as Label
 	var narrative_meta = scene.find_child("StatsSummaryNarrativeMeta", true, false) as Label
 	var narrative_rail = scene.find_child("StatsSummaryNarrativeRail", true, false) as Control
+	var summary_hint = scene.find_child("StatsSummaryHint", true, false) as Control
 	var dashboard_depth = scene.find_child("StatsDashboard3DDepthEdge", true, false) as Control
-	check(narrative != null and narrative_title != null and narrative_body != null and narrative_meta != null and narrative_rail != null and dashboard_depth != null, "stats dashboard exposes physical depth and left narrative summary panel at %s" % viewport_size)
+	check(narrative != null and narrative_title != null and narrative_body != null and narrative_meta != null and narrative_rail != null and summary_hint != null and dashboard_depth != null, "stats dashboard exposes physical depth and summary reading lanes at %s" % viewport_size)
 	if dash != null and narrative != null:
 		check(screen_rect(dash).grow(1.0).encloses(screen_rect(narrative)), "stats narrative summary stays inside dashboard at %s" % viewport_size)
+	if dash != null and summary_hint != null:
+		check(screen_rect(dash).grow(1.0).encloses(screen_rect(summary_hint)), "stats summary hint stays inside dashboard at %s" % viewport_size)
 	if narrative != null and narrative_title != null and narrative_body != null and narrative_meta != null and narrative_rail != null:
 		var narrative_rect = screen_rect(narrative)
 		check(narrative_rect.size.x >= 65.0 and narrative_rect.size.y >= 42.0, "stats narrative summary keeps usable compact dimensions at %s" % viewport_size)
@@ -6472,6 +6475,8 @@ func check_stats_layout(scene, viewport_size: Vector2) -> void:
 			if narrative != null:
 				check(not chip_rect.intersects(screen_rect(narrative)), "stats summary chip %s does not overlap left narrative summary at %s" % [chip_id, viewport_size])
 			check(chip_rect.grow(1.0).encloses(screen_rect(value)) and chip_rect.grow(1.0).encloses(screen_rect(caption)), "stats summary chip %s keeps text inside its backplate at %s" % [chip_id, viewport_size])
+			if summary_hint != null:
+				check(screen_rect(caption).end.y + 1.0 <= screen_rect(summary_hint).position.y, "stats summary chip %s caption clears the dashboard hint at %s" % [chip_id, viewport_size])
 			check(value.clip_text and caption.clip_text and relative_luma(value.get_theme_color("font_color")) >= 0.90 and relative_luma(caption.get_theme_color("font_color")) >= 0.86, "stats summary chip %s text stays clipped and readable at %s" % [chip_id, viewport_size])
 			if chip_id == "best":
 				var unit := scene.find_child("StatsSummaryUnit_best", true, false) as Label
