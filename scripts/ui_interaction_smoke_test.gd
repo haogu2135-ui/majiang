@@ -744,6 +744,16 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	scene.hand_keyboard_selection = -1
 	scene.render_game()
 	await settle(0.06)
+	var keyboard_action_button := scene.find_child("OfflineRestartButton", true, false) as Button
+	check(keyboard_action_button != null and keyboard_action_button.focus_mode != Control.FOCUS_NONE, "offline action button remains reachable from the keyboard")
+	if keyboard_action_button != null:
+		keyboard_action_button.grab_focus()
+		await process_frame
+		await send_key(KEY_RIGHT, 0)
+		await settle(0.04)
+		check(scene.hand_keyboard_selection == -1, "right arrow on an action button does not steal focus into the hand")
+		scene.get_viewport().gui_release_focus()
+		scene.last_game_keyboard_input_msec = 0
 	await send_key(KEY_RIGHT, 0)
 	await settle(0.04)
 	var selected_index := int(scene.hand_keyboard_selection)

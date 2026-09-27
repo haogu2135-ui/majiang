@@ -1122,6 +1122,9 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 	if not key_event.pressed or key_event.echo:
 		return false
 	var key := keyboard_event_key(key_event)
+	var hand_navigation_key := key in [KEY_LEFT, KEY_RIGHT] or key_event.is_action_pressed("ui_left") or key_event.is_action_pressed("ui_right")
+	if hand_navigation_key and game_keyboard_focus_is_action_button():
+		return false
 	var number_index := keyboard_number_index(key)
 	var extended_number_index := keyboard_extended_number_index(key_event, get_self_hand().size())
 	if extended_number_index >= 0:
