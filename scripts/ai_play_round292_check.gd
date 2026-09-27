@@ -51,6 +51,50 @@ func run() -> void:
 	var relief_reports: Array = guard_fixture()
 	scene.apply_hard_danger_push_guard(relief_reports)
 	check(str(relief_reports[0].get("tile", "")) == "5W", "hard two-away guard accepts a low-cost same-shanten player-exposure relief")
+	var moderate_pressure_reports: Array = [
+		{
+			"tile": "8W",
+			"score": 425.1,
+			"shanten": 2,
+			"risk": 31.3,
+			"feed_risk": 35.1,
+			"human_target_pressure": 31.4,
+			"human_target_exposure": 33.5,
+		},
+		{
+			"tile": "1B",
+			"score": 278.3,
+			"shanten": 2,
+			"risk": 29.3,
+			"feed_risk": 38.1,
+			"human_target_pressure": 18.1,
+			"human_target_exposure": 18.1,
+		},
+	]
+	scene.apply_hard_danger_push_guard(moderate_pressure_reports)
+	check(str(moderate_pressure_reports[0].get("tile", "")) == "1B", "hard two-away guard accepts observed lower-cost exposure relief just above moderate player pressure")
+	var below_moderate_pressure_reports: Array = [
+		{
+			"tile": "8W",
+			"score": 425.1,
+			"shanten": 2,
+			"risk": 31.3,
+			"feed_risk": 35.1,
+			"human_target_pressure": 29.9,
+			"human_target_exposure": 33.5,
+		},
+		{
+			"tile": "1B",
+			"score": 278.3,
+			"shanten": 2,
+			"risk": 29.3,
+			"feed_risk": 38.1,
+			"human_target_pressure": 18.1,
+			"human_target_exposure": 18.1,
+		},
+	]
+	scene.apply_hard_danger_push_guard(below_moderate_pressure_reports)
+	check(str(below_moderate_pressure_reports[0].get("tile", "")) == "8W", "hard two-away guard keeps its efficiency choice below the moderate-pressure threshold")
 
 	var full_table_risk_reports: Array = guard_fixture()
 	full_table_risk_reports[1]["risk"] = 39.0

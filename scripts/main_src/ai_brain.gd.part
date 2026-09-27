@@ -2089,7 +2089,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 	var two_away_emergency = best_shanten == 2 and (
 		best_risk >= AI_DANGER_RISK_HIGH + 14.0
 		or best_feed >= AI_DANGER_FEED_SOFT + 28.0
-		or best_human_pressure >= 32.0
+		or best_human_pressure >= 30.0
 	)
 	# 三项风险同时失控时，同向听的弃攻价值应高于单纯的效率分。
 	# 保留该更宽让步给真正灾难局，避免普通高压手牌过早放弃进攻。
@@ -2137,7 +2137,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		return
 	if best_risk < AI_DANGER_RISK_HIGH + 6.0 \
 		and best_feed < AI_DANGER_FEED_SOFT + 24.0 \
-		and best_human_pressure < 34.0:
+		and best_human_pressure < 30.0:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
@@ -2204,7 +2204,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			minimum_pressure_gain = 2.0
 		var targeted_same_shanten_human_relief = two_away_emergency \
 			and shanten_delta == 0 \
-			and best_human_pressure >= 34.0 \
+			and best_human_pressure >= 30.0 \
 			and candidate_human_exposure <= best_human_exposure - 10.0 \
 			and pressure_gain >= 3.0 \
 			and score_gap <= 180.0
