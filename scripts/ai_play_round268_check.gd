@@ -80,6 +80,13 @@ func run() -> void:
 	var claim_ban_revision_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
 	scene.ai_claim_ban_revision += 1
 	check(scene.ai_report_cache_key(1, visible_counts_268) != claim_ban_revision_key_268, "discard report key memo invalidates when claim bans change")
+	scene.offline_hand_number = scene.MATCH_MAX_HANDS
+	var tied_score_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	var tied_score_attack_268: float = scene.ai_total_attack_multiplier(1)
+	scene.players[0]["score"] = 40000
+	var chase_score_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	var chase_score_attack_268: float = scene.ai_total_attack_multiplier(1)
+	check(chase_score_key_268 != tied_score_key_268 and chase_score_attack_268 > tied_score_attack_268, "discard report partition and attack weighting track live standings")
 
 	scene.queue_free()
 	if failed:

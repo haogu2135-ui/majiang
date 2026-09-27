@@ -3503,6 +3503,7 @@ func ai_report_cache_key(seat: int, visible_counts_snapshot: Array = [], wall_co
 	var wall_count := wall_count_snapshot if wall_count_snapshot >= 0 else get_wall_count()
 	var visible_table_key := threat_report_table_state_cache_key(seat, visible_counts, visible_counts_key_override, wall_count)
 	var hand_key := tile_array_key(players[seat].get("hand", []))
+	var score_state_key := score_state_cache_key() if mode == "offline" else ""
 	# Profile remaps change report contents even when the table and hand are stable.
 	# Include the map in the memo key and reuse its string in the final report key.
 	var profile_map_key := ai_profile_map_cache_key()
@@ -3511,6 +3512,7 @@ func ai_report_cache_key(seat: int, visible_counts_snapshot: Array = [], wall_co
 		str(seat),
 		visible_table_key,
 		hand_key,
+		score_state_key,
 		profile_map_key,
 		mode,
 		str(1 if offline_sim_quiet else 0),
@@ -3550,6 +3552,7 @@ func ai_report_cache_key(seat: int, visible_counts_snapshot: Array = [], wall_co
 		# when no gameplay revision was emitted.
 		"table=" + visible_table_key,
 		"hand=" + hand_key,
+		"score=" + score_state_key,
 	]
 	var result := "|".join(parts)
 	ai_report_key_cache[input_key] = result
