@@ -53,6 +53,7 @@ EXPECTED_SCREENS = [
     "33_telemetry_revoked.png",
     "34_telemetry_exported.png",
     "35_offline_battle_capacity.png",
+    "36_menu_tutorial_progress.png",
 ]
 REQUIRED_BATTLE_SCREEN_CONTRACT = {
     "03_offline_battle": {
@@ -142,6 +143,12 @@ REQUIRED_INTERACTIVE_STATE_CONTRACTS = {
         "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"],
         "default_focus": "TelemetryExportButton",
         "state_text": "匿名诊断数据已复制",
+    },
+    "36_menu_tutorial_progress": {
+        "fixture_seed": "tutorial_step_discard",
+        "required_nodes": ["MenuTutorialEntryBanner", "MenuTutorialEntryStatus", "MenuTutorialContinueButton", "MenuTutorialSkipButton"],
+        "default_focus": "MenuTutorialContinueButton",
+        "state_text": "第1步/4 · 摸牌后出牌",
     },
 }
 DEFAULT_EXPECTED_SIZE = (1280, 720)

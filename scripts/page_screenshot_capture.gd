@@ -38,6 +38,7 @@ const SCREEN_NAMES := [
 	"33_telemetry_revoked",
 	"34_telemetry_exported",
 	"35_offline_battle_capacity",
+	"36_menu_tutorial_progress",
 ]
 const BATTLE_DIAGNOSTIC_SCREENS := [
 	"03_offline_battle",
@@ -243,6 +244,7 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 			"32_telemetry_consented": {"fixture_seed": "seed_preview_telemetry:consented", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已同意 · 本地队列"},
 			"33_telemetry_revoked": {"fixture_seed": "seed_preview_telemetry:revoked", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryConsentButton", "state_text": "已关闭 · 不记录"},
 			"34_telemetry_exported": {"fixture_seed": "seed_preview_telemetry:exported", "required_nodes": ["TelemetryDataSheet", "TelemetryDataSheetCard", "TelemetryConsentButton", "TelemetryExportButton", "TelemetryClearButton", "TelemetryDataSheetCloseButton", "TelemetryDataStatus", "TelemetryExportStatus"], "default_focus": "TelemetryExportButton", "state_text": "匿名诊断数据已复制"},
+			"36_menu_tutorial_progress": {"fixture_seed": "tutorial_step_discard", "required_nodes": ["MenuTutorialEntryBanner", "MenuTutorialEntryStatus", "MenuTutorialContinueButton", "MenuTutorialSkipButton"], "default_focus": "MenuTutorialContinueButton", "state_text": "第1步/4 · 摸牌后出牌"},
 		},
 		"capture_time_utc": Time.get_datetime_string_from_system(true),
 	}
@@ -295,6 +297,10 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		return
 	if screen_name == "17_hand_tutorial" and not validate_hand_tutorial_fixture(scene):
 		printerr("hand tutorial fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
+	if screen_name == "36_menu_tutorial_progress" and not validate_menu_tutorial_progress_fixture(scene):
+		printerr("menu tutorial progress fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
 	if screen_name == "19_reset_progress" and not validate_reset_progress_fixture(scene):
@@ -565,6 +571,13 @@ func validate_hand_tutorial_fixture(scene: Node) -> bool:
 	var hand := scene.find_child("HandTrayTiles", true, false) as Control
 	return hint != null and target != null and hand != null and scene.show_hand_hint and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD and scene.can_self_discard() and scene.players.size() > 0 and scene.players[0].get("hand", []).size() == 14
 
+func validate_menu_tutorial_progress_fixture(scene: Node) -> bool:
+	var banner := scene.find_child("MenuTutorialEntryBanner", true, false) as Control
+	var status := scene.find_child("MenuTutorialEntryStatus", true, false) as Label
+	var continue_button := scene.find_child("MenuTutorialContinueButton", true, false) as Button
+	var skip_button := scene.find_child("MenuTutorialSkipButton", true, false) as Button
+	return banner != null and banner.visible and status != null and status.text == "第1步/4 · 摸牌后出牌" and continue_button != null and continue_button.visible and continue_button.text == "继续" and skip_button != null and skip_button.visible and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD
+
 func validate_reset_progress_fixture(scene: Node) -> bool:
 	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
 	var reset_button := scene.find_child("SettingRowButton_本地进度", true, false) as Button
@@ -615,6 +628,10 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			seed_preview_capacity_battle(scene)
 			scene.render_game()
 			scene.clear_fx_overlays()
+		"36_menu_tutorial_progress":
+			scene.settings_panel_open = false
+			scene.tutorial_step = scene.TUTORIAL_STEP_DISCARD
+			scene.show_menu(true)
 		"04_rules":
 			scene._show_rules_screen_impl()
 		"05_stats":
