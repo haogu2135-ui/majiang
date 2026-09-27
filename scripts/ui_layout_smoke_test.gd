@@ -3645,6 +3645,7 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 		check(quick_button != null, "menu quick action %s exists at %s" % [quick_actions[quick_id], viewport_size])
 		if quick_button != null:
 			check(quick_button.text == str(quick_actions[quick_id]) and quick_button.get_theme_font_size("font_size") >= 18, "menu quick action %s keeps a readable native label at %s" % [quick_actions[quick_id], viewport_size])
+			check(quick_button.get_theme_color("font_color").a == 0.0 and quick_button.get_theme_color("font_outline_color").a == 0.0 and quick_button.get_theme_color("font_shadow_color").a == 0.0 and quick_button.get_theme_constant("outline_size") == 0, "menu quick action %s keeps its accessible native label visually hidden behind the custom label at %s" % [quick_actions[quick_id], viewport_size])
 			check_button_face_behind_native_text(quick_button, "menu quick action %s" % quick_actions[quick_id], viewport_size)
 			var quick_rect = screen_rect(quick_button)
 			check(quick_rect.size.x >= 96.0 and quick_rect.size.y >= 44.0, "menu quick action %s keeps a non-overlapping touch target at %s" % [quick_actions[quick_id], viewport_size])
