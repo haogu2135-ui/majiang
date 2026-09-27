@@ -218,7 +218,9 @@ check_no_runtime_programmatic_ui_shapes() {
 	scan_absent 'ColorRect[.]new[[:space:]]*[(]|make_color_rect[[:space:]]*[(]|draw_(rect|line|circle|arc|colored_polygon|polygon)[[:space:]]*[(]' \
 		"$ROOT_DIR/scripts/main_base.gd" \
 		"$ROOT_DIR/scripts/main_src" \
-		"$ROOT_DIR/scripts/ui"
+		"$ROOT_DIR/scripts/ui" \
+		"$ROOT_DIR/scripts/animation_effects.gd" \
+		"$ROOT_DIR/scripts/ui_enhancements.gd"
 }
 
 run_check "Python QA tools compile" "py_compile.log" \
