@@ -87,6 +87,20 @@ func run() -> void:
 	var chase_score_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
 	var chase_score_attack_268: float = scene.ai_total_attack_multiplier(1)
 	check(chase_score_key_268 != tied_score_key_268 and chase_score_attack_268 > tied_score_attack_268, "discard report partition and attack weighting track live standings")
+	var initial_rule_variant_268: String = scene.active_rule_variant()
+	var prior_offline_rule_variant_268: String = str(scene.offline_active_rule_variant)
+	scene.offline_active_rule_variant = scene.RULE_VARIANT_GUANGDONG if initial_rule_variant_268 != scene.RULE_VARIANT_GUANGDONG else scene.RULE_VARIANT_NANJING
+	var alternate_rule_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	check(alternate_rule_key_268 != chase_score_key_268, "discard report key memo invalidates when active rule profile changes")
+	scene.offline_active_rule_variant = prior_offline_rule_variant_268
+	var flower_state_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	scene.players[1]["flowers"] = 1
+	check(scene.ai_report_cache_key(1, visible_counts_268) != flower_state_key_268, "discard report key memo invalidates when flower scoring changes")
+	scene.players[1]["flowers"] = 0
+	scene.players[1]["melds"] = [["E", "E", "E", "E"]]
+	var exposed_gang_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	scene.offline_concealed_gang_tiles[1] = {"E": true}
+	check(scene.ai_report_cache_key(1, visible_counts_268) != exposed_gang_key_268, "discard report key memo invalidates when concealed-gang scoring changes")
 
 	scene.queue_free()
 	if failed:
