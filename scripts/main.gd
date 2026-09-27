@@ -3506,7 +3506,25 @@ func ai_report_cache_key(seat: int, visible_counts_snapshot: Array = [], wall_co
 	# Profile remaps change report contents even when the table and hand are stable.
 	# Include the map in the memo key and reuse its string in the final report key.
 	var profile_map_key := ai_profile_map_cache_key()
-	var input_key := "%d|%d|%s|%s|%s" % [ai_state_revision, seat, visible_table_key, hand_key, profile_map_key]
+	var input_parts: Array[String] = [
+		str(ai_state_revision),
+		str(seat),
+		visible_table_key,
+		hand_key,
+		profile_map_key,
+		mode,
+		str(1 if offline_sim_quiet else 0),
+		offline_phase,
+		str(current_seat),
+		str(1 if offline_turn_needs_draw else 0),
+		str(dealer_seat),
+		str(offline_hand_number),
+		str(wall_count),
+		str(clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)),
+		str(ai_package_liability_revision),
+		str(ai_claim_ban_revision),
+	]
+	var input_key := "|".join(input_parts)
 	var cached_key: String = str(ai_report_key_cache.get(input_key, ""))
 	if cached_key != "":
 		return cached_key

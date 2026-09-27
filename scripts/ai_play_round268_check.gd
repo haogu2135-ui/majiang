@@ -69,6 +69,17 @@ func run() -> void:
 	var baseline_report_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
 	var snapshot_report_key_268: String = scene.ai_report_cache_key(1, visible_counts_268, -1, visible_key_268)
 	check(snapshot_report_key_268 == baseline_report_key_268, "forwarded key preserves the discard report cache partition")
+	var normal_difficulty_key_268 := baseline_report_key_268
+	scene.ai_difficulty = scene.AI_DIFFICULTY_HARD
+	var hard_difficulty_key_268: String = scene.ai_report_cache_key(1, visible_counts_268)
+	check(hard_difficulty_key_268 != normal_difficulty_key_268 and hard_difficulty_key_268.contains("diff=%d" % scene.AI_DIFFICULTY_HARD), "discard report key memo invalidates when difficulty changes")
+	scene.ai_difficulty = scene.AI_DIFFICULTY_NORMAL
+	var package_revision_key_268 := scene.ai_report_cache_key(1, visible_counts_268)
+	scene.ai_package_liability_revision += 1
+	check(scene.ai_report_cache_key(1, visible_counts_268) != package_revision_key_268, "discard report key memo invalidates when package liability changes")
+	var claim_ban_revision_key_268 := scene.ai_report_cache_key(1, visible_counts_268)
+	scene.ai_claim_ban_revision += 1
+	check(scene.ai_report_cache_key(1, visible_counts_268) != claim_ban_revision_key_268, "discard report key memo invalidates when claim bans change")
 
 	scene.queue_free()
 	if failed:
