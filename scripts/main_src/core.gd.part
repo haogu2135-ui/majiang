@@ -10502,9 +10502,9 @@ func chat_panel_rect() -> Rect2:
 		rect_full(0.620, 0.120, 0.880, 0.430),
 		rect_full(0.115, 0.110, upper_left_right, upper_left_bottom),
 		# When the upper-left reading lane is reserved by an active meld, keep the
-		# same-height compact controls in the clear left channel above the bottom
-		# seat and below the side river.
-		rect_full(0.115, 0.430, left_route_right, 0.720),
+		# compact controls below the last visible side-wall tile and above the
+		# bottom seat and river.
+		rect_full(0.115, 0.460, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
 	# Candidate scoring runs once per authored lane. Capture all shared geometry
@@ -10521,7 +10521,7 @@ func chat_panel_rect() -> Rect2:
 		# Every preferred lane can be occupied by a live seat/meld/river. Keep the
 		# last resort in the bounded left channel instead of covering the bottom
 		# river, seat plaque, or hand tray.
-		return rect_full(0.115, 0.430, left_route_right, 0.720)
+		return rect_full(0.115, 0.460, left_route_right, 0.720)
 	return best
 
 func chat_panel_occupancy_snapshot(visible_meld_seats_snapshot = null) -> Dictionary:

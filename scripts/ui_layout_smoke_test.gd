@@ -4519,6 +4519,9 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		var route_bottom_limit := 0.43 if route == "top_safe_drawer" or route == "upper_meld_safe_drawer" else 0.78
 		check(panel_rect.size.x >= 180.0 and panel_rect.end.y <= viewport_size.y * route_bottom_limit, "online game chat drawer keeps a wide compact touch lane at %s" % viewport_size)
 		check(panel.get_meta("compact_chat", false), "online game chat marks the narrow route as compact at %s" % viewport_size)
+		var wall_tile_rects := battle_visible_wall_face_rects(scene)
+		for wall_index in range(wall_tile_rects.size()):
+			check(not rects_overlap(panel_rect, wall_tile_rects[wall_index]), "online chat clears visible wall tile %d at %s" % [wall_index, viewport_size])
 		for seat in range(4):
 			var seat_panel = scene.find_child("SeatPanel_%d" % seat, true, false) as Control
 			var meld_area = scene.find_child("MeldArea_%d" % seat, true, false) as Control
