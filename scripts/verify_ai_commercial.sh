@@ -192,6 +192,7 @@ run_godot_check "Strength evidence" 94 "all-opponent avoidable danger is mandato
 run_godot_check "Strategy quality" 95 "exact-score discard ties preserve decision quality"
 run_godot_check "Strategy quality" 97 "exposed melds affect numeric route scoring"
 run_godot_check "Strategy quality" 287 "declined ron still evaluates legal meld claims"
+run_godot_check "Cache correctness" 268 "discard reports invalidate on scoring and decision input changes"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
@@ -237,6 +238,7 @@ fi
 	echo "- Difficulty and strength: easy/normal/hard conservation is exercised; paired easy/hard multi-seed packs and an independent fixed-player probe must pass."
 	echo "- Strength outcome telemetry: raw danger and whole-table ron incidence remain recorded; actionable safer alternatives and deal-ins to the fixed player probe decide the commercial defense gate."
 	echo "- Strategy determinism: exact-score discard ties prefer lower shanten, higher ukeire, lower combined danger, then canonical tile order."
+	echo "- Cache correctness: discard-report reuse invalidates on difficulty, standings, active rules, flower/concealed-gang scoring, liability, and claim-ban changes."
 	echo "- Hard-defense diagnostics: catastrophic thin-tenpai pressure is guarded; all-opponent danger telemetry only counts same-shanten actionable alternatives and is mandatory for commercial PASS."
 	echo "- Performance: fresh-scene, primary strength, and independent strength samples must finish within their low-resource budgets."
 	echo ""
