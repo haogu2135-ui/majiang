@@ -214,6 +214,13 @@ check_no_runtime_generated_bitmap_textures() {
 		"$ROOT_DIR/scripts/ui"
 }
 
+check_no_runtime_programmatic_ui_shapes() {
+	scan_absent 'ColorRect[.]new[[:space:]]*[(]|make_color_rect[[:space:]]*[(]|draw_(rect|line|circle|arc|colored_polygon|polygon)[[:space:]]*[(]' \
+		"$ROOT_DIR/scripts/main_base.gd" \
+		"$ROOT_DIR/scripts/main_src" \
+		"$ROOT_DIR/scripts/ui"
+}
+
 run_check "Python QA tools compile" "py_compile.log" \
 	python3 -m py_compile \
 	tools/assemble_main.py \
@@ -236,6 +243,9 @@ run_check "Git whitespace check" "git_diff_check.log" \
 
 run_check "Runtime UI uses imported bitmap assets only" "runtime_bitmap_policy.log" \
 	check_no_runtime_generated_bitmap_textures
+
+run_check "Runtime UI avoids code-painted shape primitives" "runtime_shape_policy.log" \
+	check_no_runtime_programmatic_ui_shapes
 
 run_check "Target Godot engine is 4.6.3" "godot_version.log" \
 	check_target_godot_version
