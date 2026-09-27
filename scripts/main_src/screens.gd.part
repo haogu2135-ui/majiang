@@ -452,11 +452,11 @@ func _show_menu_impl() -> void:
 		root_layer.add_child(tutorial_banner)
 		var tutorial_title = make_label(tutorial_banner, "新手教学", commercial_ui_font_size(15, 4), Color(0.10, 0.15, 0.12), true)
 		tutorial_title.name = "MenuTutorialEntryTitle"
-		apply_rect(tutorial_title, rect_full(0.105, 0.095, 0.390, 0.360))
+		apply_rect(tutorial_title, rect_full(0.200, 0.095, 0.550, 0.360))
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, commercial_ui_font_size(12, 4), Color(0.24, 0.29, 0.23), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
-		apply_rect(tutorial_detail, rect_full(0.105, 0.390, 0.560, 0.670))
+		apply_rect(tutorial_detail, rect_full(0.200, 0.390, 0.580, 0.670))
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(tutorial_detail)
 		set_ui_full_text(tutorial_detail, tutorial_detail_text, "新手教学进度详情")
