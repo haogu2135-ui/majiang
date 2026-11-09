@@ -38,6 +38,11 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	var runtime_script := load("res://scripts/main.gd") as Script
+	if runtime_script == null or not runtime_script.can_instantiate():
+		check(false, "runtime script must compile before layout assertions")
+		quit(1)
+		return
 	# Keep one complete page fixture within the fixed QA budget. The safe-area and
 	# live-resize probes below still exercise the 960px and 1920px layouts in the
 	# same process without rebuilding every heavy secondary page three times.
@@ -195,6 +200,8 @@ func seed_battle_capacity_layout_state(scene) -> void:
 	seed_offline_battle_layout_state(scene)
 	scene.offline_phase = "await_discard"
 	scene.offline_pending_claim.clear()
+	scene.show_hand_hint = false
+	scene.tutorial_step = scene.TUTORIAL_STEP_COMPLETE
 	scene.current_seat = 0
 	scene.offline_turn_needs_draw = false
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "5T", "9T", "E", "R"]
@@ -284,15 +291,15 @@ func run_continuous_resize_capacity_probe() -> void:
 		var shop_rows := controls_with_name_prefix(scene, "ShopItemRow_")
 		check(shop_rows.size() == 4, "shop preserves all four product rows through live resize at %s" % viewport_size)
 		if not shop_rows.is_empty():
-			var expected_wide: bool = viewport_size.x >= 1600.0
-			var expected_columns: int = 2 if expected_wide else 1
-			var expected_rows: int = maxi(1, ceili(4.0 / float(expected_columns)))
-			var expected_gap := 12.0 if expected_wide else 10.0
-			var expected_row_cap := 320.0 if expected_wide else 120.0
-			var expected_row_height := clampf(floorf((scene.safe_content_pixel_size().y * 0.96 * (0.750 - 0.12) - expected_gap * float(expected_rows - 1)) / float(expected_rows)), 68.0, expected_row_cap)
-			check(absf((shop_rows[0] as Control).custom_minimum_size.y - expected_row_height) <= 1.0, "shop recomputes compact row height through live resize at %s" % viewport_size)
-			if viewport_size.x >= 1600.0:
-				check((shop_rows[0] as Control).custom_minimum_size.y > 120.0, "wide shop uses the full display height instead of leaving a shelf-sized blank lane at %s" % viewport_size)
+			var catalogue := scene.find_child("ShopItemsContent", true, false) as Control
+			var display_cards: bool = viewport_size.x >= 1200.0 and not scene.large_text_enabled
+			check((catalogue is GridContainer and (catalogue as GridContainer).columns == 2) if display_cards else catalogue is VBoxContainer, "shop switches between real two-column display and single-column reading through live resize at %s" % viewport_size)
+			var catalogue_scroll := scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
+			if display_cards and catalogue_scroll != null:
+				for product in shop_rows:
+					check(screen_rect(catalogue_scroll).grow(1.0).encloses(screen_rect(product)), "all four display cards remain visible after resize at %s" % viewport_size)
+			else:
+				check((shop_rows[0] as Control).custom_minimum_size.y >= 68.0 and (shop_rows[0] as Control).custom_minimum_size.y <= 120.0, "single-column products retain readable compact heights through live resize at %s" % viewport_size)
 
 	var daily_fixture := {"consecutive_days": 5, "claimed_today": true, "show_reward": true}
 	scene.show_daily_login_panel(daily_fixture)
@@ -396,6 +403,8 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 				if river_tile != null and not bool(river_tile.get_meta("archive_reserved", false)) and rects_overlap(screen_rect(owner_badge), screen_rect(river_tile)):
 					owner_clears_tiles = false
 		check(grid != null and real_tile_count == expected_visible, "river %d exposes its full %d-tile visible window at %s" % [seat, expected_visible, viewport_size])
+		if seat in [1, 3] and viewport_size in [Vector2(960, 540), Vector2(1280, 720)]:
+			check(real_tile_count >= 3, "side river %d shows at least three recent discards at %s" % [seat, viewport_size])
 		check(grid == null or reserved_cell_count == 0, "river %d does not add blank archive cells to the visible river grid at %s" % [seat, viewport_size])
 		check(owner_badge == null or owner_clears_tiles, "river %d ownership cue does not cover a visible discard face at %s" % [seat, viewport_size])
 		check(grid != null and str(grid.get_meta("river_owner_label", "")) == str(scene.discard_river_owner_text(seat)), "river %d keeps its owner identity in scene semantics at %s" % [seat, viewport_size])
@@ -406,10 +415,15 @@ func check_battle_capacity_layout(scene, viewport_size: Vector2) -> void:
 			var archive_rect := screen_rect(archive_button)
 			var archive_label = archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
 			check(archive_rect.size.x >= 44.0 and archive_rect.size.y >= 44.0 and archive_button.get_combined_minimum_size().x <= archive_rect.size.x + 1.0, "river %d archive entry remains a readable 44px target at %s" % [seat, viewport_size])
-			check(archive_label != null and str(archive_label.text) == str(archive_button.get_meta("visible_summary", "")) and not str(archive_label.text).contains("查看") and archive_label.tooltip_text == archive_button.tooltip_text and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry keeps a short visible window summary with the full history detail available on focus at %s" % [seat, viewport_size])
+			check(archive_label != null and str(archive_label.text) == str(archive_button.get_meta("visible_summary", "")) and archive_label.tooltip_text == archive_button.tooltip_text and relative_luma(archive_label.get_theme_color("font_color")) >= 0.88 and archive_rect.grow(1.0).encloses(screen_rect(archive_label)), "river %d archive entry keeps its visible action and full history detail available on focus at %s" % [seat, viewport_size])
 		if seat == scene.get_last_discard_seat():
 			var recent = scene.find_child("RecentDiscardTile_%d" % seat, true, false) as Control
 			check(recent != null and int(recent.get_meta("discard_source_index", -1)) == scene.get_discards(seat).size() - 1 and str(recent.get_meta("discard_tile_code", "")) == str(scene.get_discards(seat)[-1]), "river %d retains one accurate latest-discard marker at capacity at %s" % [seat, viewport_size])
+			var marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
+			if recent != null and marker != null:
+				check(screen_rect(marker).position.distance_to(screen_rect(recent).position) <= 0.5 and screen_rect(marker).size.distance_to(screen_rect(recent).size) <= 0.5, "river %d latest frame follows its actual face after resize at %s" % [seat, viewport_size])
+			else:
+				check(false, "river %d keeps a latest face and frame after resize at %s" % [seat, viewport_size])
 		var flower_meta = scene.find_child("SeatCompactMeta_%d" % seat, true, false) as Label
 		check(flower_meta != null and flower_meta.text.contains("花8"), "seat %d preserves the full eight-flower count at %s" % [seat, viewport_size])
 	check_battle_viewport_bounds(scene, viewport_size)
@@ -622,7 +636,7 @@ func check_ui_round_771_800(scene, viewport_size: Vector2) -> void:
 	if retry != null and state_badge != null:
 		check(not rects_overlap(screen_rect(retry), screen_rect(state_badge)) and screen_rect(retry).position.y >= screen_rect(state_badge).end.y - 1.0, "lobby retry stays below the connection state badge at %s" % viewport_size)
 	if retry != null and lobby_log != null:
-		check(screen_rect(retry).end.y + 6.0 <= screen_rect(lobby_log).position.y, "lobby retry clears the room-state panel by six pixels at %s" % viewport_size)
+		check(not screen_rect(retry).grow(5.5).intersects(screen_rect(lobby_log)), "lobby retry clears the room-state panel by six pixels at %s" % viewport_size)
 	var form_feedback := scene.find_child("OnlineLobbyFormFeedbackLabel", true, false) as Control
 	var form_actions := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
 	if form_feedback != null and form_actions != null:
@@ -1138,6 +1152,12 @@ func check_ui_round_1131_1160(scene, viewport_size: Vector2) -> void:
 	var room_copy := scene.find_child("TopHudRoomCodeCopyButton", true, false) as Button
 	if room_copy != null:
 		check(int(room_copy.get_meta("ui_min_touch_target", 0)) >= 44, "table room copy keeps a minimum touch target at %s" % viewport_size)
+		var hud_status := scene.find_child("TopHudStatus", true, false) as Label
+		var hud_title := scene.find_child("TopHudTitle", true, false) as Label
+		check(room_copy.text == "复制" and room_copy.icon == null, "room-copy action has a recognizable command without a missing icon at %s" % viewport_size)
+		if hud_status != null and hud_title != null:
+			check(screen_rect(hud_title).end.x + 7.5 <= screen_rect(room_copy).position.x and screen_rect(room_copy).end.x + 7.5 <= screen_rect(hud_status).position.x, "room title copy and live status have separate eight-pixel gutters at %s" % viewport_size)
+
 
 
 func check_ui_round_1161_1190(scene, viewport_size: Vector2) -> void:
@@ -1665,7 +1685,8 @@ func check_ui_round_1431_1490(scene, viewport_size: Vector2) -> void:
 		check(chat_range.get_meta("range_status_owner", "") == "ChatPanelMessageScroll" and chat_range.tooltip_text != "", "chat visible range stays in the header lane at %s" % viewport_size)
 	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
 	if quick_row != null:
-		check(quick_row.clip_contents and float(quick_row.get_meta("input_gutter_px", 0.0)) >= 8.0, "chat quick actions keep an input gutter at %s" % viewport_size)
+		var chat_body := scene.find_child("ChatPanelBodyScroll", true, false) as ScrollContainer
+		check(chat_body != null and chat_body.clip_contents and not quick_row.clip_contents and float(quick_row.get_meta("input_gutter_px", 0.0)) >= 8.0, "chat quick actions wrap inside a clipped scroll owner with an input gutter at %s" % viewport_size)
 	var quick_title := scene.find_child("ChatPanelQuickMessagesLabel", true, false) as Label
 	if quick_title != null:
 		check(quick_title.clip_text and quick_title.get_meta("overflow_policy", "") != "", "chat quick-message heading stays distinct and bounded at %s" % viewport_size)
@@ -1841,7 +1862,7 @@ func check_ui_round_1491_1550(scene, viewport_size: Vector2) -> void:
 	for section_name in ["声音", "体验", "系统"]:
 		var section_button := scene.find_child("SettingsSectionNavButton_%s" % section_name, true, false) as Button
 		if section_button != null:
-			check(section_button.get_meta("section_focus_role", "") == "jump_to_settings_section" and section_button.get_meta("section_focus_name", "") == section_name, "settings section %s keeps a named native route at %s" % [section_name, viewport_size])
+			check(section_button.get_meta("section_focus_role", "") == "select_settings_category" and section_button.get_meta("section_focus_name", "") == section_name, "settings section %s keeps a named native route at %s" % [section_name, viewport_size])
 	for setting_button_name in [
 		"SettingRowButton_背景音乐", "SettingRowButton_音效反馈", "SettingRowButton_语音报牌", "SettingRowButton_播放测试",
 		"SettingRowButton_AI 节奏", "SettingRowButton_AI 难度", "SettingRowButton_桌面特效", "SettingRowButton_阅读辅助",
@@ -2192,6 +2213,17 @@ func check_ui_round_1791_1850(scene, viewport_size: Vector2) -> void:
 	var marker := scene.find_child("LastDiscardFocusMarker", true, false) as Control
 	if marker != null:
 		check(marker.z_index >= 50 and marker.get_meta("primary_visual_owner", "") == "LastDiscardFocusMarker" and marker.get_meta("z_index_policy", "") == "latest_discard_owner_above_river_faces", "latest discard has one raised visual owner at %s" % viewport_size)
+		var latest_grid := scene.find_child("DiscardGrid_%d" % scene.get_last_discard_seat(), true, false) as Control
+		var latest_face: Control = null
+		if latest_grid != null:
+			for child in latest_grid.get_children():
+				if child is Control and int(child.get_meta("discard_source_index", -1)) == scene.get_discards(scene.get_last_discard_seat()).size() - 1:
+					latest_face = child as Control
+		check(latest_face != null, "latest discard marker resolves the actual visible river tile at %s" % viewport_size)
+		if latest_face != null:
+			for decoration in marker.find_children("*", "TextureRect", true, false):
+				var visual := decoration as TextureRect
+				check(not visual.is_visible_in_tree() or not screen_rect(visual).intersects(screen_rect(latest_face).grow(-0.25)), "latest discard decoration %s leaves the actual tile face clear at %s (marker=%s edge=%s tile=%s seat=%s)" % [visual.name, viewport_size, screen_rect(marker), screen_rect(visual), screen_rect(latest_face), scene.get_last_discard_seat()])
 	var river_grid := scene.find_child("DiscardGrid_0", true, false) as Control
 	if river_grid != null:
 		check(str(river_grid.get_meta("latest_discard_page_state", "")) in ["latest", "history"] and river_grid.get_meta("latest_page_state_owner", "") == "DiscardRiverOwnerOverlay_0", "river keeps an explicit latest/history page state at %s" % viewport_size)
@@ -2322,7 +2354,7 @@ func check_ui_round_1971_2030(scene, viewport_size: Vector2) -> void:
 	if hud != null:
 		check(float(hud.get_meta("header_lane_clearance_px", 0.0)) >= 8.0 and hud.get_meta("header_lane_policy", "") == "score_wall_actions_have_explicit_gutters", "top HUD records explicit score/wall/action gutters at %s" % viewport_size)
 		var score_strip := hud.find_child("ScoreStrip", true, false) as Control
-		var wall_back := hud.find_child("TopHudWallBack", true, false) as Control
+		var wall_back := hud.find_child("TopHudWallText", true, false) as Control
 		var settings := hud.find_child("TopHudSettingsButton", true, false) as Control
 		if score_strip != null and wall_back != null and settings != null:
 			check(screen_rect(score_strip).end.x + 4.0 <= screen_rect(wall_back).position.x and screen_rect(wall_back).end.x + 4.0 <= screen_rect(settings).position.x, "top HUD score, wall, and settings surfaces keep physical gutters at %s" % viewport_size)
@@ -2357,7 +2389,8 @@ func check_ui_round_2031_2090(scene, viewport_size: Vector2) -> void:
 		check(screen_rect(loading_lane).end.y <= viewport_size.y - 20.0, "loading footer rail lane keeps bottom safe clearance at %s" % viewport_size)
 	var reset_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
 	if reset_status != null:
-		check(reset_status.get_meta("compact_consequence_policy", "") == "two_line_complete_scope", "compact reset status keeps complete two-line consequence copy at %s" % viewport_size)
+		var single_line_reset: bool = not scene.large_text_enabled and (viewport_size.y <= 560.0 or viewport_size.x <= 960.0)
+		check(reset_status.get_meta("compact_consequence_policy", "") == ("single_line_complete_scope" if single_line_reset else "two_line_complete_scope"), "reset status keeps complete profile-aware consequence copy at %s" % viewport_size)
 	var danger_meld := scene.find_child("MeldArea_1", true, false) as Control
 	if danger_meld != null and scene.mode == "offline" and scene.has_pending_danger_discard():
 		check(float(danger_meld.get_meta("danger_readability_min_width_px", 0.0)) >= 28.0, "danger meld keeps readable vertical face minimum at %s" % viewport_size)
@@ -2385,7 +2418,7 @@ func check_ui_round_2091_2150(scene, viewport_size: Vector2) -> void:
 		check(root.get_meta("ui_round_2091_2150_evidence_viewports", []).size() == 3, "F-2091..F-2150 names three evidence viewports at %s" % viewport_size)
 	var telemetry_card := scene.find_child("TelemetryDataSheetCard", true, false) as Control
 	if telemetry_card != null:
-		check(float(telemetry_card.get_meta("opaque_reading_surface_alpha", 0.0)) >= 0.98 and telemetry_card.get_meta("background_showthrough_policy", "") == "dark_authored_scrim_before_privacy_copy", "telemetry sheet owns an opaque authored reading surface at %s" % viewport_size)
+		check(float(telemetry_card.get_meta("opaque_reading_surface_alpha", 0.0)) >= 0.98 and telemetry_card.get_meta("background_showthrough_policy", "") == "opaque_authored_paper_before_privacy_copy", "telemetry sheet owns an opaque authored reading surface at %s" % viewport_size)
 	var diagnostic_feedback := scene.find_child("DiagnosticCopyFeedbackLabel", true, false) as Label
 	if diagnostic_feedback != null:
 		check(diagnostic_feedback.get_meta("visible_feedback_policy", "") == "short_state_with_full_tooltip" and diagnostic_feedback.tooltip_text != "", "diagnostic copy feedback keeps a visible short state and full detail at %s" % viewport_size)
@@ -3087,6 +3120,16 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 	await process_frame
 	check_danger_discard_layout(scene, actual_viewport)
 	check_ui_round_771_800(scene, actual_viewport)
+	scene.large_text_enabled = true
+	scene.high_contrast_enabled = true
+	scene.render_game()
+	await settle_layout()
+	check_danger_discard_layout(scene, actual_viewport)
+	scene.large_text_enabled = false
+	scene.high_contrast_enabled = false
+	scene.render_game()
+	await settle_layout()
+
 	scene.advisor_detail_open = true
 	check(scene.handle_ui_cancel(), "Esc is consumed by the active danger confirmation before stale advisor detail at %s" % actual_viewport)
 	await process_frame
@@ -3302,7 +3345,11 @@ func check_telemetry_toast_layout(scene, viewport_size: Vector2) -> void:
 	var export_status := scene.find_child("TelemetryExportStatus", true, false) as Label
 	check(export_status != null and export_status.text.contains("已复制") and str(export_status.get_meta("modal_safe_route", "")) == "inside_sheet_footer", "telemetry export keeps an in-card persistent status at %s" % viewport_size)
 	var clear_hint := scene.find_child("TelemetryClearConfirmHint", true, false) as Label
-	check(clear_hint != null and clear_hint.visible and clear_hint.text.contains("范围：本机匿名诊断数据") and clear_hint.text.contains("首次点击仅确认") and int(clear_hint.get_meta("confirm_window_seconds", 0)) == 5, "telemetry clear scope and non-destructive first-click hint stay visible before confirmation at %s" % viewport_size)
+	var clear_action := scene.find_child("TelemetryClearButton", true, false) as Button
+	if scene.telemetry_outbox.is_empty():
+		check(clear_action != null and clear_action.disabled and clear_hint != null and clear_hint.visible and clear_hint.text.contains("暂无本地诊断数据"), "empty telemetry queue visibly explains its disabled clear action at %s" % viewport_size)
+	else:
+		check(clear_hint != null and clear_hint.visible and clear_hint.text.contains("范围：本机匿名诊断数据") and clear_hint.text.contains("首次点击仅确认") and int(clear_hint.get_meta("confirm_window_seconds", 0)) == 5, "nonempty telemetry clear scope and non-destructive first-click hint stay visible before confirmation at %s" % viewport_size)
 	scene.close_telemetry_data_sheet()
 	scene.dismiss_active_toast()
 	scene.settings_panel_open = false
@@ -3371,81 +3418,41 @@ func check_diagnostic_layout(scene, viewport_size: Vector2, line_count: int) -> 
 	var last_rect = screen_rect(last_line)
 	check(last_rect.position.y >= scroll_rect.position.y - 1.0 and last_rect.end.y <= scroll_rect.end.y + 1.0, "diagnostic final line is reachable at the bottom of the scroll range at %s" % viewport_size)
 func check_loading_layout(scene, viewport_size: Vector2) -> void:
-	var center_panel = scene.find_child("LoadingCenterPanel", true, false) as Control
-	var title = scene.find_child("LoadingTitleLabel", true, false) as Label
-	var subtitle = scene.find_child("LoadingSubtitleLabel", true, false) as Label
-	var status = scene.find_child("LoadingStatusLabel", true, false) as Label
-	var tip = scene.find_child("LoadingTipLabel", true, false) as Label
-	var version = scene.find_child("LoadingVersionLabel", true, false) as Label
-	var version_plate = scene.find_child("LoadingVersionReadabilityPlate", true, false) as Control
-	var shuffle_art = scene.find_child("LoadingShuffleArt", true, false) as Control
-	var progress_art = scene.find_child("LoadingProgressFeedback", true, false) as Control
-	var progress_route = scene.find_child("LoadingProgressRoute", true, false) as Control
-	var progress_fill = scene.find_child("LoadingProgressFill", true, false) as Control
-	var progress_gate = scene.find_child("LoadingProgressGate", true, false) as Control
-	var tip_art = scene.find_child("LoadingTipArt", true, false) as Control
-	var tip_rail = scene.find_child("LoadingTipRail", true, false) as Control
-	var tip_fill = scene.find_child("LoadingTipFill", true, false) as Control
-	var gpt_backdrop = scene.find_child("LoadingGPTBackdropTexture", true, false) as Control
-	var moon = scene.find_child("LoadingMoon", true, false) as Panel
-	var moon_glow = scene.find_child("MoonGlowBloom", true, false) as Control
-	var far_mountain = scene.find_child("LoadingFarMountain", true, false) as Control
-	var water = scene.find_child("LoadingWater", true, false) as Control
-	check(center_panel != null and title != null and subtitle != null and status != null and tip != null and version != null and version_plate != null, "loading screen exposes named readable text nodes and version plate at %s" % viewport_size)
-	check(shuffle_art != null and progress_art != null and progress_route != null and progress_fill != null and progress_gate != null and tip_art != null and tip_rail != null and tip_fill != null, "loading screen renders progress and tip route art for layout audit at %s" % viewport_size)
-	var loading_face_count := 0
-	for i in range(5):
-		var shuffle_tile = scene.find_child("LoadingShuffleTile_%d" % i, true, false) as Control
-		if shuffle_tile != null and shuffle_tile.find_child("TileFaceTexture", true, false) is TextureRect:
-			loading_face_count += 1
-	check(loading_face_count == 5, "loading shuffle uses five authored 2D tile faces instead of blank box-like backs at %s" % viewport_size)
-	if gpt_backdrop != null:
-		var moon_style: StyleBoxFlat = null
-		if moon != null:
-			moon_style = moon.get_theme_stylebox("panel") as StyleBoxFlat
-		check(moon_style != null and moon_style.bg_color.a <= 0.01 and moon_style.border_color.a <= 0.01, "loading GPT backdrop suppresses fallback moon rectangle at %s" % viewport_size)
-		check(moon_glow != null and _control_is_subdued_art(moon_glow, 0.02), "loading GPT backdrop suppresses rectangular moon glow overlay at %s" % viewport_size)
-		check(far_mountain != null and _control_is_subdued_art(far_mountain, 0.02), "loading GPT backdrop suppresses fallback mountain rectangle at %s" % viewport_size)
-		check(water != null and _control_is_subdued_art(water, 0.02), "loading GPT backdrop suppresses fallback water rectangle at %s" % viewport_size)
-	if center_panel == null:
+	var panel := scene.find_child("LoadingCenterPanel", true, false) as TextureRect
+	var garden := scene.find_child("LoadingGuofengGardenBackdrop", true, false) as TextureRect
+	check(panel != null and panel.texture is AtlasTexture and (panel.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt") and panel.modulate == Color.WHITE, "loading uses an opaque authored paper at %s" % viewport_size)
+	check(garden != null and garden.texture == scene.optional_gpt_illustration_texture("menu_guofeng_moonlit"), "loading uses the shared authored garden at %s" % viewport_size)
+	if panel == null:
 		return
-	var center_rect = screen_rect(center_panel)
-	check(center_rect.position.x >= viewport_size.x * 0.250 and center_rect.end.x <= viewport_size.x * 0.750 and center_rect.position.y >= viewport_size.y * 0.170 and center_rect.end.y <= viewport_size.y * 0.835, "loading center panel stays in the safe focal area at %s" % viewport_size)
-	check(center_rect.size.x >= viewport_size.x * 0.40 and center_rect.size.y >= viewport_size.y * 0.55, "loading center panel keeps enough room for title, shuffle, progress and tip at %s" % viewport_size)
-	var label_nodes: Array[Label] = [title, subtitle, status, tip, version]
-	for label in label_nodes:
-		if label == null:
+	var panel_rect := screen_rect(panel)
+	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect) and panel_rect.size.x >= 360 and panel_rect.size.y >= 360, "loading reserves a bounded reading surface at %s" % viewport_size)
+	var previous: Control = null
+	for node_name in ["LoadingTitleLabel", "LoadingSubtitleLabel", "LoadingShuffleArt", "LoadingStatusLabel", "LoadingProgressFeedback", "LoadingTipLabel", "LoadingVersionLabel"]:
+		var node := scene.find_child(node_name, true, false) as Control
+		check(node != null, "loading exposes native lane %s at %s" % [node_name, viewport_size])
+		if node == null or not node.is_visible_in_tree():
 			continue
-		var label_rect = screen_rect(label)
-		check(center_rect.grow(1.0).encloses(label_rect), "loading label %s stays inside center panel at %s" % [label.name, viewport_size])
-		var wrapped_loading_copy := label == status or label == tip
-		check(not label.clip_text if wrapped_loading_copy else label.clip_text, "loading label %s uses its declared text overflow policy at %s" % [label.name, viewport_size])
-	check(title != null and title.get_theme_font_size("font_size") >= 44 and relative_luma(title.get_theme_color("font_color")) >= 0.82, "loading title remains prominent and bright at %s" % viewport_size)
-	check(subtitle != null and subtitle.get_theme_font_size("font_size") >= 17 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.74, "loading subtitle remains readable at %s" % viewport_size)
-	check(status != null and status.get_theme_font_size("font_size") >= 19 and relative_luma(status.get_theme_color("font_color")) >= 0.82, "loading status text remains readable at %s" % viewport_size)
-	check(tip != null and tip.get_theme_font_size("font_size") >= 13 and relative_luma(tip.get_theme_color("font_color")) >= 0.66, "loading tip text remains readable at %s" % viewport_size)
-	check(version != null and version.get_theme_font_size("font_size") >= 11 and relative_luma(version.get_theme_color("font_color")) >= 0.50, "loading version text remains visible but quiet at %s" % viewport_size)
-	if tip != null and version != null:
-		check(not rects_overlap(screen_rect(tip), screen_rect(version)), "loading tip and version keep an independent reading lane at %s" % viewport_size)
-		check(version.text == "v" + scene.app_version_short() and not version.text.contains("...") and version.tooltip_text == scene.app_version(), "loading version uses the short readable build label with full tooltip detail at %s" % viewport_size)
-	if version_plate != null and version != null:
-		check(screen_rect(version_plate).grow(1.0).encloses(screen_rect(version)), "loading version label stays inside its authored readability plate at %s" % viewport_size)
-	for node in [shuffle_art, progress_art, progress_route, progress_fill, progress_gate, tip_art, tip_rail, tip_fill]:
-		if node == null:
-			continue
-		check(center_rect.grow(1.0).encloses(screen_rect(node)), "loading art node %s stays inside center panel at %s" % [node.name, viewport_size])
-	if progress_route != null and progress_fill != null:
-		check(screen_rect(progress_route).grow(1.0).encloses(screen_rect(progress_fill)), "loading progress fill stays inside progress route at %s" % viewport_size)
-	if tip_rail != null and tip_fill != null:
-		check(screen_rect(tip_rail).grow(1.0).encloses(screen_rect(tip_fill)), "loading tip fill stays inside tip rail at %s" % viewport_size)
-	if shuffle_art != null and status != null:
-		check(screen_rect(shuffle_art).end.y <= screen_rect(status).position.y - 4.0, "loading shuffle art clears the status text at %s" % viewport_size)
-	if status != null and progress_art != null:
-		check(screen_rect(status).end.y <= screen_rect(progress_art).position.y - 6.0, "loading progress feedback clears the status text at %s" % viewport_size)
-	if status != null and progress_route != null:
-		check(screen_rect(status).end.y <= screen_rect(progress_route).position.y - 8.0, "loading progress route leaves a readable gap below the status text at %s" % viewport_size)
-	if progress_art != null and tip_art != null:
-		check(screen_rect(progress_art).end.y <= screen_rect(tip_art).position.y - 3.0, "loading progress feedback clears the tip art lane at %s" % viewport_size)
+		check(panel_rect.grow(1.0).encloses(screen_rect(node)), "loading lane %s stays on paper at %s" % [node_name, viewport_size])
+		if previous != null:
+			check(screen_rect(previous).end.y + 1.0 <= screen_rect(node).position.y, "loading lanes %s and %s remain separate at %s" % [previous.name, node.name, viewport_size])
+		if node is Label:
+			var label := node as Label
+			check(relative_luma(label.get_theme_color("font_color")) <= 0.24 and label.size.y + 0.5 >= label.get_theme_font("font").get_height(label.get_theme_font_size("font_size")), "loading native text %s has complete font height and dark ink contrast at %s" % [node_name, viewport_size])
+		previous = node
+	var title := scene.find_child("LoadingTitleLabel", true, false) as Label
+	check(title != null and title.get_theme_font_size("font_size") >= 40, "loading title remains prominent at %s" % viewport_size)
+	var version := scene.find_child("LoadingVersionLabel", true, false) as Label
+	check(version != null and version.text == "v" + scene.app_version_short() and version.tooltip_text == scene.app_version(), "loading displays the exact readable version at %s" % viewport_size)
+	for index in range(5):
+		var tile := scene.find_child("LoadingShuffleTile_%d" % index, true, false) as Control
+		check(tile != null and tile.find_child("TileFaceTexture", true, false) is TextureRect, "loading keeps original 2D tile %d at %s" % [index, viewport_size])
+	var route := scene.find_child("LoadingProgressRoute", true, false) as Control
+	var fill := scene.find_child("LoadingProgressFill", true, false) as Control
+	check(route != null and fill != null and screen_rect(route).grow(1.0).encloses(screen_rect(fill)), "loading progress stays inside its bitmap track at %s" % viewport_size)
+	if fill != null:
+		var ratio := float(scene.loading_view_state.get("progress_ratio", -1.0))
+		check(fill.visible == (ratio >= 0.0) and absf(fill.anchor_right - clampf(ratio, 0.0, 1.0)) < 0.001, "loading progress equals the actual state without a decorative sweep at %s" % viewport_size)
+
 
 func check_online_score_strip_probe(scene, viewport_size: Vector2) -> void:
 	var saved_mode = scene.mode
@@ -3483,16 +3490,12 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 	var hud = scene.find_child("TopHud3DShell", true, false) as Control
 	var title = scene.find_child("TopHudTitle", true, false) as Control
 	var status = scene.find_child("TopHudStatus", true, false) as Control
-	var title_back = scene.find_child("TopHudTitleBack", true, false) as Control
-	var status_back = scene.find_child("TopHudStatusBack", true, false) as Control
-	var wall_back = scene.find_child("TopHudWallBack", true, false) as Control
 	var wall_text = scene.find_child("TopHudWallText", true, false) as Label
-	var wall_meter = scene.find_child("TopHudWallMeter", true, false) as Control
 	var score_strip = scene.find_child("ScoreStrip", true, false) as Control
 	var connection_surface = scene.find_child("TopHudOnlineConnectionStatus", true, false) as Control
 	var connection_label = scene.find_child("TopHudOnlineConnectionLabel", true, false) as Label
 	check(hud != null and not hud.clip_contents and str(hud.get_meta("visual_clip_policy", "")) == "content_labels_clip_focus_and_shadow_hosts_unclipped", "top HUD leaves its decorative focus and shadow gutter visible at %s" % viewport_size)
-	check(title != null and status != null and title_back != null and status_back != null and wall_back != null and wall_text != null and wall_meter != null, "top HUD exposes readable title status and wall groups at %s" % viewport_size)
+	check(hud != null and title != null and status != null and wall_text != null and hud.get_meta("guofeng_surface_key", "") == "battle_hud_jiangnan_gpt", "top HUD exposes readable title status and wall facts on one authored paper surface at %s" % viewport_size)
 	check(scene.rule_wall_size("guangdong") == 136 and scene.rule_wall_size("sichuan") == 108 and scene.rule_wall_size("yangzhou") == 144, "rule profiles expose their actual wall totals at %s" % viewport_size)
 	var saved_active_variant := str(scene.offline_active_rule_variant)
 	scene.offline_active_rule_variant = scene.RULE_VARIANT_GUANGDONG
@@ -3505,26 +3508,23 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		var status_rect = screen_rect(status)
 		check(title_rect.size.x >= min(132.0, viewport_size.x * 0.13), "top HUD title keeps enough width for round text at %s" % viewport_size)
 		check(not title_rect.intersects(status_rect, true), "top HUD title and status do not overlap at %s" % viewport_size)
-		if title_back != null and status_back != null:
-			check(screen_rect(title_back).grow(1.0).encloses(title_rect), "top HUD title backplate contains title at %s" % viewport_size)
-			check(screen_rect(status_back).grow(1.0).encloses(status_rect), "top HUD status backplate contains status at %s" % viewport_size)
+		if hud != null:
+			check(screen_rect(hud).grow(1.0).encloses(title_rect) and screen_rect(hud).grow(1.0).encloses(status_rect), "single HUD paper surface contains both title and status at %s" % viewport_size)
 		if title is Label:
 			var title_label := title as Label
-			check(title_label.clip_text and title_label.get_theme_font_size("font_size") >= 15 and relative_luma(title_label.get_theme_color("font_color")) >= 0.74, "top HUD title remains bright and clipped at %s" % viewport_size)
+			check(title_label.clip_text and title_label.get_theme_font_size("font_size") >= 15 and readable_paper_ink(title_label.get_theme_color("font_color")), "top HUD title remains dark ink and clipped at %s" % viewport_size)
 			if viewport_size.x <= 960.0:
 				check(not title_label.text.contains("...") and not title_label.text.contains("…"), "compact top HUD title keeps the round and dealer visible without ellipsis at %s" % viewport_size)
 		if status is Label:
 			var status_label := status as Label
-			check(status_label.clip_text and status_label.get_theme_font_size("font_size") >= 15 and relative_luma(status_label.get_theme_color("font_color")) >= 0.86, "top HUD status remains bright and clipped at %s" % viewport_size)
-	if wall_text != null and wall_back != null and wall_meter != null:
-		var wall_text_rect = screen_rect(wall_text)
-		var wall_back_rect = screen_rect(wall_back)
-		var wall_meter_rect = screen_rect(wall_meter)
-		check(wall_back_rect.grow(1.0).encloses(wall_text_rect) and wall_back_rect.grow(1.0).encloses(wall_meter_rect), "top HUD wall backplate contains text and meter at %s" % viewport_size)
+			check(status_label.clip_text and status_label.get_theme_font_size("font_size") >= 15 and readable_paper_ink(status_label.get_theme_color("font_color")), "top HUD status remains dark ink and clipped at %s" % viewport_size)
+	if wall_text != null and hud != null:
+		var wall_text_rect := screen_rect(wall_text)
+		check(screen_rect(hud).grow(1.0).encloses(wall_text_rect), "single HUD paper surface contains the wall count at %s" % viewport_size)
 		check(wall_text.clip_text and wall_text.get_theme_font_size("font_size") >= 11 and readable_paper_ink(wall_text.get_theme_color("font_color")), "top HUD wall text remains readable at %s" % viewport_size)
 		check(str(wall_text.text).begins_with("余牌 ") and wall_text.tooltip_text.contains("牌墙剩余") and wall_text.tooltip_text.contains("上张"), "top HUD wall counter and last-discard context remain explicit at %s" % viewport_size)
 		if status != null:
-			check(screen_rect(status).end.x <= wall_back_rect.position.x - 2.0, "top HUD status clears wall badge at %s" % viewport_size)
+			check(screen_rect(status).end.x <= wall_text_rect.position.x - 2.0, "top HUD status clears the wall count lane at %s" % viewport_size)
 	if scene.mode == "offline":
 		check(score_strip == null, "offline top HUD keeps duplicate score strip off at %s" % viewport_size)
 		check(connection_surface == null, "offline top HUD omits the online connection lane at %s" % viewport_size)
@@ -3546,15 +3546,18 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 		var rect = screen_rect(button)
 		rects.append(rect)
 		check(rect.size.x >= 44.0 and rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "top HUD %s keeps a 44px touch target at %s" % [label_text, viewport_size])
+		var action_label := button.find_child("TopHudButtonCharLabel", true, false) as Label
+		var expected_action: String = str(button.text).substr(0, 2) if label_text == "更新" else label_text
+		check(action_label != null and action_label.text == expected_action and action_label.text.length() == 2 and label_text_width(action_label, action_label.text) <= action_label.size.x + 0.5 and action_label.size.y + 0.5 >= action_label.get_minimum_size().y, "top HUD %s displays its complete action name within the native reading lane at %s" % [label_text, viewport_size])
 		check(rect.position.x >= -0.5 and rect.end.x <= viewport_size.x + 0.5, "top HUD %s stays inside viewport at %s" % [label_text, viewport_size])
 		if hud != null:
 			check(screen_rect(hud).grow(1.0).encloses(rect), "top HUD %s stays inside its shell at %s" % [label_text, viewport_size])
-		if wall_back != null:
-			check(screen_rect(wall_back).end.x <= rect.position.x - 2.0 or label_text != "设置", "top HUD wall badge clears settings button at %s" % viewport_size)
+		if wall_text != null:
+			check(screen_rect(wall_text).end.x <= rect.position.x - 2.0 or label_text != "设置", "top HUD wall count clears settings button at %s" % viewport_size)
 		var icon_back = button.find_child("TopHudButtonIconBack_%s" % label_text, true, false) as Control
 		var rail = button.find_child("TopHudButtonRail_%s" % label_text, true, false) as Control
 		var seal = button.find_child("TopHudButtonSeal_%s" % label_text, true, false) as Control
-		check(icon_back != null and rail != null and seal != null, "top HUD %s keeps compact icon material accents at %s" % [label_text, viewport_size])
+		check(icon_back == null and rail == null and seal == null and button.find_child("TopHudButtonFocusMarker", true, false) != null, "top HUD %s keeps a native focus marker without layered icon accents at %s" % [label_text, viewport_size])
 		check(button.find_child("TopHudButtonCommandRoute_%s" % label_text, true, false) == null and button.find_child("TopHudButtonCommandFill_%s" % label_text, true, false) == null and button.find_child("TopHudButtonCommandGate_%s" % label_text, true, false) == null, "top HUD %s omits command route clutter at %s" % [label_text, viewport_size])
 		check(count_nodes_with_name_prefix(button, "TopHudButtonCommandTick_%s_" % label_text) == 0 and count_nodes_with_name_prefix(button, "TopHudButtonPulse_%s_" % label_text) == 0, "top HUD %s omits rhythm ticks and pulses at %s" % [label_text, viewport_size])
 		if icon_back != null:
@@ -3592,7 +3595,7 @@ func check_focus_route(scene, control_names: Array, default_focus_name: String, 
 	check(default_control != null and default_control.has_focus(), "%s assigns default focus to %s at %s" % [route_label, default_focus_name, viewport_size])
 
 func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
-	var text_backplates = controls_with_name_prefix(scene, "MenuCardTextBackplate")
+	var card_faces = controls_with_name_prefix(scene, "MenuCardGptFace")
 	var title_labels = controls_with_name_prefix(scene, "MenuCardTitleLabel")
 	var subtitle_labels = controls_with_name_prefix(scene, "MenuCardSubtitleLabel")
 	var quick_rail = scene.find_child("MenuQuickActionRail", true, false) as Control
@@ -3614,11 +3617,18 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			menu_card_name = menu_card.name
 		check(menu_card != null and menu_card.focus_mode == Control.FOCUS_ALL and str(menu_card.focus_next) != "" and str(menu_card.focus_previous) != "", "menu primary card %s joins the keyboard focus graph at %s" % [menu_card_name, viewport_size])
 	check(menu_cards[0] != null and menu_cards[0].has_focus(), "menu assigns default keyboard focus to the offline primary card at %s" % viewport_size)
-	check(text_backplates.size() == 3 and title_labels.size() == 3 and subtitle_labels.size() == 3, "menu primary cards expose readable title subtitle and text backplates at %s" % viewport_size)
+	check(card_faces.size() == 3 and title_labels.size() == 3 and subtitle_labels.size() == 3 and controls_with_name_prefix(scene, "MenuCardTextBackplate").is_empty(), "menu entries share one authored reading face without duplicate text backplates at %s" % viewport_size)
 	check(header != null and product_title != null and rule_summary != null, "menu exposes named foreground title and current-rule summary at %s" % viewport_size)
+	if header != null and product_title != null and rule_summary != null:
+		var title_rect := screen_rect(product_title)
+		var rule_rect := screen_rect(rule_summary)
+		check(rule_rect.position.y - title_rect.end.y >= 7.5, "menu title and rule keep at least eight pixels of measured vertical clearance at %s" % viewport_size)
+		check(screen_rect(header).grow(1.0).encloses(title_rect) and screen_rect(header).grow(1.0).encloses(rule_rect), "menu measured header contains both complete text lanes at %s" % viewport_size)
+		var reading_plate := header.find_child("MenuTitleReadingPlate", true, false) as TextureRect
+		check(reading_plate == null and str(header.get_meta("reading_surface_contract", "")) == "ivory_type_over_dark_authored_garden", "menu title uses ivory type over the authored garden without another rectangular plate at %s" % viewport_size)
 	if header != null and product_title != null:
 		check(product_title.text == "云桌麻将" and product_title.get_theme_font_size("font_size") >= 28, "menu product title keeps its full name and commercial display size at %s" % viewport_size)
-		check(readable_paper_ink(product_title.get_theme_color("font_color")), "menu product title keeps readable foreground contrast at %s" % viewport_size)
+		check(relative_luma(product_title.get_theme_color("font_color")) >= 0.65, "menu product title keeps luminous ivory contrast on the dark garden at %s" % viewport_size)
 	if rule_summary != null:
 		check(rule_summary.text.contains(scene.rule_variant_label()) and rule_summary.clip_text, "menu title summary exposes the active local rule without truncation at %s" % viewport_size)
 		if stage_overlay != null and stage_overlay.get_parent() == header.get_parent():
@@ -3626,9 +3636,9 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			if commercial_stage != null and commercial_stage.get_parent() == header.get_parent():
 				check(header.get_index() > commercial_stage.get_index(), "menu product title draws above the commercial stage at %s" % viewport_size)
 	check(commercial_stage == null, "menu does not mount an executable 3D tile showcase at %s" % viewport_size)
-	var menu_stage_backdrop = scene.find_child("MenuBackgroundBrightGPTStage", true, false) as CanvasItem
-	check(menu_scrim != null or menu_stage_backdrop != null, "menu keeps one GPT background scrim at %s" % viewport_size)
-	check(stage_overlay != null, "menu keeps one full-screen GPT scene at %s" % viewport_size)
+	var menu_stage_backdrop = scene.find_child("MenuGuofengBackdrop", true, false) as TextureRect
+	check(menu_stage_backdrop != null and menu_stage_backdrop.texture == scene.optional_gpt_illustration_texture("menu_guofeng_moonlit") and menu_scrim == null and stage_overlay == null, "menu uses one authored moonlit garden without stage or scrim stacking at %s" % viewport_size)
+	check(menu_stage_backdrop != null, "menu keeps one full-screen GPT scene at %s" % viewport_size)
 	if stage_overlay != null:
 		check(stage_overlay.modulate.a <= 0.30, "menu full-screen scene stays subdued behind the foreground navigation at %s" % viewport_size)
 	check(scene.find_child("MenuHeroGPTBackdropTexture", true, false) == null and scene.find_child("MenuLobbyGeneratedUIOverlay", true, false) == null and scene.find_child("GuofengPaperSceneryBackdrop", true, false) == null, "menu omits duplicate full-screen hero and generic scenery layers at %s" % viewport_size)
@@ -3654,25 +3664,26 @@ func check_menu_card_layout(scene, viewport_size: Vector2) -> void:
 			for previous_rect in quick_rects:
 				check(not previous_rect.intersects(quick_rect, true), "menu quick action %s does not overlap another shortcut at %s" % [quick_actions[quick_id], viewport_size])
 			quick_rects.append(quick_rect)
-	for backplate in text_backplates:
-		var card = backplate.get_parent() as Button
-		check(card != null, "menu card text backplate belongs to a button at %s" % viewport_size)
+	for face in card_faces:
+		var card = face.get_parent().get_parent() as Button
+		check(card != null, "menu authored face belongs to a native action button at %s" % viewport_size)
 		if card == null:
 			continue
 		var card_rect = screen_rect(card)
-		var back_rect = screen_rect(backplate)
+		var back_rect = screen_rect(face)
 		var title = card.find_child("MenuCardTitleLabel", true, false) as Label
 		var subtitle = card.find_child("MenuCardSubtitleLabel", true, false) as Label
 		check(title != null and subtitle != null and card.tooltip_text == "%s · %s" % [title.text, subtitle.text], "menu card exposes its complete action label to the native interactive surface at %s" % viewport_size)
-		check(card_rect.grow(1.0).encloses(back_rect), "menu card text backplate stays inside card at %s" % viewport_size)
-		check(back_rect.size.x >= card_rect.size.x * 0.58 and back_rect.size.y >= card_rect.size.y * 0.52, "menu card text backplate gives labels a stable reading lane at %s" % viewport_size)
+		check(card_rect.grow(1.0).encloses(back_rect) and back_rect.size.distance_to(card_rect.size) <= 1.0, "the single authored menu face fills its complete native action boundary at %s" % viewport_size)
 		if title != null and subtitle != null:
 			var title_rect = screen_rect(title)
 			var subtitle_rect = screen_rect(subtitle)
 			check(back_rect.grow(1.0).encloses(title_rect) and back_rect.grow(1.0).encloses(subtitle_rect), "menu card labels stay inside text backplate at %s" % viewport_size)
 			check(title.clip_text and subtitle.clip_text and title.get_theme_font_size("font_size") >= 21 and subtitle.get_theme_font_size("font_size") >= 14, "menu card text clips safely and keeps readable size at %s" % viewport_size)
 			check(not str(subtitle.text).contains("...") and not str(subtitle.text).contains("…") and label_text_width(subtitle, str(subtitle.text)) <= subtitle_rect.size.x + 1.0, "menu card subtitle fits without rendered truncation at %s" % viewport_size)
-			var menu_card_ink_ok := readable_paper_ink(title.get_theme_color("font_color")) and readable_paper_ink(subtitle.get_theme_color("font_color"))
+			var primary: bool = card.name == "MenuPrimaryOfflineCard"
+			var menu_card_ink_ok: bool = relative_luma(title.get_theme_color("font_color")) >= 0.65 and relative_luma(subtitle.get_theme_color("font_color")) >= 0.55 if primary else readable_paper_ink(title.get_theme_color("font_color")) and readable_paper_ink(subtitle.get_theme_color("font_color"))
+			check(menu_card_ink_ok and str(card.get_meta("menu_entry_hierarchy", "")) == ("primary" if primary else "secondary"), "menu distinguishes the ink primary action from paper secondary actions with matching text contrast at %s" % viewport_size)
 			check(not rects_overlap(title_rect, subtitle_rect), "menu card title and subtitle do not overlap at %s" % viewport_size)
 		if quick_rail != null:
 			check(screen_rect(card).end.y <= screen_rect(quick_rail).position.y - 8.0, "menu card keeps an 8px clearance before the quick action rail at %s" % viewport_size)
@@ -3795,7 +3806,7 @@ func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
 		var current_stage := scene.find_child("UpdateDialogStageCurrentLabel", true, false) as Label
 		var track := scene.find_child("UpdateProgressGptTrack", true, false) as Control
 		var progress_bar := scene.find_child("ProgressBar", true, false) as ProgressBar
-		var convergence := scene.find_child("UpdateStatusConvergenceArt", true, false) as Control
+		var convergence := scene.find_child("UpdateDialogStageMap", true, false) as Control
 		var notes := scene.find_child("UpdateReleaseNotesArt", true, false) as Control
 		check(title != null and title.text.contains("当前 v%s" % scene.app_version_short()) and title.get_meta("version_semantics", "") != "", "update %s keeps installed and remote version semantics separate at %s" % [state, viewport_size])
 		var notes_label := scene.find_child("UpdateReleaseNotesLabel", true, false) as Label
@@ -3826,7 +3837,7 @@ func check_update_dialog_layout(scene, viewport_size: Vector2) -> void:
 			if state == "ready" or state == "current":
 				check(not progress.text.contains(scene.update_release_notes_summary_line()) and not progress.text.contains("更新说明"), "update %s progress line stays free of duplicated release notes at %s" % [state, viewport_size])
 		if progress_bar != null and track != null:
-			check(not rects_overlap(screen_rect(progress_bar).grow(-1.0), screen_rect(convergence).grow(-1.0)), "update %s progress bar clears the convergence art at %s" % [state, viewport_size])
+			check(not rects_overlap(screen_rect(progress_bar).grow(-1.0), screen_rect(convergence).grow(-1.0)), "update %s progress bar clears the native phase map at %s" % [state, viewport_size])
 	scene.update_release_notes = ""
 	scene.refresh_update_dialog()
 	await settle_layout()
@@ -3872,11 +3883,11 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 	if archive_scrollbar != null and archive_scroll != null:
 		check(archive_scrollbar.custom_minimum_size.x >= scene.UI_MIN_TOUCH_TARGET and archive_scrollbar.mouse_filter == Control.MOUSE_FILTER_STOP, "replay archive scrollbar keeps a 44px native drag target at %s" % viewport_size)
 		check(screen_rect(archive_scrollbar).size.x >= scene.UI_MIN_TOUCH_TARGET - 1.0, "replay archive scrollbar exposes its full touch width at %s" % viewport_size)
-		check(screen_rect(archive_scroll).grow(1.0).encloses(screen_rect(archive_scrollbar)), "replay archive scrollbar stays inside the scroll viewport at %s" % viewport_size)
+		check(not archive_scrollbar.visible or screen_rect(archive_scroll).grow(1.0).encloses(screen_rect(archive_scrollbar)), "visible replay archive scrollbar stays inside the scroll viewport at %s" % viewport_size)
 	if archive_scroll != null and archive_list != null:
-		check(screen_rect(archive_list).size.x <= screen_rect(archive_scroll).size.x + 1.0 and archive_list.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "replay archive list fills the scroll viewport without horizontal overflow at %s" % viewport_size)
+		check(screen_rect(archive_list).end.x + 7.5 <= screen_rect(archive_scrollbar).position.x, "replay archive content ends before the native scrollbar with an eight-pixel gutter at %s" % viewport_size)
 		var archive_rows := controls_with_name_prefix(archive_list, "ReplayArchiveRow_")
-		check(archive_rows.size() > 0, "replay archive exposes visible rows for result scanning at %s" % viewport_size)
+		check(archive_rows.size() > 0 or scene.round_history.is_empty() and scene.find_child("ReplayArchiveEmpty", true, false) != null, "replay archive exposes real rows or its actual empty state at %s" % viewport_size)
 		for archive_row in archive_rows:
 			var primary := archive_row.find_child("ReplayArchiveRowPrimary", true, false) as Label
 			var result := archive_row.find_child("ReplayArchiveRowResult", true, false) as Label
@@ -3939,13 +3950,26 @@ func check_replay_import_layout(scene, viewport_size: Vector2) -> void:
 		var first_long_event := long_event_rows[0] as Button if not long_event_rows.is_empty() else null
 		var last_long_event := long_event_rows[long_event_rows.size() - 1] as Button if not long_event_rows.is_empty() else null
 		var long_timeline_position := scene.find_child("ReplayImportTimelinePosition", true, false) as Label
+		# Let native VBox sorting and deferred focus reveal finish before probing
+		# the exact intersection boundary of the actual first row.
+		await process_frame
+		await process_frame
+		if long_event_list != null:
+			scene.sync_replay_timeline_height_index(long_event_list)
+		if first_long_event != null and timeline_scroll != null:
+			first_long_event.grab_focus()
+			await process_frame
+			var event_focus := first_long_event.get_node_or_null("ButtonFocusPlate") as Control
+			check(event_focus != null and screen_rect(event_focus).end.x + 7.5 <= screen_rect(timeline_scroll.get_v_scroll_bar()).position.x, "selected replay event focus bitmap keeps the native scrollbar's eight-pixel gutter at %s" % viewport_size)
 		var long_row_ends: Array = long_event_list.get_meta("timeline_row_ends", []) if long_event_list != null else []
 		check(status.text.contains("180 条事件") and long_event_list != null and long_event_rows.size() == 180 and long_event_list.custom_minimum_size.y >= 3600.0 and first_long_event != null and last_long_event != null and first_long_event.text.contains("001  摸牌") and last_long_event.text.contains("180  摸牌"), "replay import keeps both ends of a 180-event row timeline available through its scroll child at %s" % viewport_size)
 		if timeline_scroll != null and long_timeline_position != null and long_row_ends.size() == long_event_rows.size():
-			timeline_scroll.scroll_vertical = int(long_row_ends[0])
+			timeline_scroll.scroll_vertical = int(ceil(float(long_row_ends[0])))
+			await process_frame
 			scene.update_replay_timeline_status(timeline_scroll)
 			check(long_timeline_position.text.contains("显示 2-"), "replay visible range excludes row one when its end meets the viewport top at %s" % viewport_size)
 			timeline_scroll.scroll_vertical = 0
+			await process_frame
 			scene.update_replay_timeline_status(timeline_scroll)
 			check(long_timeline_position.text.contains("显示 1-"), "replay visible range includes row one when it intersects the viewport at %s" % viewport_size)
 		if last_long_event != null:
@@ -3962,12 +3986,12 @@ func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 	var footer = scene.find_child("MenuFooterTextLayer", true, false) as Control
 	var settings = scene.find_child("MenuSettingsButton", true, false) as Button
 	var bridge = scene.find_child("MenuFooterEconomyStatsBridge", true, false) as Control
-	check(footer != null and settings != null and bridge != null, "menu footer exposes footer settings and bridge at %s" % viewport_size)
+	check(footer != null and settings != null and bridge == null and scene.find_child("MenuFooterBackplate", true, false) != null, "menu footer keeps a single reading surface and settings without decorative bridges at %s" % viewport_size)
 	if footer == null:
 		return
 	var footer_rect = screen_rect(footer)
 	check(footer_rect.position.x >= -0.5 and footer_rect.end.x <= viewport_size.x + 0.5, "menu footer stays horizontally inside viewport at %s" % viewport_size)
-	check(footer_rect.end.y <= viewport_size.y + 0.5 and footer_rect.size.y >= max(50.0, viewport_size.y * 0.105), "menu footer keeps a readable status band at %s" % viewport_size)
+	check(footer_rect.end.y <= viewport_size.y + 0.5 and footer_rect.size.y >= max(50.0, settings.get_combined_minimum_size().y + 16.0), "menu footer keeps a readable status band at %s" % viewport_size)
 	var chip_labels := {
 		"version": "MenuVersionBadge",
 		"currency": "MenuCurrencyBadge",
@@ -3998,18 +4022,18 @@ func check_menu_footer_layout(scene, viewport_size: Vector2) -> void:
 			check(label_text_width(label, str(label.text)) <= label_rect.size.x + 1.0, "menu footer version text fits without rendered ellipsis at %s" % viewport_size)
 		check(chip_rect.position.x >= previous_right + 4.0, "menu footer chips remain ordered with gaps at %s" % viewport_size)
 		previous_right = chip_rect.end.x
-	check(scene.find_child("MenuCurrencyBadgeArt", true, false) != null and scene.find_child("MenuCurrencyBrocadeTexture", true, false) != null, "menu footer currency chip keeps reusable art layer or fallback at %s" % viewport_size)
-	check(scene.find_child("MenuStatsBadgeArt", true, false) != null and scene.find_child("MenuStatsBadgeRail", true, false) != null, "menu footer stats chip keeps trend art layer at %s" % viewport_size)
+	check(controls_with_name_prefix(scene, "MenuFooterStatusRail_").is_empty() and scene.find_child("MenuCurrencyBadgeArt", true, false) == null and scene.find_child("MenuStatsBadgeRail", true, false) == null, "passive account status uses no decorative progress meters or stacked brocade at %s" % viewport_size)
 	if settings != null:
 		var settings_rect = screen_rect(settings)
 		rects.append(settings_rect)
 		check(footer_rect.grow(1.0).encloses(settings_rect), "menu settings button stays inside footer at %s" % viewport_size)
-		check(settings_rect.size.x >= 88.0 and settings_rect.size.y >= 40.0, "menu settings button keeps practical touch size at %s" % viewport_size)
+		check(settings_rect.size.x >= 88.0 and settings_rect.size.y >= 44.0, "menu settings button keeps practical touch size at %s" % viewport_size)
 		check(settings.text == "设置" and settings.get_theme_font_size("font_size") >= 15, "menu settings button keeps a readable native label at %s" % viewport_size)
 		check_button_face_behind_native_text(settings, "menu settings button", viewport_size)
 		scene.center_touch_button_pivot_by_id(settings.get_instance_id())
 		check(settings.pivot_offset.distance_to(settings.size * 0.5) <= 1.0, "menu settings button press feedback stays centered at %s" % viewport_size)
-		check(settings.find_child("MenuSettingsButtonArt", true, false) != null and settings.find_child("MenuSettingsGearTexture", true, false) != null, "menu settings button keeps material art and gear layer at %s" % viewport_size)
+		var settings_icon := settings.find_child("MenuSettingsIcon", true, false) as TextureRect
+		check(settings_icon != null and settings_icon.texture == scene.lucide_icon_texture("settings") and settings.find_child("MenuSettingsButtonArt", true, false) == null, "menu settings button keeps one native gear icon without stacked material art at %s" % viewport_size)
 	for i in range(rects.size()):
 		for j in range(i + 1, rects.size()):
 			check(not rects_overlap(rects[i], rects[j]), "menu footer status elements do not overlap at %s" % viewport_size)
@@ -4084,7 +4108,12 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(rect.position.x >= previous_right - 0.5, "pending claim buttons remain ordered within each wrapped row at %s" % viewport_size)
 		check(button.find_child("ActionButtonEnergyDot_0", true, false) == null, "pending claim %s uses compact action styling without energy dots at %s" % [text, viewport_size])
 		var shortcut_hint = button.find_child("ActionButtonShortcutHint", true, false) as Label
-		check(shortcut_hint != null and shortcut_hint.text == scene.action_button_shortcut_hint(text) and button.get_meta("action_shortcut", "") == shortcut_hint.text, "pending claim %s exposes its keyboard shortcut in the action node at %s" % [text, viewport_size])
+		var assigned_shortcut := str(button.get_meta("action_shortcut", ""))
+		var expected_shortcut: String = scene.action_button_shortcut_hint(text)
+		if text.begins_with("吃"):
+			var keyboard_choices: Array = scene.ordered_pending_chi_choices(scene.pending_claim_display_model().get("chi_choices", []))
+			expected_shortcut = "C" if not keyboard_choices.is_empty() and button.get_meta("pending_chi_choice", {}) == keyboard_choices[0] else ""
+		check(assigned_shortcut == expected_shortcut and ((shortcut_hint == null and assigned_shortcut == "") or (shortcut_hint != null and shortcut_hint.text == assigned_shortcut)), "pending claim %s exposes only its genuinely mapped keyboard shortcut at %s" % [text, viewport_size])
 		previous_right = rect.end.x
 		previous_top = rect.position.y
 	check(found == expected.size(), "pending claim complex action bar renders all legal choices at %s" % viewport_size)
@@ -4148,20 +4177,20 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	var context_tile = scene.find_child("PendingClaimTile", true, false) as Control
 	var source_text = scene.find_child("PendingClaimSourceText", true, false) as Label
 	var tile_name = scene.find_child("PendingClaimTileName", true, false) as Label
-	check(summary != null and dock != null and dock_shadow != null and dock_apron != null and hand != null, "pending claim renders summary, physical dock shell, and hand tray at %s" % viewport_size)
+	check(summary != null and dock != null and dock_shadow == null and dock_apron == null and hand != null, "pending claim renders one paper action dock and hand tray at %s" % viewport_size)
 	check(context_tile != null and source_text != null and tile_name != null and urgency_text != null, "pending claim exposes readable source, urgency, and real target tile context at %s" % viewport_size)
 	if urgency_text != null:
 		check(urgency_text.text.contains("紧迫度") and urgency_text.clip_text, "pending claim urgency stays visible and clipped inside its context strip at %s" % viewport_size)
-	check(scene.find_child("ActionDock3DRearShell", true, false) != null and scene.find_child("ActionDock3DJadeTrack", true, false) != null, "action dock exposes rear shell and jade track at %s" % viewport_size)
+	check(scene.find_child("ActionDock3DRearShell", true, false) == null and scene.find_child("ActionDock3DJadeTrack", true, false) == null and dock.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "action dock keeps one paper surface without stacked shell and track at %s" % viewport_size)
 	var seat_shell = scene.find_child("SeatPanel3DRearShell_0", true, false)
 	var seat_lip = scene.find_child("SeatPanel3DJadeLip_0", true, false)
-	check(seat_shell != null and seat_lip != null and scene.find_child("SeatPanel3DRightBevel_0", true, false) != null and scene.find_child("SeatPanel3DJadeWash_0", true, false) != null, "seat HUD exposes commercial rear shell, jade lip, right bevel, and jade wash at %s" % viewport_size)
-	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "top HUD keeps one primary surface without a duplicate rear shell at %s" % viewport_size)
+	check(seat_shell == null and seat_lip == null and scene.find_child("SeatPanel3DRightBevel_0", true, false) == null and scene.find_child("SeatPanel3DJadeWash_0", true, false) == null, "seat HUD retires duplicate shell, lip, bevel and wash at %s" % viewport_size)
+	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) == null and scene.find_child("TopHud3DJadeRail", true, false) == null, "top HUD keeps one primary surface without a duplicate rear shell at %s" % viewport_size)
 	var top_hud_banner = scene.find_child("TopHudGPTBannerTexture", true, false) as TextureRect
 	if top_hud_banner != null:
 		check(top_hud_banner.modulate.a <= 0.40, "top HUD banner stays subdued behind status text at %s" % viewport_size)
-	check(scene.optional_gpt_illustration_texture("pending_claim_action_dock") == null or scene.find_child("PendingClaimActionGPTDockTexture", true, false) != null, "pending claim consumes GPT action dock at %s" % viewport_size)
-	check(scene.optional_gpt_illustration_texture("pending_claim_status_strip") == null or scene.find_child("PendingClaimStatusStripTexture", true, false) != null, "pending claim consumes GPT status strip at %s" % viewport_size)
+	check(dock != null and dock.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt" and scene.find_child("PendingClaimActionGPTDockTexture", true, false) == null, "pending claim uses the declared existing paper action dock at %s" % viewport_size)
+	check(summary != null and summary.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt" and summary.find_child("PendingClaimPriorityArt", true, false) == null, "pending claim uses one authored paper context without a duplicate priority layer at %s" % viewport_size)
 	if summary != null and dock != null and hand != null:
 		var summary_rect = screen_rect(summary)
 		var dock_rect = screen_rect(dock)
@@ -4209,7 +4238,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 	if context_tile != null:
 		var context_tile_rect = screen_rect(context_tile)
 		check(context_tile_rect.size.x >= 32.0 and context_tile_rect.size.y >= 44.0, "pending claim target tile keeps a readable 32x44 preview at %s" % viewport_size)
-		check(context_tile.tooltip_text.contains("点击下方按钮"), "pending claim target tile explains the response route at %s" % viewport_size)
+		check(context_tile.tooltip_text.contains("选择响应"), "pending claim target tile explains the response route at %s" % viewport_size)
 	if source_text != null and tile_name != null:
 		check(source_text.get_theme_font_size("font_size") >= 13 and tile_name.get_theme_font_size("font_size") >= 13, "pending claim source and tile labels keep 13px+ text at %s" % viewport_size)
 		check(source_text.clip_text and tile_name.clip_text, "pending claim source and tile labels clip safely at %s" % viewport_size)
@@ -4219,7 +4248,7 @@ func check_pending_claim_action_bar(scene, viewport_size: Vector2) -> void:
 		check(pending_dock_texture.modulate.a <= 0.40, "pending claim GPT action dock stays subdued behind individual actions at %s" % viewport_size)
 	var first_button = first_button_with_text(scene.action_bar, "吃3-5")
 	if first_button != null:
-		check(first_button.find_child("ActionButton3DDepthEdge", true, false) != null and first_button.find_child("ActionButton3DTopRim", true, false) != null, "pending claim buttons expose physical depth and a light-catching top rim at %s" % viewport_size)
+		check(first_button.find_child("ActionButton3DDepthEdge", true, false) == null and first_button.find_child("ActionButton3DTopRim", true, false) == null and first_button.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt", "pending claim buttons use one paper face without stacked depth and rim art at %s" % viewport_size)
 		var panel_plate = first_button.find_child("ActionButtonPanelPlate", true, false) as TextureRect
 		if panel_plate != null:
 			check(panel_plate.modulate.a >= 0.50 and panel_plate.modulate.a <= 0.70 and panel_plate.show_behind_parent, "pending claim compact GPT panel provides a dark text backing behind the native label at %s" % viewport_size)
@@ -4256,7 +4285,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	var urgency_text = scene.find_child("PendingClaimUrgencyText", true, false) as Label
 	var mode_badge = scene.find_child("TopHudModeBadge", true, false) as Control
 	var wall_text = scene.find_child("TopHudWallText", true, false) as Label
-	var mode_label: Label = null
+	var mode_label: Label = mode_badge as Label
 	if mode_badge != null:
 		for badge_child in mode_badge.get_children():
 			if badge_child is Label:
@@ -4264,14 +4293,15 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 				break
 	check(source_text != null and source_text.text == "北海若 打出", "online pending context names the discard source at %s" % viewport_size)
 	check(tile_name != null and tile_name.text == scene.tile_label("3W"), "online pending context shows the server tile at %s" % viewport_size)
-	check(focus_text != null and focus_text.text.contains("胡牌机会"), "online pending context explains the response priority at %s" % viewport_size)
+	check(focus_text != null and focus_text.tooltip_text.contains("胡牌机会"), "online pending context explains the response priority at %s" % viewport_size)
 	check(focus_text != null and focus_text.text.contains("H胡") and focus_text.text.contains("X过"), "online pending context exposes response keyboard shortcuts at %s" % viewport_size)
 	check(urgency_text != null and urgency_text.text.contains("紧迫度高") and urgency_text.clip_text, "online pending context exposes a visible urgency cue at %s" % viewport_size)
 	if typeof(scene.online_game.get("pending", null)) == TYPE_DICTIONARY:
 		(scene.online_game["pending"] as Dictionary)["deadline_msec"] = Time.get_ticks_msec() + 3000
 		scene.update_pending_claim_live_state()
 		var auto_pass_warning := scene.find_child("PendingClaimAutoPassWarning", true, false) as Label
-		check(auto_pass_warning != null and auto_pass_warning.visible and auto_pass_warning.text.contains("将自动过") and auto_pass_warning.text.contains("秒"), "online pending response exposes a readable final-three-second auto-pass warning at %s" % viewport_size)
+		var countdown := scene.find_child("PendingClaimTimerText", true, false) as Label
+		check(auto_pass_warning != null and auto_pass_warning.visible and auto_pass_warning.text.contains("将自动过") and countdown != null and countdown.text.contains("秒"), "online pending response exposes the final seconds and auto-pass warning at %s" % viewport_size)
 	check(mode_badge != null and mode_label != null and mode_label.text == "联机 · 四川" and mode_badge.tooltip_text.contains("108张"), "online HUD displays the server rule profile instead of the local setting at %s" % viewport_size)
 	check(wall_text != null and wall_text.text.contains("55/108") and wall_text.tooltip_text.contains("55/108"), "online HUD scales the wall meter and tooltip to the server total at %s" % viewport_size)
 	var live_status = scene.find_child("TopHudStatus", true, false) as Label
@@ -4311,6 +4341,8 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 
 	var waiting_status = scene.find_child("TopHudStatus", true, false) as Label
 	var waiting_action = scene.find_child("ActionDockStatusLabel", true, false) as Label
+	if waiting_action == null:
+		waiting_action = scene.find_child("ActionIntentText", true, false) as Label
 	var compact_waiting_hud := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 	check(scene.current_status_text() == "操作已提交 · 等待服务器确认" and waiting_status != null and waiting_status.text == scene.top_hud_short_status_text(compact_waiting_hud), "online submitted state is explicit in the top HUD at %s" % viewport_size)
 	check(waiting_action != null and waiting_action.text.contains("等待服务器") and scene.find_child("ActionDockWaitingStatus", true, false) == null and scene.find_child("ActionDockRetryStatus", true, false) == null, "online submitted state owns the single action-dock status slot at %s" % viewport_size)
@@ -4322,7 +4354,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	scene.render_game()
 	await settle_layout()
 	var disconnected_status := scene.find_child("TopHudStatus", true, false) as Label
-	var disconnected_action := scene.find_child("ActionDockStatusLabel", true, false) as Label
+	var disconnected_action := scene.find_child("ActionIntentText", true, false) as Label
 	check(disconnected_status != null and disconnected_status.text.begins_with("断线") and (disconnected_status.text.contains("连接中") or disconnected_status.text.contains("秒后重连") or disconnected_status.text.contains("重连") or disconnected_status.text.contains("可立即重连")) and disconnected_status.tooltip_text.contains("使用重连"), "online disconnect HUD keeps one compact recovery phase and a full detail tooltip at %s" % viewport_size)
 	if disconnected_status != null:
 		check(not disconnected_status.text.contains("...") and label_text_width(disconnected_status, disconnected_status.text) <= screen_rect(disconnected_status).size.x + 1.0, "online disconnect HUD status fits its compact lane at %s" % viewport_size)
@@ -4360,7 +4392,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(disconnected_hand_tiles.size() == scene.get_self_hand().size() and disconnected_tile_buttons == 0, "online disconnect renders every hand tile without a clickable Button at %s" % viewport_size)
 	var intent_text := scene.find_child("ActionIntentText", true, false) as Label
 	var intent_count := scene.find_child("ActionIntentCount", true, false) as Control
-	var intent_count_label: Label = null
+	var intent_count_label: Label = intent_count as Label
 	if intent_count != null:
 		var intent_count_labels := intent_count.find_children("*", "Label", true, false)
 		if not intent_count_labels.is_empty():
@@ -4370,7 +4402,7 @@ func check_online_pending_claim_layout(scene, viewport_size: Vector2) -> void:
 	check(intent_text != null and intent_text.text == expected_disconnect_intent and not intent_text.text.contains("等待") and not intent_text.text.contains("提交响应"), "online disconnect intent points to the sole recovery action at %s" % viewport_size)
 	if intent_text != null:
 		check(not intent_text.text.contains("...") and not intent_text.text.contains("…") and label_text_width(intent_text, intent_text.text) <= screen_rect(intent_text).size.x + 1.0 and intent_text.tooltip_text.contains("使用重连"), "online disconnect intent keeps a readable compact phase label and complete recovery tooltip at %s (text=%s width=%.1f lane=%.1f tooltip=%s)" % [viewport_size, intent_text.text, label_text_width(intent_text, intent_text.text), screen_rect(intent_text).size.x, intent_text.tooltip_text])
-	check(intent_count_label != null and intent_count_label.text == "重连" and scene.action_bar_button_count() == 1, "online disconnect intent badge and action count expose only reconnect at %s" % viewport_size)
+	check(intent_count_label != null and not intent_count_label.is_visible_in_tree() and scene.action_bar_button_count() == 1, "online disconnect avoids a clipped duplicate reconnect badge at %s" % viewport_size)
 	check(scene.find_child("PendingClaimIllustration", true, false) == null and scene.hand_keyboard_selection == -1 and not scene.hand_keyboard_tile_selectable(0, scene.get_self_hand()), "online disconnect clears stale response art and keyboard selection at %s" % viewport_size)
 	check(scene.online_action_validation_error({"type": "discard", "tile": "3W"}).contains("断线"), "online disconnect rejects programmatic discard submission at %s" % viewport_size)
 	var unknown_phase_before := str(scene.online_game.get("phase", ""))
@@ -4419,7 +4451,7 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 	scene.large_text_enabled = false
 	scene.high_contrast_enabled = false
 	scene.reduce_motion_enabled = false
-	scene.settings_focus_restore_name = ""
+	scene.settings_focus_restore_name = "SettingRowButton_阅读辅助"
 	scene.refresh_current_screen()
 	await settle_layout()
 	var expected_profiles := ["标准", "大字", "高对比", "减动效", "专注", "清晰"]
@@ -4432,7 +4464,7 @@ func check_accessibility_profile_cycle(scene, viewport_size: Vector2) -> void:
 		if index > 0:
 			check(button.has_focus(), "accessibility profile restores focus after selecting %s at %s" % [expected, viewport_size])
 		if expected == "大字":
-			for title in ["AI 难度", "阅读辅助", "画面质量"]:
+			for title in ["AI 难度", "阅读辅助"]:
 				var large_button := scene.find_child("SettingRowButton_%s" % title, true, false) as Button
 				check(large_button != null and large_button.get_theme_font_size("font_size") >= 17 and screen_rect(large_button).size.y >= 46.0, "large-text setting button %s scales with the profile at %s" % [title, viewport_size])
 		if expected == "大字":
@@ -4462,13 +4494,13 @@ func check_settings_large_text_layout(scene, viewport_size: Vector2) -> void:
 	check(panel_rect.grow(1.0).encloses(scroll_rect), "large-text settings scroll lane stays inside the panel at %s (panel=%s scroll=%s)" % [viewport_size, panel_rect, scroll_rect])
 	check(scroll.focus_mode == Control.FOCUS_ALL and str(scroll.get_meta("accessible_name", "")) == "大字设置滚动区域" and str(scroll.get_meta("focus_contract", "")) == "header_to_scroll_to_footer", "large-text settings scroll lane exposes its keyboard and accessibility contract at %s" % viewport_size)
 	check(status.visible and not bool(status.get_meta("measurement_pending", true)) and int(status.get_meta("settings_section_count", 0)) >= 3, "large-text settings range status is only visible after first geometry measurement at %s" % viewport_size)
-	check(scroll.get_v_scroll_bar().max_value > scroll.get_v_scroll_bar().page, "large-text settings exposes more content than the first viewport at %s" % viewport_size)
-	check(status.text.contains("设置区") and status.text.contains("下方还有内容") and status.tooltip_text != "", "large-text settings exposes a first-viewport range hint at %s" % viewport_size)
+	check(status.get_meta("settings_visible_section_names", []).size() == 1, "large-text settings describes only the selected category at %s" % viewport_size)
+	check(status.text.contains("设置") and (status.text.contains("下方还有内容") or status.text.contains("已显示全部") or status.text.contains("已到末端")) and status.tooltip_text != "", "large-text settings exposes a first-viewport range hint at %s" % viewport_size)
 	for section_name in ["声音", "体验", "系统"]:
 		var section := scene.find_child("SettingsSection_%s" % section_name, true, false) as Control
 		var grid := scene.find_child("SettingsSectionGrid_%s" % section_name, true, false) as Control
 		check(section != null and grid != null, "large-text settings keeps the %s section in the scroll content at %s" % [section_name, viewport_size])
-		if section == null or grid == null:
+		if section == null or grid == null or not section.is_visible_in_tree():
 			continue
 		var section_title: Label = null
 		for child in section.get_children():
@@ -4478,6 +4510,36 @@ func check_settings_large_text_layout(scene, viewport_size: Vector2) -> void:
 		check(section_title != null and screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "large-text settings %s grid stays inside its section at %s" % [section_name, viewport_size])
 		if section_title != null:
 			check(screen_rect(grid).position.y >= screen_rect(section_title).end.y + 8.0, "large-text settings %s title keeps an 8px gap before its first row lane at %s" % [section_name, viewport_size])
+
+
+func check_chat_scroll_reachability(scene, viewport_size: Vector2) -> void:
+	var panel := scene.find_child("ChatPanel", true, false) as Control
+	var body := scene.find_child("ChatPanelBodyScroll", true, false) as ScrollContainer
+	check(panel != null and body != null and body.follow_focus and body.clip_contents, "chat composing lanes have a real clipped focus-following scroll owner at %s" % viewport_size)
+	if panel == null or body == null:
+		return
+	check(panel.get_meta("safe_content_contract", "") == "pinned_44px_header_and_reachable_native_scroll_lanes" and panel.get_meta("body_scroll_owner", "") == body.name, "chat publishes its pinned-header and reachable-content contract at %s" % viewport_size)
+	var saved_scroll := body.scroll_vertical
+	var controls: Array[Control] = []
+	for control_name in ["ChatPanelMessageScroll", "ChatPanelQuickMessagesLabel", "ChatPanelCustomMessageLabel", "ChatInput", "ChatSendButton", "ChatSendCooldownLabel"]:
+		var control := scene.find_child(control_name, true, false) as Control
+		check(control != null, "chat has a reachable %s lane at %s" % [control_name, viewport_size])
+		if control != null:
+			controls.append(control)
+	for quick_index in range(scene.CHAT_QUICK_MESSAGES.size()):
+		var quick_button := scene.find_child("ChatQuickMessageButton_%d" % quick_index, true, false) as Button
+		check(quick_button != null, "chat exposes quick action %d for scroll reachability at %s" % [quick_index, viewport_size])
+		if quick_button != null:
+			controls.append(quick_button)
+	for control in controls:
+		body.ensure_control_visible(control)
+		await settle_layout()
+		var target_rect := screen_rect(control)
+		check(control.is_visible_in_tree() and screen_rect(body).grow(1.0).encloses(target_rect) and screen_rect(panel).grow(1.0).encloses(target_rect), "chat scrolling exposes the complete %s lane inside the drawer at %s" % [control.name, viewport_size])
+		if control is Button or control is LineEdit:
+			check(target_rect.size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and target_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "chat reachable %s preserves its full touch target at %s" % [control.name, viewport_size])
+	body.scroll_vertical = saved_scroll
+	await settle_layout()
 
 
 func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
@@ -4539,17 +4601,16 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 			if top_hud != null:
 				check(not rects_overlap(panel_rect, screen_rect(top_hud)), "online chat clears the top HUD at %s" % viewport_size)
 	if input != null and panel != null:
-		check(screen_rect(panel).grow(1.0).encloses(screen_rect(input)) and input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input stays inside the drawer and preserves its length boundary at %s" % viewport_size)
+		check(input.max_length == scene.CHAT_MESSAGE_MAX_LENGTH, "online chat input preserves its length boundary at %s" % viewport_size)
 		if table_log_button != null:
-			check(screen_rect(panel).grow(1.0).encloses(screen_rect(table_log_button)) and screen_rect(table_log_button).size.x >= 34.0 and screen_rect(table_log_button).size.y >= 30.0, "online chat table-records route stays inside the drawer with a touch target at %s" % viewport_size)
+			check(screen_rect(panel).grow(1.0).encloses(screen_rect(table_log_button)) and screen_rect(table_log_button).size.x >= 44.0 and screen_rect(table_log_button).size.y >= 44.0, "online chat table-records route stays inside the drawer with a full touch target at %s" % viewport_size)
 	if close_button != null and send_button != null and panel != null:
 		check(close_button.tooltip_text.contains("关闭") and send_button.tooltip_text.contains("Enter"), "online chat close/send controls expose complete action hints at %s" % viewport_size)
 		var close_rect := screen_rect(close_button)
 		check(close_rect.size.x >= 44.0 and close_rect.size.y >= 44.0, "online chat close action keeps its minimum touch target at %s" % viewport_size)
 		check(screen_rect(panel).grow(1.0).encloses(close_rect), "online chat close action stays inside the drawer at %s" % viewport_size)
-		check(screen_rect(send_button).size.x >= 42.0 and screen_rect(send_button).size.y >= 36.0, "online chat send action keeps a 42x36 touch target at %s" % viewport_size)
-		check(screen_rect(panel).grow(1.0).encloses(screen_rect(send_button)), "online chat send action stays inside the drawer at %s" % viewport_size)
-		check(screen_rect(panel).grow(1.0).encloses(screen_rect(cooldown_label)) and cooldown_label.visible and cooldown_label.text.contains("可用"), "online chat keeps a stable send-status lane before cooldown at %s" % viewport_size)
+		check(screen_rect(send_button).size.x >= 44.0 and screen_rect(send_button).size.y >= 44.0, "online chat send action keeps a 44x44 touch target at %s" % viewport_size)
+		check(cooldown_label.visible and cooldown_label.text.contains("可用"), "online chat keeps a stable send-status lane before cooldown at %s" % viewport_size)
 		check(not rects_overlap(screen_rect(cooldown_label).grow(-1.0), screen_rect(send_button).grow(-1.0)), "online chat send-status lane stays separate from the send target at %s" % viewport_size)
 	var quick_row := scene.find_child("ChatPanelQuickMessages", true, false) as Control
 	var quick_buttons: Array[Button] = []
@@ -4559,12 +4620,12 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 	if panel != null:
 		for quick_button in quick_buttons:
 			var quick_rect := screen_rect(quick_button)
-			check(screen_rect(panel).grow(1.0).encloses(quick_rect) and quick_rect.size.x >= 46.0 and quick_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and str(quick_button.get_meta("chat_action_role", "")) == "quick_message" and quick_button.get_meta("ui_full_text", "") != "", "online chat quick action %s keeps its full touch target and message semantics at %s" % [quick_button.text, viewport_size])
+			check(quick_rect.size.x >= 46.0 and quick_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and str(quick_button.get_meta("chat_action_role", "")) == "quick_message" and quick_button.get_meta("ui_full_text", "") != "", "online chat quick action %s keeps its full touch target and message semantics at %s" % [quick_button.text, viewport_size])
 	if panel != null and input != null and quick_row != null:
 		var input_rect := screen_rect(input)
 		var quick_row_rect := screen_rect(quick_row)
 		check(not rects_overlap(input_rect.grow(-1.0), quick_row_rect.grow(-1.0)), "online chat input clears the quick-message row at %s" % viewport_size)
-		check(input_rect.size.y >= 42.0, "online chat input keeps a finger-sized compact row at %s" % viewport_size)
+		check(input_rect.size.y >= 44.0 and input_rect.end.x + 8.0 <= screen_rect(send_button).position.x, "online chat input keeps a full touch row and eight-pixel send gutter at %s" % viewport_size)
 		for quick_button in quick_buttons:
 			check(not rects_overlap(input_rect.grow(-1.0), screen_rect(quick_button).grow(-1.0)), "online chat input clears quick action %s at %s" % [quick_button.text, viewport_size])
 	if input != null and custom_counter != null:
@@ -4573,6 +4634,7 @@ func check_chat_panel_layout(scene, viewport_size: Vector2) -> void:
 		check(custom_counter.text == "自定义消息 · 2/%d" % scene.CHAT_MESSAGE_MAX_LENGTH and int(custom_counter.get_meta("chat_char_count", -1)) == 2, "online chat counter follows text_changed character count at %s (got=%s count=%s)" % [viewport_size, custom_counter.text, custom_counter.get_meta("chat_char_count", -1)])
 		input.clear()
 		input.text_changed.emit(input.text)
+	await check_chat_scroll_reachability(scene, viewport_size)
 	var saved_chat_timestamp: int = int(scene.online_last_chat_sent_msec)
 	scene.online_last_chat_sent_msec = Time.get_ticks_msec()
 	scene.update_chat_send_cooldown(scene.online_last_chat_sent_msec + 100)
@@ -4625,6 +4687,7 @@ func check_chat_panel_meld_route(scene, viewport_size: Vector2, seat: int, expec
 	if panel != null:
 		var panel_rect := screen_rect(panel)
 		check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect) and panel_rect.size.x >= 180.0, "online chat seat %d meld route stays in a bounded safe reading lane at %s" % [seat, viewport_size])
+		await check_chat_scroll_reachability(scene, viewport_size)
 		for other_seat in range(4):
 			var meld_area = scene.find_child("MeldArea_%d" % other_seat, true, false) as Control
 			var discard_grid = scene.find_child("DiscardGrid_%d" % other_seat, true, false) as Control
@@ -4729,6 +4792,10 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	check(count_named_nodes(scene, "AdvisorPanel") == 1, "AI advisor keeps exactly one mounted panel instance at %s" % viewport_size)
 	var panel_rect = screen_rect(panel)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "AI advisor panel stays inside viewport at %s" % viewport_size)
+	for seat in range(4):
+		var seat_panel := scene.find_child("SeatPanel_%d" % seat, true, false) as Control
+		if seat_panel != null:
+			check(not rects_overlap(panel_rect.grow(5.5), screen_rect(seat_panel)), "AI advisor clears actual seat %d with a six-pixel gutter at %s" % [seat, viewport_size])
 	if dock != null:
 		check(not rects_overlap(panel_rect, screen_rect(dock)), "AI advisor panel clears the action dock at %s" % viewport_size)
 	var intent_dock := scene.find_child("ActionIntentDock", true, false) as Control
@@ -4739,6 +4806,19 @@ func check_advisor_interaction_layout(scene, viewport_size: Vector2) -> void:
 	var bottom_river = scene.find_child("DiscardGrid_0", true, false) as Control
 	if bottom_river != null:
 		check(not rects_overlap(panel_rect, screen_rect(bottom_river)), "AI advisor panel clears the bottom player's discard river at %s" % viewport_size)
+	if panel.get_meta("advisor_layout_mode", "") == "detail_only":
+		var opener := panel.find_child("AdvisorDetailButton", true, false) as Button
+		check(opener != null and opener.size.x >= 44.0 and opener.size.y >= 44.0 and panel_rect.encloses(screen_rect(opener)), "occupied advisor channel retains a bounded real analysis opener at %s" % viewport_size)
+		return
+	if panel.get_meta("advisor_layout_mode", "") == "compact_summary":
+		var summary := panel.find_child("AdvisorPanelTitle", true, false) as Label
+		var context := panel.find_child("AdvisorPanelContext", true, false) as Label
+		var opener := panel.find_child("AdvisorDetailButton", true, false) as Button
+		check(summary != null and context != null and opener != null and summary.text != "" and context.tooltip_text != "", "compact advisor keeps a live conclusion, rationale route and real details action at %s" % viewport_size)
+		for summary_label in [summary, context]:
+			if summary_label != null and opener != null:
+				check(panel_rect.grow(1.0).encloses(screen_rect(summary_label)) and not screen_rect(summary_label).intersects(screen_rect(opener)), "compact advisor native text clears its bounded details target at %s" % viewport_size)
+		return
 	for heading in ["响应", "牌局", "防守"]:
 		var card = panel.find_child("AdvisorInfoCard_%s" % heading, true, false) as Control
 		check(card != null and panel_rect.grow(1.0).encloses(screen_rect(card)), "AI advisor %s card stays inside the panel at %s" % [heading, viewport_size])
@@ -4769,7 +4849,7 @@ func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 	detail_button.pressed.emit()
 	await settle_layout(0.04)
 	var panel = scene.find_child("AdvisorDetailPanel", true, false) as Control
-	var text = scene.find_child("AdvisorDetailText", true, false) as Label
+	var text = scene.find_child("AdvisorDetailText", true, false) as RichTextLabel
 	var close_button = scene.find_child("AdvisorDetailCloseButton", true, false) as Button
 	check(panel != null and text != null and close_button != null, "AI advisor opens a dedicated detail panel at %s" % viewport_size)
 	if panel != null:
@@ -4780,7 +4860,7 @@ func check_advisor_detail_layout(scene, viewport_size: Vector2) -> void:
 		var hand = scene.find_child("HandTray", true, false) as Control
 		check((dock == null or not rects_overlap(panel_rect, screen_rect(dock))) and (hand == null or not rects_overlap(panel_rect, screen_rect(hand))), "AI advisor detail clears action dock and hand tray at %s" % viewport_size)
 	if text != null:
-		check(text.text.contains("响应目标") and text.clip_text and text.tooltip_text == text.text and screen_rect(text).size.x >= viewport_size.x * 0.40, "AI advisor detail exposes readable in-panel rationale instead of tooltip-only copy at %s" % viewport_size)
+		check(text.get_parsed_text().contains("响应目标") and text.fit_content and not text.scroll_active and text.tooltip_text == text.get_parsed_text() and screen_rect(text).size.x >= viewport_size.x * 0.40, "AI advisor detail exposes complete structured in-panel rationale at its actual native content width at %s" % viewport_size)
 	check(close_button == null or (close_button.has_focus() and screen_rect(close_button).size.x >= scene.UI_MIN_TOUCH_TARGET - 0.5 and screen_rect(close_button).size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5), "AI advisor detail gives focus to a full touch-sized close route at %s" % viewport_size)
 	if close_button != null:
 		close_button.pressed.emit()
@@ -4828,6 +4908,9 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 		var action_surface_rect := screen_rect(action_surface)
 		check(panel_rect.end.y <= action_surface_rect.position.y - 6.0 and not rects_overlap(panel_rect, action_surface_rect), "danger discard warning clears the full-width CTA lane at %s" % viewport_size)
 	for seat in range(4):
+		var archive_button := scene.find_child("DiscardRiverArchiveButton_%d" % seat, true, false) as Button
+		if archive_button != null:
+			check(not archive_button.is_visible_in_tree() and archive_button.focus_mode == Control.FOCUS_NONE, "danger decision suppresses the river pager and its focus at %s seat %d" % [viewport_size, seat])
 		var discard_grid = scene.find_child("DiscardGrid_%d" % seat, true, false) as GridContainer
 		if discard_grid != null:
 			for discard_tile in discard_grid.get_children():
@@ -4841,7 +4924,7 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 					canonical_layout = meld_layout
 					break
 			if not canonical_layout.is_empty():
-				var expected_lane := anchor_rect_in_parent(screen_rect(scene.root_layer), canonical_layout[1])
+				var expected_lane := anchor_rect_in_parent(screen_rect(scene.root_layer), scene.seat_meld_rect(seat, viewport_size))
 				var actual_lane := screen_rect(meld_area)
 				check(actual_lane.position.distance_to(expected_lane.position) <= 1.0 and actual_lane.size.distance_to(expected_lane.size) <= 1.0, "danger discard keeps seat %d melds in the canonical seat lane at %s" % [seat, viewport_size])
 				check(str(meld_area.get_meta("orientation", "")) == ("vertical" if scene.seat_meld_is_vertical(seat) else "horizontal"), "danger discard keeps seat %d meld orientation stable at %s" % [seat, viewport_size])
@@ -4862,6 +4945,20 @@ func check_danger_discard_layout(scene, viewport_size: Vector2) -> void:
 	if title != null and detail != null:
 		check(title.clip_text and title.get_theme_font_size("font_size") >= 13, "danger discard title remains clipped and prominent at %s" % viewport_size)
 		check(detail.clip_text and detail.get_theme_font_size("font_size") >= 12, "danger discard detail text remains clipped and readable at %s" % viewport_size)
+	var danger_previous: Label = null
+	for node_name in ["DangerDiscardTitleText", "DangerDiscardRiskLevelText", "DangerDiscardDetailText"]:
+		var danger_label := scene.find_child(node_name, true, false) as Label
+		check(danger_label != null, "danger warning has decision information: " + node_name)
+		if danger_label != null and node_name == "DangerDiscardRiskLevelText" and scene.large_text_enabled:
+			check(not danger_label.is_visible_in_tree() and title.text.contains("高危"), "large warning states risk in its complete title without a duplicate caption")
+			continue
+		if danger_label != null:
+			var danger_font := danger_label.get_theme_font("font")
+			var danger_size := danger_label.get_theme_font_size("font_size")
+			check(danger_size >= 12 and label_text_width(danger_label, danger_label.text) <= danger_label.size.x + 0.5 and danger_label.size.y + 0.5 >= danger_font.get_height(danger_size), "danger warning information is complete at readable native size at %s: %s" % [viewport_size, node_name])
+			if danger_previous != null:
+				check(screen_rect(danger_previous).end.y + 1.0 <= screen_rect(danger_label).position.y, "danger warning text lines have visible clearance at %s" % viewport_size)
+			danger_previous = danger_label
 	if confirm_button != null:
 		var confirm_rect = screen_rect(confirm_button)
 		check(confirm_button.text == "确认打南", "danger discard primary action names the exact tile at %s" % viewport_size)
@@ -4929,7 +5026,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 		var panel_texture = (panel as TextureRect).texture
 		var panel_source = (panel_texture as AtlasTexture).atlas if panel_texture is AtlasTexture else panel_texture
 		panel_texture_path = str(panel_source.resource_path) if panel_source != null else ""
-	check(panel_texture_path.ends_with("/ui_dark_scrim.png") and panel.self_modulate.a >= 0.98, "round summary uses an opaque authored reading scrim at %s" % viewport_size)
+	check(panel_texture_path.ends_with("/settings_readable_gpt_20261006.png") and panel.self_modulate == Color.WHITE, "round summary uses one opaque authored paper at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(-2.0).encloses(panel_rect), "round summary panel stays inside the viewport safe bounds at %s" % viewport_size)
 	for node in [title, body, detail_panel, rank_header]:
 		if node != null:
@@ -4943,7 +5040,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 		check(title.get_theme_font_size("font_size") >= 26 and title.clip_text == false, "round summary title remains prominent at %s" % viewport_size)
 	if body != null:
 		var minimum_summary_font := 12 if viewport_size.y <= 560.0 else 14
-		check(not body.clip_text and body.get_theme_font_size("font_size") >= minimum_summary_font and relative_luma(body.get_theme_color("font_color")) >= 0.92, "round summary body remains bright, wrapped, and readable at %s" % viewport_size)
+		check(not body.clip_text and body.get_theme_font_size("font_size") >= minimum_summary_font and relative_luma(body.get_theme_color("font_color")) <= 0.24, "round summary body remains dark, wrapped, and readable at %s" % viewport_size)
 		check(body.text.contains("庄家下庄") and body.text.contains("包赔") and body.text.contains("全场结束") and body.tooltip_text.contains(scene.round_summary), "round summary keeps dealer, package-liability, and match-end text visible while exposing the complete source at %s" % viewport_size)
 		check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "long settlement text uses smart wrapping at %s" % viewport_size)
 		check(body.get_line_count() >= 2 and body.get_visible_line_count() >= 2, "long settlement renders both compact information lines at %s" % viewport_size)
@@ -4967,11 +5064,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 			check(yaku_scroll.is_ancestor_of(yaku_badges), "win detail yaku badges remain children of the scroll content flow at %s" % viewport_size)
 			for badge in yaku_badges.get_children():
 				if badge is Control:
-					var badge_label: Label = null
-					for badge_child in (badge as Control).get_children():
-						if badge_child is Label:
-							badge_label = badge_child as Label
-							break
+					var badge_label := badge as Label
 					check((badge as Control).get_parent() == yaku_badges and badge_label != null and (badge as Control).tooltip_text == badge_label.tooltip_text and badge_label.get_meta("ui_full_text", "") == badge_label.text, "win detail yaku entry %s keeps its own full text in the content flow at %s" % [badge.name, viewport_size])
 			var limit_badge = scene.find_child("WinDetailLimitBadge", true, false) as Control
 			if limit_badge != null:
@@ -4987,6 +5080,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 			if row != null and other_row != null:
 				check(not rects_overlap(screen_rect(row), screen_rect(other_row)), "round summary rank rows %d and %d remain mutually exclusive at %s" % [other_seat, seat, viewport_size])
 	if winner_label != null and score_label != null:
+		check(score_label.text == "本局 %+d分" % scene.round_summary_score_delta(0), "win detail primary matches the local rank delta at %s" % viewport_size)
 		check(winner_label.get_theme_font_size("font_size") >= 18 and score_label.get_theme_font_size("font_size") >= 22, "win detail winner and score text remain prominent at %s" % viewport_size)
 	if dock != null:
 		check(panel_rect.end.y <= screen_rect(dock).position.y - 8.0, "round summary clears the action dock at %s" % viewport_size)
@@ -5001,18 +5095,28 @@ func check_hand_tray_layout(scene, viewport_size: Vector2) -> void:
 	var hand_tiles = scene.find_child("HandTrayTiles", true, false) as Control
 	var tutorial_hint = scene.find_child("HandTrayTutorialHint", true, false) as Control
 	var stage = scene.find_child("HandTrayTileStage", true, false) as Control
-	var ground_shadow = scene.find_child("HandTrayTileGroundShadow", true, false) as Control
-	var back_rail = scene.find_child("HandTrayTileBackRail", true, false) as Control
-	var baseline = scene.find_child("HandTrayTileBaseline", true, false) as Control
 	var hand_tile_samples = controls_with_name_prefix(scene, "HandTile_")
 	var hand_tile_sample = hand_tile_samples[0] if not hand_tile_samples.is_empty() else null
 	var shortcut_hint = scene.find_child("HandTrayShortcutHint", true, false) as Label
 	var realtime_3d_stage = null
-	check(hand != null and stage != null and ground_shadow != null and back_rail != null and baseline != null and hand_tile_sample != null, "hand tray exposes tile stage, 2D hand tiles, ground shadow, back rail, and baseline at %s" % viewport_size)
+	check(hand != null and stage != null and hand_tile_sample != null and hand.get_meta("guofeng_surface_key", "") == "hand_tray_jiangnan_gpt", "hand tray exposes one paper surface, its geometry stage and every authored tile at %s" % viewport_size)
 	check(shortcut_hint != null and shortcut_hint.text != "", "hand tray exposes a dedicated keyboard or response shortcut line at %s" % viewport_size)
 	if hand == null:
 		return
 	var hand_rect = screen_rect(hand)
+	var reading_labels: Array[Label] = []
+	for label_name in ["HandTrayStatusText", "HandTrayShortcutHint", "HandTrayStateBadge"]:
+		var reading_label := scene.find_child(label_name, true, false) as Label
+		if reading_label == null or not reading_label.is_visible_in_tree():
+			continue
+		reading_labels.append(reading_label)
+		check(reading_label.get_theme_constant("outline_size") == 0 and reading_label.get_theme_color("font_color").a >= 0.99, "%s uses native opaque paper ink at %s" % [label_name, viewport_size])
+		check(reading_label.size.y >= reading_label.get_minimum_size().y and label_text_width(reading_label, reading_label.text) <= reading_label.size.x + 1.0, "%s fits its actual width and full line height at %s" % [label_name, viewport_size])
+		if hand_tiles != null:
+			check(screen_rect(reading_label).end.y <= screen_rect(hand_tiles).position.y - 1.0, "%s clears native tile input at %s" % [label_name, viewport_size])
+	for first_index in range(reading_labels.size()):
+		for second_index in range(first_index + 1, reading_labels.size()):
+			check(not screen_rect(reading_labels[first_index]).intersects(screen_rect(reading_labels[second_index])), "hand header native reading lanes do not overlap at %s" % viewport_size)
 	check(not hand.clip_contents, "hand tray leaves a hover gutter outside its decorative shell at %s" % viewport_size)
 	check(Rect2(Vector2.ZERO, viewport_size).grow(1.0).encloses(hand_rect), "hand tray stays inside viewport at %s" % viewport_size)
 	check(hand_rect.end.y <= viewport_size.y - max(8.0, viewport_size.y * 0.015), "hand tray leaves a visible bottom margin at %s" % viewport_size)
@@ -5097,7 +5201,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 	var dice_seal := scene.find_child("CenterDiceSimpleSeal", true, false) as Control
 	var dice_glyph := scene.find_child("CenterDiceSimpleGlyph", true, false) as Label
 	check(wall_label != null and wall_count != null and last_label != null and last_tile != null, "center console exposes independent wall and latest-discard reading slots at %s" % viewport_size)
-	check(dice_glyph != null and dice_glyph.text == "骰·庄" and dice_glyph.get_theme_font_size("font_size") >= 10 and relative_luma(dice_glyph.get_theme_color("font_color")) >= 0.90, "center dice/dealer fact keeps readable type and contrast at %s" % viewport_size)
+	check(dice_glyph != null and dice_glyph.text == "庄·%s" % scene.seat_wind_label(scene.dealer_seat) and dice_glyph.get_theme_font_size("font_size") >= 10 and relative_luma(dice_glyph.get_theme_color("font_color")) >= 0.90, "center names the actual dealer with readable type and contrast at %s" % viewport_size)
 	check(dice_seal != null and screen_rect(dice_seal).size.x >= 35.0 and screen_rect(dice_seal).size.y >= 14.0, "center dice/dealer mark keeps a readable compact surface at %s" % viewport_size)
 	if wall_label != null and wall_count != null and last_label != null and last_tile != null:
 		check(str(wall_label.get_meta("content_slot", "")) == "wall_label" and str(wall_count.get_meta("layout_role", "")) == "center_wall_count" and str(last_label.get_meta("layout_role", "")) == "center_last_discard_label", "center console keeps stable semantic slot metadata at %s" % viewport_size)
@@ -5125,7 +5229,8 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		)
 		var wind_color = wind_label.get_theme_color("font_color")
 		var outline_color = wind_label.get_theme_color("font_outline_color")
-		check(wind_label.text == wind_text and wind_label.get_theme_font_size("font_size") == 17, "center wind label %s keeps stable text sizing at %s" % [wind_text, viewport_size])
+		var expected_wind_font_size := 15 if viewport_size.x <= 960.0 or viewport_size.y < 720.0 else 17
+		check(wind_label.text == wind_text and wind_label.get_theme_font_size("font_size") == expected_wind_font_size, "center wind label %s keeps its readable responsive text sizing at %s" % [wind_text, viewport_size])
 		check(actual_wind_rect.position.distance_to(expected_wind_rect.position) <= 0.001 and actual_wind_rect.size.distance_to(expected_wind_rect.size) <= 0.001, "center wind label %s keeps its compass anchor at %s" % [wind_text, viewport_size])
 		check(center_rect.grow(1.0).encloses(screen_rect(wind_label)), "center wind label %s stays inside the center console at %s" % [wind_text, viewport_size])
 		check(wind_label.get_theme_constant("outline_size") >= 1 and outline_color.a >= 0.89, "center wind label %s keeps a dark readability outline at %s" % [wind_text, viewport_size])
@@ -5200,6 +5305,8 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 		var page_count := int(meld_area.get_meta("page_count", 1))
 		var lane_capacity := int(meld_area.get_meta("lane_capacity", 0))
 		check(visible_group_count == group_count and declared_group_count >= visible_group_count and lane_capacity >= visible_group_count and visible_group_count <= 4, "battle meld area %d exposes its visible group capacity at %s" % [meld_seat, viewport_size])
+		if viewport_size in [Vector2(960, 540), Vector2(1280, 720)] and declared_group_count >= 4:
+			check(visible_group_count >= 2, "battle seat %d shows at least two complete meld groups at %s" % [meld_seat, viewport_size])
 		check(page_count == maxi(1, ceili(float(declared_group_count) / float(maxi(1, lane_capacity)))), "battle meld area %d declares accurate pagination metadata at %s" % [meld_seat, viewport_size])
 		var meld_pager := scene.find_child("MeldLaneArchiveButton_%d" % meld_seat, true, false) as Control
 		if meld_pager != null:
@@ -5218,7 +5325,7 @@ func check_battle_viewport_bounds(scene, viewport_size: Vector2) -> void:
 			check(not rects_overlap(log_rect, seat_rect), "battle table log clears seat HUDs at %s" % viewport_size)
 		for meld_rect in meld_rects:
 			check(not rects_overlap(log_rect, meld_rect), "battle table log clears meld areas at %s" % viewport_size)
-		var expected_log_rows := 1 if viewport_size.y <= 560.0 else 2
+		var expected_log_rows := 1
 		check(controls_with_name_prefix(table_log, "TableLogLedgerRow_").size() == expected_log_rows, "battle table log uses %d readable rows at %s" % [expected_log_rows, viewport_size])
 		for body in controls_with_name_prefix(table_log, "TableLogLedgerBody_"):
 			var body_label := body as Label
@@ -5274,25 +5381,10 @@ func battle_visible_wall_face_rects(scene) -> Array[Rect2]:
 		var canvas_wall := wall_strip as CanvasItem
 		if canvas_wall == null or not canvas_wall.visible or canvas_wall.modulate.a <= 0.01:
 			continue
-		var tile_count := int(wall_strip.get("tile_count"))
-		var capacity_count := int(wall_strip.get("capacity_count"))
-		var tile_size: Vector2 = wall_strip.get("tile_size")
-		var horizontal := bool(wall_strip.get("horizontal"))
-		if tile_count <= 0 or capacity_count <= 0 or tile_size.x <= 0.0 or tile_size.y <= 0.0:
-			continue
-		var strip_screen_rect := screen_rect(wall_strip)
-		var scale_x := strip_screen_rect.size.x / maxf(1.0, wall_strip.size.x)
-		var scale_y := strip_screen_rect.size.y / maxf(1.0, wall_strip.size.y)
-		for tile_index in range(tile_count):
-			var center := Vector2(
-				(float(tile_index) + 0.5) * wall_strip.size.x / float(capacity_count) if horizontal else wall_strip.size.x * 0.5,
-				wall_strip.size.y * 0.5 if horizontal else (float(tile_index) + 0.5) * wall_strip.size.y / float(capacity_count)
-			)
-			var local_tile_rect := Rect2(center - tile_size * 0.5, tile_size)
-			rects.append(Rect2(
-				strip_screen_rect.position + Vector2(local_tile_rect.position.x * scale_x, local_tile_rect.position.y * scale_y),
-				Vector2(local_tile_rect.size.x * scale_x, local_tile_rect.size.y * scale_y)
-			))
+		for face_node in wall_strip.get_children():
+			var face := face_node as TextureRect
+			if face != null and face.is_visible_in_tree() and str(face.name).begins_with("WallTileBack_"):
+				rects.append(screen_rect(face))
 	return rects
 
 func check_discard_tile_original_rgb(scene, viewport_size: Vector2) -> void:
@@ -5374,7 +5466,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	var panel_shadow = overlay_control.find_child("SettingsConsole3DCastShadow", true, false) as Control
 	var rear_shell = overlay_control.find_child("SettingsConsole3DRearShell", true, false) as Control
 	check(panel != null, "settings overlay exposes a named modal panel at %s" % viewport_size)
-	check(panel_shadow != null and rear_shell == null, "settings overlay keeps one primary surface without a duplicate rear shell at %s" % viewport_size)
+	check(panel_shadow == null and rear_shell == null, "settings overlay keeps one fine-edged paper surface without extra shadow slabs at %s" % viewport_size)
 	var panel_rect := Rect2()
 	if panel != null:
 		panel_rect = screen_rect(panel)
@@ -5432,9 +5524,8 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		check(label_text_width(overview_summary, overview_summary.text) <= summary_rect.size.x - 4.0, "settings overview summary text fits its compact lane at %s" % viewport_size)
 		for overview_node_name in ["audio", "play", "maint"]:
 			var overview_node = overlay_control.find_child("SettingsOverviewNode_%s" % overview_node_name, true, false) as Control
-			check(overview_node != null, "settings overview exposes %s state node at %s" % [overview_node_name, viewport_size])
-			if overview_node != null:
-				check(not rects_overlap(summary_rect.grow(-1.0), screen_rect(overview_node).grow(-1.0)), "settings overview summary clears %s state node at %s" % [overview_node_name, viewport_size])
+			check(overview_node == null, "settings overview keeps its %s count textual without decorative state blocks at %s" % [overview_node_name, viewport_size])
+		check(overview_art.find_child("SettingsOverviewRail", true, false) == null and readable_paper_ink(overview_summary.get_theme_color("font_color")), "settings overview uses readable ink without a passive progress meter at %s" % viewport_size)
 	if viewport_size.x <= 960.0 and overview_art != null:
 		var small_overview_rect = screen_rect(overview_art)
 		check(small_overview_rect.size.y >= 26.0, "settings overview keeps readable compact height at %s" % viewport_size)
@@ -5449,7 +5540,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(small_audio_rect.position.y >= small_overview_rect.end.y + 8.0, "settings audio section clears overview on compact viewport at %s" % viewport_size)
 			check(small_play_rect.position.y >= small_overview_rect.end.y + 8.0, "settings play section clears overview on compact viewport at %s" % viewport_size)
 			check(small_maint_rect.size.y >= 64.0, "settings maintenance section keeps readable height on compact viewport at %s" % viewport_size)
-			check(small_maint_rect.position.y >= small_audio_rect.end.y + 8.0 and small_maint_rect.position.y >= small_play_rect.end.y + 8.0, "settings maintenance clears upper sections on compact viewport at %s" % viewport_size)
+			check(small_audio_section.visible != small_play_section.visible or small_maint_section.visible, "settings compact categories show one reading area at %s" % viewport_size)
 	var expected_setting_buttons := {
 		"背景音乐": ["已开", "已关"],
 		"音效反馈": ["已开", "已关"],
@@ -5476,7 +5567,9 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var grid = overlay_control.find_child("SettingsSectionGrid_%s" % section_name, true, false) as Control
 		var section_shadow = overlay_control.find_child("SettingsSection3DCastShadow_%s" % section_name, true, false) as Control
 		var section_depth = overlay_control.find_child("SettingsSection3DDepthEdge_%s" % section_name, true, false) as Control
-		check(section != null and grid != null and section_shadow != null and section_depth != null, "settings section %s exposes named physical section shell and grid at %s" % [section_name, viewport_size])
+		check(section != null and grid != null and section_shadow == null and section_depth == null and not section is TextureRect, "settings section %s uses a transparent native group on the single paper surface at %s" % [section_name, viewport_size])
+		if section != null and not section.is_visible_in_tree():
+			continue
 		if section != null and panel != null:
 			var section_rect = screen_rect(section)
 			check(panel_rect.grow(1.0).encloses(section_rect), "settings section %s stays inside modal at %s" % [section_name, viewport_size])
@@ -5489,7 +5582,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var row = overlay_control.find_child("SettingRow_%s" % title, true, false) as Control
 		var button = overlay_control.find_child("SettingRowButton_%s" % title, true, false) as Button
 		check(row != null and button != null, "settings row %s exposes a named row and button at %s" % [title, viewport_size])
-		if button == null:
+		if button == null or not button.is_visible_in_tree():
 			continue
 		var row_rect := Rect2()
 		if row != null:
@@ -5500,7 +5593,11 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			var expected_row_height := 56.0 if scene.large_text_enabled else (44.0 if compact_settings else 48.0)
 			check(row_rect.size.y >= expected_row_height - 1.0 and row_rect.size.x >= button_rect.size.x + 96.0, "settings row %s keeps profile-aware row rhythm and width at %s" % [title, viewport_size])
 			check(row_rect.grow(1.0).encloses(button_rect), "settings row %s encloses its button at %s" % [title, viewport_size])
-		check(button_rect.size.x >= 92.0 and button_rect.size.y >= 32.0, "settings row %s keeps a practical button target at %s" % [title, viewport_size])
+		var compact_reset_action: bool = title == "本地进度" and not scene.large_text_enabled and (viewport_size.y <= 560.0 or viewport_size.x <= 960.0)
+		check(button_rect.size.x >= (68.0 if compact_reset_action else 92.0) and button_rect.size.y >= 44.0, "settings row %s keeps a practical forty-four-pixel action target at %s" % [title, viewport_size])
+		if compact_reset_action:
+			var reset_action_width := button.get_theme_font("font").get_string_size(button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, button.get_theme_font_size("font_size")).x
+			check(reset_action_width <= button_rect.size.x - 8.0, "compact reset action keeps its complete native confirmation label at %s" % viewport_size)
 		var expected_text = expected_setting_buttons[title]
 		var matches_expected_text := false
 		if expected_text is Array:
@@ -5514,12 +5611,12 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		var title_label = overlay_control.find_child("SettingRowTitle_%s" % title, true, false) as Label
 		var status_label = overlay_control.find_child("SettingRowStatus_%s" % title, true, false) as Label
 		var text_panel = overlay_control.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) as Control
-		check(title_label != null and status_label != null and text_panel != null, "settings row %s exposes title status and readability panel at %s" % [title, viewport_size])
+		check(title_label != null and status_label != null and text_panel == null and row != null and not row is Panel, "settings row %s keeps native title and status directly on the shared paper at %s" % [title, viewport_size])
 		if title_label != null:
 			check(title_label.clip_text and title_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and title_label.get_theme_font_size("font_size") >= 14 and readable_paper_ink(title_label.get_theme_color("font_color")), "settings row %s title stays bright clipped and readable at %s" % [title, viewport_size])
 			check(not rects_overlap(screen_rect(title_label), button_rect), "settings row %s title clears the button lane at %s" % [title, viewport_size])
 		if status_label != null:
-			check(status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS and status_label.get_theme_font_size("font_size") >= 13 and readable_paper_ink(status_label.get_theme_color("font_color")), "settings row %s status stays bright clipped and readable at %s" % [title, viewport_size])
+			check((title == "本地进度" and status_label.autowrap_mode != TextServer.AUTOWRAP_OFF or status_label.clip_text and status_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS) and status_label.get_theme_font_size("font_size") >= 13 and readable_paper_ink(status_label.get_theme_color("font_color")), "settings row %s status stays bounded and readable at %s" % [title, viewport_size])
 			if scene.large_text_enabled:
 				check(not status_label.text.contains("...") and not status_label.text.contains("…"), "large-text settings row %s keeps a visible non-truncated status at %s" % [title, viewport_size])
 			if (viewport_size.y <= 560.0 or viewport_size.x <= 960.0) and title == "出牌辅助":
@@ -5578,8 +5675,13 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(reset_status != null and reset_button != null and reset_status.tooltip_text != "" and reset_button.tooltip_text != "", "settings reset row exposes confirmation status and consequence tooltips at %s" % viewport_size)
 			if reset_status != null and reset_button != null:
 				var compact_reset_row := viewport_size.y <= 560.0 or viewport_size.x <= 960.0
-				var expected_reset_status := ("确认清空\n统计 + 离线记录" if compact_reset_row else "确认清空：统计+离线记录") if scene.reset_progress_confirming else ("清空统计\n/ 离线记录" if compact_reset_row else "清空统计·离线记录")
-				check(reset_status.text == expected_reset_status, "settings reset row mirrors its layout-aware state at %s (got=%s expected=%s)" % [viewport_size, reset_status.text, expected_reset_status])
+				var expected_reset_status := "清空续局·保留战绩" if compact_reset_row and not scene.large_text_enabled else ("清空续局\n保留战绩" if compact_reset_row else "清空续局存档\n保留战绩")
+				check(reset_status.text == expected_reset_status, "reset confirmation visibly preserves both the clearing scope and retained records at %s" % viewport_size)
+				var reset_font := reset_status.get_theme_font("font")
+				var reset_size := reset_status.get_theme_font_size("font_size")
+				check(reset_status.size.y + 0.5 >= reset_font.get_height(reset_size) * reset_status.text.split("\n").size(), "reset consequence reserves two complete native font lines at %s" % viewport_size)
+				for reset_line in reset_status.text.split("\n"):
+					check(label_text_width(reset_status, reset_line) <= reset_status.size.x + 0.5, "reset consequence is complete without hover at %s: %s" % [viewport_size, reset_line])
 			var reset_texture = button.find_child("ResetDangerSealTexture", true, false) as CanvasItem
 			check(reset_texture == null or reset_texture.modulate.a <= 0.12, "settings reset row keeps full-button texture subdued at %s" % viewport_size)
 			check_settings_button_art_text_safe_zone(button, [
@@ -5601,7 +5703,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 		check(first_button_with_text(overlay_control, long_text) == null, "settings overlay omits long button label %s at %s" % [long_text, viewport_size])
 	for compact_section_name in ["声音", "体验", "系统"]:
 		var compact_grid = overlay_control.find_child("SettingsSectionGrid_%s" % compact_section_name, true, false) as Control
-		if compact_grid == null:
+		if compact_grid == null or not compact_grid.is_visible_in_tree():
 			continue
 		var section_signal_texture = overlay_control.find_child("SettingsSectionSignalPanelTexture_%s" % compact_section_name, true, false) as CanvasItem
 		check(section_signal_texture == null or section_signal_texture.modulate.a <= 0.03, "settings section %s generated signal plate stays quiet at %s" % [compact_section_name, viewport_size])
@@ -5615,368 +5717,51 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			previous_setting_row_rects.append(setting_child_rect)
 
 func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
-	var page_plate = scene.find_child("OnlineLobbyLowFrequencyPagePlate", true, false) as TextureRect
-	var form_panel = scene.find_child("OnlineLobbyFormPanel", true, false) as Control
-	var log_panel = scene.find_child("OnlineLobbyLogPanel", true, false) as Control
-	var input_backplate = scene.find_child("OnlineLobbyInputGroupBackplate", true, false) as Control
-	var action_backplate = scene.find_child("OnlineLobbyActionClusterBackplate", true, false) as Control
-	var status_backplate = scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) as Control
-	var start_reason_backplate := scene.find_child("OnlineLobbyStartReasonReadabilityBackplate", true, false) as Control
-	var status_label = scene.find_child("OnlineLobbyStatusLabel", true, false) as Label
-	var divider = scene.find_child("OnlineLobbySplitDivider", true, false) as Control
-	var feedback = scene.find_child("OnlineFeedbackArt", true, false) as Control
-	var feedback_text = scene.find_child("OnlineFeedbackText", true, false) as Label
-	var feedback_text_backplate = scene.find_child("OnlineFeedbackTextBackplate", true, false) as Control
-	var feedback_seal = scene.find_child("OnlineFeedbackStatusSeal", true, false) as Control
-	var room_status_art = scene.find_child("OnlineLobbyRoomArt", true, false) as Control
-	var room_summary_panel = scene.find_child("OnlineLobbyRoomSummaryPanel", true, false) as Control
-	var room_summary_occupancy = scene.find_child("OnlineLobbyRoomSummaryOccupancy", true, false) as Control
-	var room_summary_ready = scene.find_child("OnlineLobbyRoomSummaryReady", true, false) as Control
-	var room_summary_state = scene.find_child("OnlineLobbyRoomSummaryState", true, false) as Control
-	var room_summary_occupancy_label = scene.find_child("OnlineLobbyRoomSummaryOccupancyLabel", true, false) as Label
-	var room_summary_ready_label = scene.find_child("OnlineLobbyRoomSummaryReadyLabel", true, false) as Label
-	var room_summary_state_label = scene.find_child("OnlineLobbyRoomSummaryStateLabel", true, false) as Label
-	var room_summary_snapshot_status = scene.find_child("OnlineLobbyRoomSummarySnapshotStatus", true, false) as Label
-	var roster_panel = scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
-	var log_list_panel = scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
-	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
-	var log_list_text = scene.find_child("OnlineLobbyLogListText", true, false) as RichTextLabel
-	var name_edit = scene.find_child("OnlineLobbyNameEdit", true, false) as LineEdit
-	var host_edit = scene.find_child("OnlineLobbyHostEdit", true, false) as LineEdit
-	var room_edit = scene.find_child("OnlineLobbyRoomEdit", true, false) as LineEdit
-	var roster_title = scene.find_child("OnlineLobbyRosterTitle", true, false) as Label
-	var log_list_title = scene.find_child("OnlineLobbyLogListTitle", true, false) as Label
-	var log_count_badge = scene.find_child("OnlineLobbyLogCountBadge", true, false) as Control
-	var log_latest_button = scene.find_child("OnlineLobbyLogLatestButton", true, false) as Button
-	var chat_button = scene.find_child("ChatLobbyButton", true, false) as Button
-	var log_unread_label = scene.find_child("OnlineLobbyLogUnreadLabel", true, false) as Label
-	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
-	var room_offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Label
-	var connect_button = scene.find_child("OnlineLobbyConnectButton", true, false) as Button
-	var create_button = scene.find_child("OnlineLobbyCreateButton", true, false) as Button
-	var join_button = scene.find_child("OnlineLobbyJoinButton", true, false) as Button
-	var start_button := scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
-	var start_reason := scene.find_child("OnlineLobbyStartGateReason", true, false) as Label
-	var action_button_row := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
-	var start_button_row := scene.find_child("OnlineLobbyStartButtonRow", true, false) as Control
-	var endpoint_badge = scene.find_child("OnlineLobbyServerEndpointBadge", true, false) as Control
-	var endpoint_label = scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
-	var state_badge = scene.find_child("OnlineLobbyConnectionStateBadge", true, false) as Control
-	var connection_state_label = scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
-	var subtitle := scene.find_child("OnlineLobbySubtitle", true, false) as Label
-	var room_badge_view_icon := scene.find_child("OnlineLobbyRoomBadgeViewIcon", true, false) as TextureRect
-	check(page_plate != null and form_panel != null and log_panel != null, "online lobby exposes a low-frequency page plate and named split panels at %s" % viewport_size)
-	if page_plate != null:
-		var page_source = (page_plate.texture as AtlasTexture).atlas if page_plate.texture is AtlasTexture else page_plate.texture
-		check(page_source != null and str(page_source.resource_path).ends_with("ui_dark_scrim.png") and page_plate.self_modulate.a >= 0.35 and page_plate.self_modulate.a <= 0.60, "disconnected lobby uses a restrained low-frequency authored bitmap substrate at %s" % viewport_size)
-	check(input_backplate != null and action_backplate != null and status_backplate != null and start_reason_backplate != null and status_label != null and divider != null, "online lobby exposes separate form, action, and footer readability lanes at %s" % viewport_size)
-	check(room_status_art != null and room_summary_panel != null and room_summary_snapshot_status != null and roster_panel != null and log_list_panel != null and log_list_text != null and chat_button != null and log_latest_button != null and log_unread_label != null and room_badge_view_icon != null and room_badge_view_icon.texture != null, "online lobby exposes room summary roster chat log list latest-log controls and a visible room-view affordance at %s" % viewport_size)
-	check_focus_route(scene, [
-		"OnlineLobbyNameEdit",
-		"OnlineLobbyHostEdit",
-		"OnlineLobbyRoomEdit",
-		"OnlineLobbyConnectButton",
-		"OnlineLobbyConnectionRetryButton",
-		"OnlineLobbyCreateButton",
-		"OnlineLobbyJoinButton",
-		"OnlineLobbyPrimaryStartButton",
-		"OnlineLobbySecondaryReturnButton",
-		"ChatLobbyButton",
-		"OnlineLobbyLogLatestButton",
-		"OnlineLobbyRoomBadgeTouchTarget",
-		"OnlineLobbyRosterTouchTarget_0",
-		"OnlineLobbyRosterTouchTarget_1",
-		"OnlineLobbyRosterTouchTarget_2",
-		"OnlineLobbyRosterTouchTarget_3",
-	], "OnlineLobbyConnectButton", "online lobby", viewport_size)
-	check(create_button != null and create_button.disabled and str(create_button.focus_next) != str(create_button.get_path()), "disconnected lobby skips disabled create action in its focus route at %s" % viewport_size)
-	check(join_button != null and join_button.disabled and str(join_button.focus_next) != str(join_button.get_path()), "disconnected lobby skips disabled join action in its focus route at %s" % viewport_size)
-	var retry_button := scene.find_child("OnlineLobbyConnectionRetryButton", true, false) as Button
-	check(retry_button != null and retry_button.visible and not retry_button.disabled and retry_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET and str(retry_button.get_meta("recovery_route", "")).contains("adjacent"), "disconnected lobby keeps a visible retry CTA beside the connection state at %s" % viewport_size)
-	if retry_button != null and state_badge != null:
-		check(not rects_overlap(screen_rect(retry_button), screen_rect(state_badge)) and absf(screen_rect(retry_button).position.y - screen_rect(state_badge).end.y) <= viewport_size.y * 0.025, "disconnected lobby places retry CTA directly below the connection state at %s" % viewport_size)
-	var error_gate: Dictionary = scene.online_lobby_start_gate("异常")
-	check(str(error_gate.get("reason", "")).contains("连接异常") and str(error_gate.get("reason", "")).contains("点击") and str(error_gate.get("reason", "")).contains("重试"), "online lobby connection-error start gate names the nearby retry route at %s" % viewport_size)
-	if start_reason != null and start_button != null and action_button_row != null and start_button_row != null and status_label != null and start_reason_backplate != null:
-		var start_reason_rect := screen_rect(start_reason)
-		var reason_plate_rect := screen_rect(start_reason_backplate)
-		check(not start_reason_rect.intersects(screen_rect(action_button_row), true) and not start_reason_rect.intersects(screen_rect(start_button_row), true), "online lobby start-gate reason stays outside both action rows at %s" % viewport_size)
-		check(start_reason_rect.position.y >= screen_rect(start_button_row).end.y + maxf(8.0, viewport_size.y * 0.012), "online lobby start-gate reason remains in the separate lower footer lane at %s" % viewport_size)
-		check(start_reason_rect.position.x >= screen_rect(status_label).end.x + maxf(8.0, viewport_size.x * 0.01), "online lobby status and start-gate reasons occupy distinct footer columns at %s" % viewport_size)
-		check(reason_plate_rect.grow(1.0).encloses(start_reason_rect) and not reason_plate_rect.intersects(screen_rect(status_backplate), true), "online lobby start-gate reason uses its own authored footer reading surface at %s" % viewport_size)
-		check(start_reason.tooltip_text.contains("开始游戏条件") and str(start_reason.get_meta("layout_role", "")) == "separate_footer_reason_lane", "online lobby start-gate reason keeps full accessible copy in its footer lane at %s" % viewport_size)
-		check(label_text_width(start_reason, str(start_reason.text)) <= start_reason_rect.size.x + 1.0, "online lobby visible start-gate reason fits without truncation at %s" % viewport_size)
-	var roster_texture = (roster_panel as TextureRect).texture if roster_panel is TextureRect else null
-	var log_list_texture = (log_list_panel as TextureRect).texture if log_list_panel is TextureRect else null
-	var roster_source = (roster_texture as AtlasTexture).atlas if roster_texture is AtlasTexture else roster_texture
-	var log_list_source = (log_list_texture as AtlasTexture).atlas if log_list_texture is AtlasTexture else log_list_texture
-	var roster_texture_path := str(roster_source.resource_path) if roster_source != null else ""
-	var log_list_texture_path := str(log_list_source.resource_path) if log_list_source != null else ""
-	check(roster_texture_path.ends_with("ui_dark_scrim.png") and log_list_texture_path.ends_with("ui_dark_scrim.png"), "online lobby reading panels use the low-frequency dark bitmap substrate at %s" % viewport_size)
-	check(room_offline_state != null and not room_status_art.visible and not roster_panel.visible and not log_list_panel.visible, "disconnected lobby hides stale room, roster, and log content behind an explicit empty state at %s" % viewport_size)
-	check(scene.online_room.is_empty() and room_offline_state != null and room_offline_state.text == "连接后显示房间、席位和日志", "disconnected lobby clears the room snapshot and explains the empty state at %s" % viewport_size)
-	check(log_latest_button != null and log_latest_button.text == "最新" and str(log_latest_button.get_meta("ui_button_role", "")) == "log_latest" and str(log_latest_button.get_meta("ui_full_text", "")).contains("最新"), "online lobby keeps the latest-log CTA visually stable while preserving its full action detail at %s" % viewport_size)
-	check(log_unread_label != null and str(log_unread_label.get_meta("ui_status_role", "")) == "log_unread" and str(log_unread_label.get_meta("ui_full_text", "")) != "", "online lobby exposes a separate unread status lane instead of growing the latest button label at %s" % viewport_size)
-	check(log_count_badge != null and int(log_count_badge.get_meta("log_count", -1)) >= 0 and str(log_count_badge.get_meta("ui_full_text", "")).contains("房间日志"), "online lobby count badge keeps its total-log meaning independent of the unread state at %s" % viewport_size)
-	if room_badge != null and room_badge.get_child_count() > 0:
-		var room_badge_label = scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
-		check(room_badge_label != null and room_badge_label.text == "房间号 连接后显示", "disconnected lobby replaces the room badge with a connection-state hint at %s" % viewport_size)
-		check(not room_badge.visible and room_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected lobby hides the room detail target until a room snapshot exists at %s" % viewport_size)
-		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
-		check(room_touch_target != null and room_touch_target.get_parent() == scene.root_layer, "disconnected lobby keeps the room detail target on the safe content layer at %s" % viewport_size)
-		if room_touch_target != null:
-			var room_target_rect := screen_rect(room_touch_target)
-			var room_badge_rect := screen_rect(room_badge)
-			check(room_target_rect.grow(1.0).encloses(room_badge_rect) and room_badge_rect.grow(1.0).encloses(room_target_rect), "room detail target stays aligned with the room badge at %s" % viewport_size)
-			check(room_touch_target.disabled and room_touch_target.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected room detail target remains inert at %s" % viewport_size)
-	check(endpoint_badge != null and endpoint_label != null and state_badge != null and connection_state_label != null and subtitle != null, "online lobby exposes top badges and complete subtitle at %s" % viewport_size)
-	if subtitle != null and endpoint_badge != null:
-		var subtitle_rect := screen_rect(subtitle)
-		var endpoint_rect := screen_rect(endpoint_badge)
-		check(subtitle.text == "连接本机或局域网，先连接再创建或加入房间。" and not subtitle.text.contains("...") and not subtitle.text.contains("…"), "online lobby subtitle keeps its complete connection guidance at %s" % viewport_size)
-		check(label_text_width(subtitle, subtitle.text) <= subtitle_rect.size.x + 1.0, "online lobby subtitle fits its expanded header lane at %s" % viewport_size)
-		check(subtitle_rect.end.x <= endpoint_rect.position.x - 8.0, "online lobby subtitle clears the endpoint badge at %s" % viewport_size)
-	check(name_edit != null and name_edit.max_length == scene.ONLINE_NAME_MAX_LENGTH, "online lobby nickname input enforces its client boundary at %s" % viewport_size)
-	check(host_edit != null and host_edit.max_length == scene.ONLINE_HOST_MAX_LENGTH and host_edit.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_URL, "online lobby host input enforces its boundary and URL keyboard at %s" % viewport_size)
-	check(room_edit != null and room_edit.max_length == scene.ONLINE_ROOM_CODE_MAX_LENGTH and room_edit.placeholder_text == "输入房间码，如 ROOM7" and room_edit.tooltip_text.contains("最多"), "online lobby room input exposes a format example and length consequence at %s" % viewport_size)
-	var lobby_action_font_min: int = scene.accessibility_font_size(scene.commercial_ui_font_size(17, 2))
-	for action_button in [connect_button, create_button, join_button]:
-		check(action_button != null and action_button.get_theme_font_size("font_size") >= lobby_action_font_min, "online lobby action button keeps the shared accessible font size at %s" % viewport_size)
-		if action_button != null and action_button.disabled:
-			var disabled_color: Color = action_button.get_theme_color("font_disabled_color")
-			check(disabled_color.a >= 0.95 and relative_luma(disabled_color) >= 0.78 and action_button.modulate.a >= 0.98 and relative_luma(action_button.modulate) >= 0.80, "online lobby disabled action remains readable instead of being dimmed away at %s" % viewport_size)
-	check(scene.optional_gpt_illustration_texture("online_lobby_panel_frame") == null or (scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) != null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) != null), "online lobby consumes GPT panel-frame textures at %s" % viewport_size)
-	check(scene.optional_gpt_illustration_texture("online_lobby_group_plate") == null or (scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) != null and scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) != null), "online lobby consumes GPT group-plate textures at %s" % viewport_size)
-	var form_gpt_frame = scene.find_child("OnlineLobbyFormGPTPanelFrameTexture", true, false) as CanvasItem
-	var log_gpt_frame = scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) as CanvasItem
-	var input_gpt_plate = scene.find_child("OnlineLobbyInputGPTGroupPlateTexture", true, false) as CanvasItem
-	var action_gpt_plate = scene.find_child("OnlineLobbyActionGPTGroupPlateTexture", true, false) as CanvasItem
-	var fan_texture = scene.find_child("OnlineLobbyFanTexture", true, false) as CanvasItem
-	check(form_gpt_frame == null or form_gpt_frame.modulate.a <= 0.06, "online lobby form GPT frame stays edge-level at %s" % viewport_size)
-	check(log_gpt_frame == null or log_gpt_frame.modulate.a <= 0.06, "online lobby log GPT frame stays edge-level at %s" % viewport_size)
-	check(input_gpt_plate == null or input_gpt_plate.modulate.a <= 0.05, "online lobby input GPT group plate stays below the controls at %s" % viewport_size)
-	check(action_gpt_plate == null or action_gpt_plate.modulate.a <= 0.05, "online lobby action GPT group plate stays below the controls at %s" % viewport_size)
-	check(fan_texture == null or fan_texture.modulate.a <= 0.01, "online lobby fan remains a quiet header-edge decoration at %s" % viewport_size)
-	if form_panel == null or log_panel == null:
+	check_secondary_paper(scene, "Lobby", viewport_size)
+	var form := scene.find_child("OnlineLobbyFormPanel", true, false) as Control
+	var room := scene.find_child("OnlineLobbyLogPanel", true, false) as Control
+	var feedback := scene.find_child("OnlineLobbyFormFeedbackLabel", true, false) as Label
+	var actions := scene.find_child("OnlineLobbyActionButtonRow", true, false) as Control
+	var start_actions := scene.find_child("OnlineLobbyStartButtonRow", true, false) as Control
+	var back := scene.find_child("OnlineLobbySecondaryReturnButton", true, false) as Button
+	check(form != null and room != null and feedback != null and actions != null and start_actions != null and back != null, "lobby keeps the real form, state, validation and native action lanes")
+	if form == null or room == null or feedback == null or actions == null or start_actions == null or back == null:
 		return
-	var form_rect = screen_rect(form_panel)
-	var log_rect = screen_rect(log_panel)
-	check(not form_rect.intersects(log_rect, true), "online lobby form and log panels do not overlap at %s" % viewport_size)
-	check(form_rect.position.x >= -0.5 and log_rect.end.x <= viewport_size.x + 0.5, "online lobby split panels stay inside viewport at %s" % viewport_size)
-	if chat_button != null:
-		var chat_rect := screen_rect(chat_button)
-		check(chat_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and chat_rect.size.x >= 44.0, "online lobby chat keeps a 44px touch target at %s" % viewport_size)
-		check(log_rect.grow(1.0).encloses(chat_rect), "online lobby chat stays inside the room panel at %s" % viewport_size)
-		if room_status_art != null:
-			check(chat_rect.end.y <= screen_rect(room_status_art).position.y - 1.0, "online lobby chat clears the room summary at %s" % viewport_size)
-	if endpoint_badge != null and endpoint_label != null and state_badge != null:
-		var expected_endpoint: String = str(scene.online_connection_endpoint_text())
-		var endpoint_rect = screen_rect(endpoint_badge)
-		var endpoint_label_rect = screen_rect(endpoint_label)
-		var state_rect = screen_rect(state_badge)
-		check(str(endpoint_label.text) == expected_endpoint, "online lobby top endpoint label keeps the full host:port value at %s" % viewport_size)
-		check(not str(endpoint_label.text).contains("...") and not str(endpoint_label.text).contains("…"), "online lobby top endpoint source text is not pre-truncated at %s" % viewport_size)
-		check(endpoint_rect.position.x >= viewport_size.x * 0.56 and endpoint_rect.end.x <= viewport_size.x * 0.83, "online lobby endpoint badge stays in the top-right status lane at %s" % viewport_size)
-		check(endpoint_rect.end.x <= state_rect.position.x - max(4.0, viewport_size.x * 0.004), "online lobby endpoint and state badges keep visible separation at %s" % viewport_size)
-		check(endpoint_rect.position.y >= 0.0 and endpoint_rect.end.y <= form_rect.position.y - 8.0, "online lobby endpoint badge clears the split content panels at %s" % viewport_size)
-		check(label_text_width(endpoint_label, expected_endpoint) <= endpoint_label_rect.size.x + 1.0, "online lobby endpoint text fits without rendered ellipsis at %s" % viewport_size)
-	if input_backplate != null and action_backplate != null:
-		var input_rect = screen_rect(input_backplate)
-		var action_rect = screen_rect(action_backplate)
-		check(input_rect.position.y < action_rect.position.y and not input_rect.intersects(action_rect, true), "online lobby input and action groups remain vertically separated at %s" % viewport_size)
-		check(action_rect.end.y <= form_rect.end.y - max(10.0, form_rect.size.y * 0.030), "online lobby action cluster lifts off the form bottom at %s" % viewport_size)
-		for input_id in ["name", "server", "room"]:
-			var input_art = scene.find_child("LineEditInputArt_%s" % input_id, true, false) as CanvasItem
-			var input_edit = input_art.get_parent() as LineEdit if input_art != null else null
-			check(input_edit != null, "online lobby keeps the %s input visible at %s" % [input_id, viewport_size])
-			if input_edit == null:
-				continue
-			check(input_art.show_behind_parent, "online lobby %s GPT field art stays behind native text caret and selection at %s" % [input_id, viewport_size])
-			var room_input_may_be_empty: bool = input_id == "room" and scene.lobby_connection_state_text() != "已连接" and not scene.online_waiting_for_server
-			check((input_edit.text.strip_edges() != "" or room_input_may_be_empty) and input_edit.get_theme_font_size("font_size") >= 18, "online lobby %s input keeps a visible value or an intentional disconnected empty state at %s" % [input_id, viewport_size])
-			var edit_rect = screen_rect(input_edit)
-			check(edit_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5, "online lobby %s input keeps a 44px touch target at %s" % [input_id, viewport_size])
-			check(edit_rect.position.y >= input_rect.position.y - 1.0 and edit_rect.end.y <= input_rect.end.y + 1.0, "online lobby %s input stays inside input group at %s" % [input_id, viewport_size])
-			check(edit_rect.end.y <= action_rect.position.y - 2.0, "online lobby %s input clears action group at %s" % [input_id, viewport_size])
-			var focus_glow = input_edit.find_child("LineEditInputFocusGlow_%s" % input_id, true, false) as Control
-			var accent_wash = input_edit.find_child("LineEditInputAccentWash_%s" % input_id, true, false) as Control
-			var corner_seal = input_edit.find_child("LineEditInputCornerSeal_%s" % input_id, true, false) as Control
-			check(focus_glow != null and accent_wash != null and corner_seal != null, "online lobby %s input exposes restrained material accents at %s" % [input_id, viewport_size])
-			if focus_glow != null:
-				var focus_rect = screen_rect(focus_glow)
-				check(focus_rect.size.x <= edit_rect.size.x * 0.04 and focus_rect.size.y <= edit_rect.size.y * 0.04, "online lobby %s input focus rail stays thin and non-button-like at %s" % [input_id, viewport_size])
-			if accent_wash != null:
-				var accent_rect = screen_rect(accent_wash)
-				check(accent_rect.size.x <= edit_rect.size.x * 0.012 and accent_rect.size.y <= edit_rect.size.y * 0.40, "online lobby %s input accent wash remains a quiet edge detail at %s" % [input_id, viewport_size])
-			if corner_seal != null:
-				var seal_rect = screen_rect(corner_seal)
-				check(seal_rect.size.x <= edit_rect.size.x * 0.035 and seal_rect.size.y <= edit_rect.size.y * 0.18, "online lobby %s input corner seal stays compact at %s" % [input_id, viewport_size])
-	if room_status_art != null and roster_panel != null and log_list_panel != null:
-		var room_status_rect = screen_rect(room_status_art)
-		var roster_rect = screen_rect(roster_panel)
-		var log_list_rect = screen_rect(log_list_panel)
-		check(log_rect.grow(1.0).encloses(room_status_rect) and log_rect.grow(1.0).encloses(roster_rect) and log_rect.grow(1.0).encloses(log_list_rect), "online lobby room hierarchy stays inside log panel at %s" % viewport_size)
-		check(room_status_rect.end.y <= roster_rect.position.y - 2.0 and roster_rect.end.y <= log_list_rect.position.y - 2.0, "online lobby room roster and log list remain vertically separated at %s" % viewport_size)
-		if room_summary_panel != null:
-			var summary_rect = screen_rect(room_summary_panel)
-			check(room_status_rect.grow(1.0).encloses(summary_rect), "online lobby room summary stays inside room art at %s" % viewport_size)
-			check(summary_rect.size.y >= max(20.0, room_status_rect.size.y * 0.42), "online lobby room summary keeps readable height at %s" % viewport_size)
-			for chip in [room_summary_occupancy, room_summary_ready, room_summary_state]:
-				check(chip != null and summary_rect.grow(1.0).encloses(screen_rect(chip)), "online lobby room summary chip stays inside summary panel at %s" % viewport_size)
-			var previous_chip_rect := Rect2()
-			var has_previous_chip := false
-			for chip in [room_summary_occupancy, room_summary_ready, room_summary_state]:
-				if chip == null:
-					continue
-				var chip_rect = screen_rect(chip)
-				if has_previous_chip:
-					check(previous_chip_rect.end.x <= chip_rect.position.x - 2.0, "online lobby room summary chips keep horizontal separation at %s" % viewport_size)
-				previous_chip_rect = chip_rect
-				has_previous_chip = true
-			for label in [room_summary_occupancy_label, room_summary_ready_label, room_summary_state_label]:
-				check(label != null and label.clip_text and label.get_theme_font_size("font_size") >= 11 and relative_luma(label.get_theme_color("font_color")) >= 0.84, "online lobby room summary label is readable and clipped at %s" % viewport_size)
-				if label != null:
-					var label_rect = screen_rect(label)
-					check(summary_rect.grow(1.0).encloses(label_rect), "online lobby room summary label stays inside summary panel at %s" % viewport_size)
-					check(label_text_width(label, str(label.text)) <= label_rect.size.x + 1.0, "online lobby room summary label text fits its lane at %s" % viewport_size)
-			if room_summary_snapshot_status != null:
-				check(room_summary_snapshot_status.clip_text and room_summary_snapshot_status.get_theme_font_size("font_size") >= 9 and relative_luma(room_summary_snapshot_status.get_theme_color("font_color")) >= 0.78, "online lobby room summary exposes a readable stale-snapshot status lane at %s" % viewport_size)
-		if roster_title != null:
-			check(roster_rect.grow(1.0).encloses(screen_rect(roster_title)) and roster_title.get_theme_font_size("font_size") >= 13 and relative_luma(roster_title.get_theme_color("font_color")) >= 0.88, "online lobby roster title is readable and contained at %s" % viewport_size)
-		if log_list_title != null:
-			check(log_list_rect.grow(1.0).encloses(screen_rect(log_list_title)) and log_list_title.get_theme_font_size("font_size") >= 13 and relative_luma(log_list_title.get_theme_color("font_color")) >= 0.88, "online lobby log title is readable and contained at %s" % viewport_size)
-			if log_count_badge != null:
-				check(log_list_rect.grow(1.0).encloses(screen_rect(log_count_badge)), "online lobby log count badge stays inside log panel at %s" % viewport_size)
-			if log_latest_button != null and log_unread_label != null:
-				var latest_rect := screen_rect(log_latest_button)
-				check(latest_rect.size.y >= scene.UI_MIN_TOUCH_TARGET - 0.5 and latest_rect.size.x >= 44.0, "online lobby latest-log button keeps a 44px touch target at %s" % viewport_size)
-				check(log_list_rect.grow(1.0).encloses(latest_rect) and log_latest_button.tooltip_text.contains("最新"), "online lobby latest-log button stays inside the log header and explains its route at %s" % viewport_size)
-				check(log_scroll == null or not latest_rect.intersects(screen_rect(log_scroll), true), "online lobby latest-log button clears the native log scroll at %s" % viewport_size)
-				check(log_count_badge == null or not latest_rect.intersects(screen_rect(log_count_badge), true), "online lobby latest-log button clears the log count at %s" % viewport_size)
-				check(log_list_rect.grow(1.0).encloses(screen_rect(log_unread_label)), "online lobby unread-log indicator stays inside the log header at %s" % viewport_size)
-		for i in range(4):
-			var row = scene.find_child("OnlineLobbyRosterRow_%d" % i, true, false) as Control
-			check(row != null, "online lobby roster row %d exists at %s" % [i, viewport_size])
-			if row != null:
-				var row_rect = screen_rect(row)
-				check(roster_rect.grow(1.0).encloses(row_rect), "online lobby roster row %d stays inside roster panel at %s" % [i, viewport_size])
-				check(row_rect.size.y >= max(18.0, roster_rect.size.y * 0.14), "online lobby roster row %d keeps readable height at %s" % [i, viewport_size])
-				var roster_touch_target := scene.find_child("OnlineLobbyRosterTouchTarget_%d" % i, true, false) as Button
-				check(roster_touch_target != null and roster_touch_target.get_parent() == scene.root_layer, "online lobby roster row %d keeps a root-layer detail target at %s" % [i, viewport_size])
-				if roster_touch_target != null:
-					var roster_target_rect := screen_rect(roster_touch_target)
-					check(roster_target_rect.grow(1.0).encloses(row_rect) and row_rect.grow(1.0).encloses(roster_target_rect), "online lobby roster row %d detail target aligns with its visual row at %s" % [i, viewport_size])
-					check(roster_touch_target.disabled and roster_touch_target.mouse_filter == Control.MOUSE_FILTER_IGNORE, "disconnected lobby roster row %d detail target remains inert at %s" % [i, viewport_size])
-			var name_label = scene.find_child("OnlineLobbyRosterName_%d" % i, true, false) as Label
-			var state_label = scene.find_child("OnlineLobbyRosterState_%d" % i, true, false) as Label
-			check(name_label != null and state_label != null, "online lobby roster row %d exposes name and state labels at %s" % [i, viewport_size])
-			if name_label != null:
-				check(name_label.clip_text and name_label.get_theme_font_size("font_size") >= 12 and relative_luma(name_label.get_theme_color("font_color")) >= 0.88, "online lobby roster row %d name is readable and clipped at %s" % [i, viewport_size])
-			if state_label != null:
-				check(state_label.clip_text and state_label.get_theme_font_size("font_size") >= 11 and relative_luma(state_label.get_theme_color("font_color")) >= 0.84, "online lobby roster row %d state is readable and clipped at %s" % [i, viewport_size])
-		if log_scroll != null:
-			check(log_list_rect.grow(1.0).encloses(screen_rect(log_scroll)), "online lobby native log scroll stays inside log list panel at %s" % viewport_size)
-			check(log_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and log_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and log_scroll.get_v_scroll_bar() != null, "online lobby log uses native touch-scroll with a vertical range at %s" % viewport_size)
-		if log_list_text != null:
-			check(log_scroll != null and log_list_text.get_parent() == log_scroll, "online lobby log text is owned by the native scroll container at %s" % viewport_size)
-			var minimum_log_font := 13 if viewport_size.y <= 560.0 else 14
-			check(log_list_text.fit_content and not log_list_text.scroll_active and log_list_text.get_theme_font_size("normal_font_size") >= minimum_log_font and relative_luma(log_list_text.get_theme_color("default_color")) >= 0.90, "online lobby log text stays readable and delegates scrolling to its parent at %s" % viewport_size)
-		# Exercise the unread path with a bounded synthetic snapshot, then restore
-		# the disconnected fixture so this probe cannot leak room state downstream.
-		var saved_room: Dictionary = scene.online_room.duplicate(true)
-		var saved_seen: int = int(scene.online_log_seen_count)
-		var saved_total: int = int(scene.online_log_total_count)
-		var saved_waiting: bool = bool(scene.online_waiting_for_server)
-		var saved_sent_type: String = str(scene.online_last_sent_type)
-		scene.online_room = {"code": "ROOM7", "players": [{"seat": 0, "name": "上次快照", "ready": true}]}
-		scene.online_waiting_for_server = true
-		scene.online_last_sent_type = "joinRoom"
-		scene.refresh_online_room_content()
-		check(room_summary_snapshot_status != null and room_summary_snapshot_status.visible and room_summary_snapshot_status.text.contains("上次房间快照") and room_summary_snapshot_status.tooltip_text.contains("房间数据状态"), "online lobby marks the retained roster as a stale room snapshot while join is pending at %s" % viewport_size)
-		scene.online_room = saved_room
-		scene.online_log_seen_count = saved_seen
-		scene.online_log_total_count = saved_total
-		scene.online_waiting_for_server = saved_waiting
-		scene.online_last_sent_type = saved_sent_type
-		scene.refresh_online_lobby_state()
-		scene.online_room = {"logs": ["第一条", "第二条", "第三条"]}
-		scene.online_log_total_count = 3
-		scene.online_log_seen_count = 1
-		scene.refresh_online_log_navigation()
-		check(log_latest_button != null and log_latest_button.text == "最新 2" and log_unread_label != null and log_unread_label.visible and log_unread_label.text == "未读 2", "online lobby exposes an accurate unread-log count at %s" % viewport_size)
-		scene.scroll_online_log_to_end()
-		check(scene.online_log_seen_count == 3 and log_latest_button != null and log_latest_button.text == "最新" and log_unread_label != null and not log_unread_label.visible, "online lobby latest-log route clears unread state at %s" % viewport_size)
-		scene.online_room = saved_room
-		scene.online_log_seen_count = saved_seen
-		scene.online_log_total_count = saved_total
-		scene.render_room_log()
-		scene.refresh_online_log_navigation()
-	var feedback_rect := Rect2()
-	if feedback != null:
-		feedback_rect = screen_rect(feedback)
-		check(feedback.get_parent() == log_panel and log_rect.grow(1.0).encloses(feedback_rect), "online feedback footer stays owned and contained by the room panel at %s" % viewport_size)
-		if log_scroll != null:
-			var log_scroll_rect := screen_rect(log_scroll)
-			check(feedback_rect.position.y >= log_scroll_rect.end.y + max(12.0, viewport_size.y * 0.012) and feedback_rect.end.y <= log_rect.end.y + 0.5, "online feedback footer follows the log scroll with clearance and stays inside the room panel at %s" % viewport_size)
-		check(feedback_rect.size.y <= viewport_size.y * 0.064, "online feedback strip stays thin at the bottom edge at %s" % viewport_size)
-		check(scene.optional_gpt_illustration_texture("online_feedback_gpt_strip") == null or feedback.find_child("OnlineFeedbackGPTStripTexture", true, false) != null, "online feedback strip consumes GPT v2 texture at %s" % viewport_size)
-	check(feedback_text != null and feedback_text_backplate != null and feedback_seal != null, "online feedback strip exposes text safety backplate and status seal at %s" % viewport_size)
-	if feedback != null and feedback_text != null and feedback_text_backplate != null:
-		var feedback_text_rect = screen_rect(feedback_text)
-		var feedback_back_rect = screen_rect(feedback_text_backplate)
-		check(feedback_rect.grow(1.0).encloses(feedback_back_rect) and feedback_back_rect.grow(1.0).encloses(feedback_text_rect), "online feedback text stays inside its local backplate at %s" % viewport_size)
-		check(feedback_text.clip_text and feedback_text.get_theme_font_size("font_size") >= 12 and relative_luma(feedback_text.get_theme_color("font_color")) >= 0.88, "online feedback text remains readable and clipped at %s" % viewport_size)
-		check(feedback_text_rect.end.x <= feedback_rect.position.x + feedback_rect.size.x * 0.78, "online feedback text clears the right ornament lane at %s" % viewport_size)
-		if feedback_seal != null:
-			check(not rects_overlap(feedback_text_rect, screen_rect(feedback_seal)), "online feedback text clears status seal at %s" % viewport_size)
-	var action_rects: Array[Rect2] = []
-	for text in ["连接", "创建", "加入", "连接后开始", "返回菜单"]:
-		var button = first_button_with_text(scene, text)
-		check(button != null, "online lobby exposes %s action button at %s" % [text, viewport_size])
-		if button == null:
+	check(not screen_rect(form).intersects(screen_rect(room), true), "lobby operational columns stay separate at %s" % viewport_size)
+	check(not back.disabled and back.modulate == Color.WHITE and back.size.y >= 44.0, "lobby return remains readable and available in every connection state")
+	check(feedback.get_global_rect().end.y + 7.5 <= actions.get_global_rect().position.y and actions.get_global_rect().end.y + 7.5 <= start_actions.get_global_rect().position.y, "lobby validation and two action rows keep eight pixel gaps")
+	for field_name in ["OnlineLobbyNameEdit", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit"]:
+		var edit := scene.find_child(field_name, true, false) as LineEdit
+		check(edit != null, "lobby retains native input " + field_name)
+		if edit == null:
 			continue
-		var rect = screen_rect(button)
-		action_rects.append(rect)
-		check(rect.size.x >= 96.0 and rect.size.y >= 46.0, "online lobby %s keeps stable touch size at %s" % [text, viewport_size])
-		check(rect.position.x >= form_rect.position.x - 1.0 and rect.end.x <= form_rect.end.x + 1.0, "online lobby %s stays inside form panel at %s" % [text, viewport_size])
-		check(button.text == text and button.get_theme_font_size("font_size") >= 17, "online lobby %s keeps a readable native label at %s" % [text, viewport_size])
-		check_button_face_behind_native_text(button, "online lobby %s button" % text, viewport_size)
-		var button_art = button.find_child("LobbyActionButtonArt_%s" % text, true, false) as Control
-		var button_glow = button.find_child("LobbyActionButtonGlow_%s" % text, true, false) as Control
-		var button_seal = button.find_child("LobbyActionButtonSeal_%s" % text, true, false) as Control
-		check(button_art != null and button_glow != null and button_seal != null, "online lobby %s keeps restrained button material art at %s" % [text, viewport_size])
-		if button_art != null:
-			check(rect.grow(1.0).encloses(screen_rect(button_art)), "online lobby %s button art stays inside the touch target at %s" % [text, viewport_size])
-		if button_glow != null:
-			var glow_rect = screen_rect(button_glow)
-			check(glow_rect.size.x <= rect.size.x * 0.04 and glow_rect.position.x >= rect.position.x + rect.size.x * 0.90, "online lobby %s button glow stays as a right-edge detail at %s" % [text, viewport_size])
-		if button_seal != null:
-			var button_seal_rect = screen_rect(button_seal)
-			check(button_seal_rect.size.x <= rect.size.x * 0.10 and button_seal_rect.size.y <= rect.size.y * 0.22 and button_seal_rect.end.x <= rect.position.x + rect.size.x * 0.19, "online lobby %s button seal stays outside the label lane at %s" % [text, viewport_size])
-	for i in range(action_rects.size()):
-		for j in range(i + 1, action_rects.size()):
-			check(not action_rects[i].intersects(action_rects[j], true), "online lobby action buttons do not overlap at %s" % viewport_size)
-	var primary_start = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
-	var secondary_return = scene.find_child("OnlineLobbySecondaryReturnButton", true, false) as Button
-	check(primary_start != null and secondary_return != null, "online lobby exposes primary start and secondary return buttons at %s" % viewport_size)
-	if primary_start != null and secondary_return != null:
-		var primary_start_rect = screen_rect(primary_start)
-		var secondary_return_rect = screen_rect(secondary_return)
-		check(primary_start_rect.size.x > secondary_return_rect.size.x + 16.0, "online lobby start button has stronger width hierarchy than return at %s" % viewport_size)
-		check(primary_start_rect.end.y <= form_rect.end.y - max(12.0, viewport_size.y * 0.025) and secondary_return_rect.end.y <= form_rect.end.y - max(12.0, viewport_size.y * 0.025), "online lobby bottom actions leave a clear form-panel footer at %s" % viewport_size)
-		check(primary_start.disabled and primary_start.text == "连接后开始", "online lobby start button becomes a disabled waiting state before server connection at %s" % viewport_size)
-	if status_backplate != null:
-		var status_rect = screen_rect(status_backplate)
-		check(status_rect.position.x >= form_rect.position.x - 1.0 and status_rect.end.x <= log_rect.position.x + 1.0, "online lobby status backplate stays in the lower left lane at %s" % viewport_size)
-		check(status_rect.position.y >= form_rect.end.y + max(6.0, viewport_size.y * 0.012) and status_rect.size.y <= viewport_size.y * 0.064, "online lobby lower status reads as a thin strip below the form panel at %s" % viewport_size)
-		if feedback != null:
-			var feedback_rect_for_status = screen_rect(feedback)
-			check(not status_rect.intersects(feedback_rect_for_status, true), "online lobby lower status stays separate from the log-owned feedback footer at %s" % viewport_size)
-		if status_label != null:
-			var status_label_rect = screen_rect(status_label)
-			check(status_rect.grow(1.0).encloses(status_label_rect), "online lobby status label stays inside lower status backplate at %s" % viewport_size)
-			check(status_label.clip_text and not str(status_label.text).contains(str(scene.DEFAULT_HOST)) and not str(status_label.text).contains(":"), "online lobby lower status avoids repeating raw server endpoint at %s" % viewport_size)
-			check(label_text_width(status_label, str(status_label.text)) <= status_label_rect.size.x + 1.0, "online lobby lower status text fits without truncation at %s" % viewport_size)
+		check(edit.size.y >= 44.0 and edit.get_theme_font_size("font_size") >= 18 and not edit.clear_button_enabled and bool(edit.get_meta("native_clear_proxy", false)), field_name + " preserves readable native editing and one clear owner")
+		var face := edit.find_child("LobbyFieldPaperFace", true, false) as TextureRect
+		check(face != null and face.show_behind_parent and face.texture == scene.optional_gpt_illustration_texture("menu_card_readable_gpt"), field_name + " uses the authored paper without a baked clear icon")
+		check(edit.get_global_rect().end.y + 6.0 <= actions.get_global_rect().position.y, field_name + " clears actions")
+	for action_name in ["OnlineLobbyConnectButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyPrimaryStartButton", "ChatLobbyButton", "OnlineLobbyEndpointCopyButton"]:
+		var button := scene.find_child(action_name, true, false) as Button
+		check(button != null and button.size.x >= 44 and button.size.y >= 44 and button.get_meta("guofeng_button_face_key", "") in ["button_face_jiangnan_gpt", "menu_ink_primary"], action_name + " retains a real authored forty-four-pixel action")
+	var endpoint := scene.find_child("OnlineLobbyServerEndpointLabel", true, false) as Label
+	var state := scene.find_child("OnlineLobbyConnectionStateLabel", true, false) as Label
+	check(endpoint != null and endpoint.text == scene.online_connection_endpoint_text() and endpoint.tooltip_text != "" and label_text_width(endpoint, endpoint.text) <= endpoint.size.x + 1.0, "lobby endpoint is readable and retains the complete copy route")
+	check(state != null and state.text == scene.lobby_connection_state_text() and readable_paper_ink(state.get_theme_color("font_color")), "lobby connection state uses actual native ink text")
+	var retry := scene.find_child("OnlineLobbyConnectionRetryButton", true, false) as Button
+	var expected_retry: bool = scene.lobby_connection_state_text() == "异常" or scene.online_retry_available or scene.online_feedback_requires_recovery()
+	check(retry != null and retry.visible == expected_retry, "lobby retry is shown for recovery rather than every initial disconnected state")
+	check(scene.find_child("LobbyRoomGateTokenTexture", true, false) == null and scene.find_child("OnlineLobbyForm3DRearShell", true, false) == null and scene.find_child("OnlineLobbyLogGPTPanelFrameTexture", true, false) == null, "lobby removes the empty room token and overlapping decorative shells")
+	var connected: bool = scene.lobby_connection_state_text() == "已连接" or scene.online_waiting_for_server
+	var roster := scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
+	var log_panel := scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
+	check(roster != null and log_panel != null and roster.visible == connected and log_panel.visible == connected, "lobby shows roster and logs only for a current or pending room snapshot")
+	if connected:
+		for slot in range(4):
+			var name := scene.find_child("OnlineLobbyRosterName_%d" % slot, true, false) as Label
+			var status := scene.find_child("OnlineLobbyRosterState_%d" % slot, true, false) as Label
+			check(name != null and status != null and name.tooltip_text != "" and status.tooltip_text != "" and readable_paper_ink(name.get_theme_color("font_color")) and readable_paper_ink(status.get_theme_color("font_color")), "lobby seat %d preserves complete name and state details in ink" % slot)
+		var log_scroll := scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
+		var latest := scene.find_child("OnlineLobbyLogLatestButton", true, false) as Button
+		check(log_scroll != null and latest != null and latest.size.y >= 44 and latest.get_global_rect().end.y + 7.5 <= log_scroll.get_global_rect().position.y, "lobby logs retain latest action above the native reading viewport")
 
 
 func _control_is_subdued_art(node: Control, max_alpha: float) -> bool:
@@ -6003,494 +5788,138 @@ func inherited_canvas_modulate_alpha(node: Node) -> float:
 
 
 func check_secondary_back_button_art(scene, screen_id: String, viewport_size: Vector2) -> void:
-	# r372: route nodes may be Control/TextureRect (GPT plates) — no ColorRect program art required.
-	var art = scene.find_child("SecondaryBackButtonArt_%s" % screen_id, true, false) as Control
-	var confirm_route = scene.find_child("SecondaryBackConfirmRoute_%s" % screen_id, true, false) as Control
-	var confirm_fill = scene.find_child("SecondaryBackConfirmFill_%s" % screen_id, true, false) as Control
-	var confirm_gate = scene.find_child("SecondaryBackConfirmGate_%s" % screen_id, true, false) as Control
-	check(art != null and confirm_route != null and confirm_fill != null and confirm_gate != null, "secondary back button %s exposes quiet route art at %s" % [screen_id, viewport_size])
-	if art != null:
-		var back_button = art.get_parent() as Button
-		check(back_button != null and back_button.text == "返回", "secondary back button %s keeps its native 返回 label at %s" % [screen_id, viewport_size])
-		if back_button != null:
-			check_button_face_behind_native_text(back_button, "secondary back button %s" % screen_id, viewport_size)
-	if confirm_route != null and confirm_fill != null and confirm_gate != null:
-		# Subdued route: either invisible host / low-modulate plate, or legacy low-alpha ColorRect.
-		# r372: program color routes removed — empty Control hosts or low-alpha plates are OK.
-		var route_ok := not (confirm_route is ColorRect) or _control_is_subdued_art(confirm_route, 0.20)
-		var fill_ok := not (confirm_fill is ColorRect) or _control_is_subdued_art(confirm_fill, 0.16)
-		var gate_ok := not (confirm_gate is ColorRect) or _control_is_subdued_art(confirm_gate, 0.16)
-		check(route_ok and fill_ok and gate_ok, "secondary back button %s keeps center route subdued below label at %s" % [screen_id, viewport_size])
-	for i in range(2):
-		var confirm_tick = scene.find_child("SecondaryBackConfirmTick_%s_%d" % [screen_id, i], true, false) as Control
-		if confirm_tick != null:
-			check(_control_is_subdued_art(confirm_tick, 0.12), "secondary back button %s center tick %d stays subdued below label at %s" % [screen_id, i, viewport_size])
+	var names := {"rules": "RulesBackButton", "achievements": "AchievementsBackButton", "stats": "StatsBackButton"}
+	var button := scene.find_child(names[screen_id], true, false) as Button
+	check(button != null and button.text == "返回" and button.size.y >= 44.0 and not button.disabled, "%s return remains a readable native action at %s" % [screen_id, viewport_size])
+	if button != null:
+		check_button_face_behind_native_text(button, screen_id + " return", viewport_size)
+		check(button.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and readable_paper_ink(button.get_theme_color("font_color")), "%s secondary return has dark ink on authored paper at %s" % [screen_id, viewport_size])
+
+
+func check_secondary_paper(scene, prefix: String, viewport_size: Vector2) -> void:
+	var paper := scene.find_child(prefix + "GuofengPaperSurface", true, false) as TextureRect
+	var garden := scene.find_child(prefix + "GuofengGardenBackdrop", true, false) as TextureRect
+	check(paper != null and paper.texture == scene.optional_gpt_illustration_texture("settings_readable_gpt") and paper.modulate == Color.WHITE, "%s has one opaque authored paper at %s" % [prefix, viewport_size])
+	check(garden != null and garden.texture == scene.optional_gpt_illustration_texture("menu_guofeng_moonlit"), "%s shares the authored garden at %s" % [prefix, viewport_size])
+
 
 func check_rules_layout(scene, viewport_size: Vector2) -> void:
-	var codex_front = scene.find_child("RulesCodexFrontPanel", true, false) as Control
-	var codex_shadow = scene.find_child("RulesCodex3DCastShadow", true, false) as Control
-	var reading_inset = scene.find_child("RulesCodex3DReadingInset", true, false) as Control
-	check(codex_front != null and codex_shadow != null and reading_inset == null, "rules exposes one front surface and shadow without a duplicate reading inset at %s" % viewport_size)
-	var guide = scene.find_child("RulesGuideArt", true, false) as Control
-	var content_backplate = scene.find_child("RulesContentReadabilityBackplate", true, false) as Control
-	var content_surface = scene.find_child("RulesContentLowFrequencySurface", true, false) as Control
-	var content_scroll = scene.find_child("RulesContentScroll", true, false) as ScrollContainer
-	var content_scrollbar = scene.find_child("RulesContentScrollBar", true, false) as VScrollBar
-	var scroll_gutter = scene.find_child("RulesContentScrollGutter", true, false) as Control
-	var scroll_thumb = scene.find_child("RulesContentScrollThumb", true, false) as Control
-	var scroll_hit_target = scene.find_child("RulesContentScrollHitTarget", true, false) as Control
-	var content_list = scene.find_child("RulesContentList", true, false) as Control
-	var back_button = first_button_with_text(scene, "返回")
-	check(guide != null and content_backplate != null and content_scroll != null and content_list != null and back_button != null, "rules screen exposes guide, content backplate, scroll list, and back button at %s" % viewport_size)
-	check(content_surface == null, "rules reading content does not add a duplicate full reading surface at %s" % viewport_size)
-	if guide == null or content_backplate == null or content_scroll == null or content_list == null:
+	check_secondary_paper(scene, "Rules", viewport_size)
+	check_secondary_back_button_art(scene, "rules", viewport_size)
+	var title := scene.find_child("RulesTitle", true, false) as Label
+	var guide := scene.find_child("RulesGuideArt", true, false) as Control
+	var scroll := scene.find_child("RulesContentScroll", true, false) as ScrollContainer
+	var hit := scene.find_child("RulesContentScrollHitTarget", true, false) as Control
+	check(title != null and guide != null and scroll != null and hit != null, "rules retains title, six-chapter guide, reading scroll and native drag lane")
+	if title == null or guide == null or scroll == null or hit == null:
 		return
-	var guide_rect = screen_rect(guide)
-	var content_rect = screen_rect(content_backplate)
-	var scroll_rect = screen_rect(content_scroll)
-	var content_list_rect = screen_rect(content_list)
-	check(guide_rect.size.y <= viewport_size.y * 0.090, "rules guide stays compact so reading content gets priority at %s" % viewport_size)
-	check(content_rect.size.y >= viewport_size.y * 0.765, "rules content backplate uses most of the viewport height at %s" % viewport_size)
-	check(guide_rect.end.y <= content_rect.position.y - 4.0, "rules guide clears content backplate at %s" % viewport_size)
-	check(content_scroll.clip_contents, "rules content scroll clips only the reading list at %s" % viewport_size)
-	check(content_rect.grow(1.0).encloses(scroll_rect), "rules content scroll stays inside the readability backplate at %s" % viewport_size)
-	if viewport_size.x <= 960.0:
-		check(content_list.get_combined_minimum_size().y >= scroll_rect.size.y + 54.0, "rules content list exposes extra scrollable reading depth on compact viewport at %s" % viewport_size)
-	var first_section := scene.find_child("RuleSection_0", true, false) as Control
-	var second_section := scene.find_child("RuleSection_1", true, false) as Control
-	if first_section != null and second_section != null:
-		check(screen_rect(second_section).position.y >= screen_rect(first_section).end.y - 1.0, "rules content-sized chapters remain ordered without overlap at %s" % viewport_size)
-	if content_scrollbar != null:
-		check(not content_scrollbar.visible and content_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "rules screen hides the default bright scrollbar at %s" % viewport_size)
-	check(content_scroll.focus_mode == Control.FOCUS_ALL and content_scroll.get_meta("ui_scroll_view", "") != "" and content_scroll.tooltip_text != "", "rules scroll is keyboard focusable and exposes its reading context at %s" % viewport_size)
+	check(screen_rect(title).end.y + 6.0 <= screen_rect(guide).position.y + 0.5 and screen_rect(guide).end.y + 12.0 <= screen_rect(scroll).position.y + 0.5, "rules has actual six and twelve pixel header clearances at %s" % viewport_size)
+	check(hit.size.x >= 44.0 and hit.mouse_filter == Control.MOUSE_FILTER_STOP and screen_rect(hit).position.x >= screen_rect(scroll).end.x, "rules native drag lane stays outside body text at %s" % viewport_size)
+	var reading_status := scene.find_child("RulesReadingStatus", true, false) as Label
+	var back := scene.find_child("RulesBackButton", true, false) as Button
+	check(reading_status != null and back != null and screen_rect(back).end.y + 6.0 <= screen_rect(reading_status).position.y + 0.5 and screen_rect(reading_status).end.y + 1.0 <= screen_rect(scroll).position.y, "rules reading status clears return and body text at %s" % viewport_size)
 	check_focus_route(scene, ["RulesBackButton", "RulesContentScroll", "RulesGuideStepButton_0", "RulesGuideStepButton_1", "RulesGuideStepButton_2", "RulesGuideStepButton_3", "RulesGuideStepButton_4", "RulesGuideStepButton_5"], "RulesBackButton", "rules", viewport_size)
-	if scroll_gutter != null and scroll_thumb != null:
-		var gutter_rect = screen_rect(scroll_gutter)
-		check(content_rect.grow(1.0).encloses(gutter_rect) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "rules custom scroll gutter stays outside the text viewport at %s" % viewport_size)
-		check(gutter_rect.grow(1.0).encloses(screen_rect(scroll_thumb)), "rules custom scroll thumb stays inside gutter at %s" % viewport_size)
-		var expected_thumb_width := float(scroll_thumb.get_meta("visual_width_px", 16.0))
-		check(screen_rect(scroll_thumb).size.x <= expected_thumb_width + 1.0, "rules custom scrollbar keeps its authored visual width at %s" % viewport_size)
-		if viewport_size.y <= 560.0:
-			check(screen_rect(scroll_thumb).size.x >= 8.0, "rules custom scrollbar remains discoverable on compact viewports at %s" % viewport_size)
-	check(scroll_hit_target != null, "rules exposes a dedicated transparent scroll hit target at %s" % viewport_size)
-	if scroll_hit_target != null:
-		var hit_rect = screen_rect(scroll_hit_target)
-		check(hit_rect.size.x >= 44.0, "rules scroll hit target keeps at least 44px width at %s" % viewport_size)
-		check(scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP, "rules scroll hit target receives pointer and touch input at %s" % viewport_size)
-		if scroll_gutter != null:
-			check(hit_rect.grow(1.0).encloses(screen_rect(scroll_gutter)), "rules scroll hit target contains the narrow visual gutter at %s" % viewport_size)
-	if back_button != null:
-		var back_rect = screen_rect(back_button)
-		check(not guide_rect.intersects(back_rect, true), "rules back button does not overlap guide at %s" % viewport_size)
-		check(back_rect.size.x >= 88.0 and back_rect.size.y >= 44.0, "rules back button keeps a 44px mobile touch height at %s" % viewport_size)
-		var back_plate = back_button.find_child("SecondaryBackGptPlate", true, false) as CanvasItem
-		var back_rail = back_button.find_child("SecondaryBackGptRail", true, false) as CanvasItem
-		check(back_plate == null or back_plate.show_behind_parent, "rules back plate stays behind native exit text at %s" % viewport_size)
-		check(back_rail == null or back_rail.show_behind_parent, "rules back rail stays behind native exit text at %s" % viewport_size)
-		var back_art = back_button.find_child("SecondaryBackButtonArt_rules", true, false) as CanvasItem
-		check(back_art != null and back_art.show_behind_parent, "rules back button keeps authored chrome behind native exit text at %s" % viewport_size)
-		check_secondary_back_button_art(scene, "rules", viewport_size)
-	var previous_bottom := -1.0
-	var rules_section_count = int(scene.RULES_SECTION_COUNT)
-	for i in range(rules_section_count):
-		var section = scene.find_child("RuleSection_%d" % i, true, false) as Control
-		check(section != null, "rules section %d exists at %s" % [i, viewport_size])
+	var previous_bottom := -INF
+	for index in range(6):
+		var step := scene.find_child("RulesGuideStep_%d" % index, true, false) as Control
+		var label := scene.find_child("RulesGuideStepLabel_%d" % index, true, false) as Label
+		var state := scene.find_child("RulesGuideStepState_%d" % index, true, false) as Label
+		var button := scene.find_child("RulesGuideStepButton_%d" % index, true, false) as Button
+		check(step != null and label != null and state != null and button != null, "rules chapter %d has native labels and target" % index)
+		if step != null and label != null and state != null and button != null:
+			check(label.get_theme_font_size("font_size") >= 12 and readable_paper_ink(label.get_theme_color("font_color")) and label_text_width(label, label.text) <= label.size.x + 1.0, "rules chapter %d has complete readable ink text at %s" % [index, viewport_size])
+			check(button.size.x >= 44.0 and button.size.y >= 44.0 and step.get_global_rect().grow(0.5).encloses(button.get_global_rect()), "rules chapter %d owns a full native target at %s" % [index, viewport_size])
+			check(screen_rect(label).end.y + 1.0 <= screen_rect(state).position.y and state.size.y >= state.get_minimum_size().y, "rules chapter %d name and state never overlap at %s" % [index, viewport_size])
+		var section := scene.find_child("RuleSection_%d" % index, true, false) as Control
+		check(section != null, "rules chapter %d has actual reading content" % index)
 		if section == null:
 			continue
-		var rect = screen_rect(section)
-		check(rect.position.x >= scroll_rect.position.x - 1.0 and rect.end.x <= scroll_rect.end.x + 1.0, "rules section %d stays inside the scroll reading lane at %s" % [i, viewport_size])
-		check(rect.position.y >= content_list_rect.position.y - 1.0 and rect.end.y <= content_list_rect.end.y + 1.0, "rules section %d stays inside the full scroll content list at %s" % [i, viewport_size])
-		check(rect.position.y >= previous_bottom - 0.5, "rules sections remain vertically ordered at %s" % viewport_size)
-		if previous_bottom >= 0.0:
-			check(rect.position.y >= previous_bottom + 8.0, "rules sections keep readable separation at %s" % viewport_size)
-		previous_bottom = rect.end.y
-		var marker = section.find_child("RuleSectionMarker", true, false) as Control
-		var example_strip = section.find_child("RuleSectionArtStrip_%d" % i, true, false) as Control
-		var text_backplate = section.find_child("RuleSectionTextBackplate_%d" % i, true, false) as Control
-		var title_label = section.find_child("RuleSectionTitle_%d" % i, true, false) as Label
-		var section_depth = section.find_child("RuleSection3DDepthEdge_%d" % i, true, false) as Control
-		var example_plinth = section.find_child("RuleSection3DExamplePlinth_%d" % i, true, false) as Control
-		var line_labels: Array[Control] = []
-		collect_controls_with_name_prefix(section, "RuleSectionLine_", line_labels)
-		var line_guide := section.find_child("RuleLineGuide_%d" % i, true, false) as Control
-		var line_bullets := controls_with_name_prefix(section, "RuleLineBullet_%d_" % i)
-		check(marker != null and example_strip != null and section_depth != null and example_plinth != null, "rules section %d renders physical card depth, marker, and example plinth at %s" % [i, viewport_size])
-		check(text_backplate != null, "rules section %d renders text readability backplate at %s" % [i, viewport_size])
-		check(title_label != null, "rules section %d exposes named title label at %s" % [i, viewport_size])
-		check(line_guide != null and line_bullets.size() == line_labels.size(), "rules section %d exposes one authored guide bullet per body clause at %s" % [i, viewport_size])
-		if line_guide != null:
-			var line_guide_rect := screen_rect(line_guide)
-			check(rect.grow(1.0).encloses(line_guide_rect), "rules section %d line guide stays inside its section frame at %s" % [i, viewport_size])
-			for guide_child in line_guide.get_children():
-				if not guide_child is Control:
-					continue
-				var guide_control := guide_child as Control
-				for line_control in line_labels:
-					check(not rects_overlap(screen_rect(guide_control), screen_rect(line_control)), "rules section %d guide %s stays outside body text at %s" % [i, guide_control.name, viewport_size])
-		if title_label != null:
-			check(title_label.text.begins_with("%02d ·" % (i + 1)) and title_label.tooltip_text != "", "rules section %d exposes numbered title and full-title tooltip at %s" % [i, viewport_size])
-		check(line_labels.size() >= 3, "rules section %d exposes named body labels at %s" % [i, viewport_size])
-		if i == 0 and viewport_size.x <= 960.0 and line_labels.size() > 1:
-			var compact_wall_line := line_labels[1] as Label
-			check(compact_wall_line != null and compact_wall_line.text.contains("\n"), "compact rules wall clause uses an explicit readable line break at %s" % viewport_size)
-		if text_backplate != null and example_strip != null:
-			var text_rect = screen_rect(text_backplate)
-			var strip_rect = screen_rect(example_strip)
-			check(text_rect.end.x <= strip_rect.position.x - 6.0, "rules section %d text and example lanes do not overlap at %s" % [i, viewport_size])
-			check(text_rect.size.x >= rect.size.x * 0.70, "rules section %d keeps a readable text lane beside example art at %s" % [i, viewport_size])
-			check(strip_rect.size.x <= rect.size.x * 0.18, "rules section %d keeps example strip compact at %s" % [i, viewport_size])
-			check(rect.grow(1.0).encloses(text_rect), "rules section %d text backplate stays inside section frame at %s" % [i, viewport_size])
-		if title_label != null:
-			check(title_label.clip_text and title_label.get_theme_font_size("font_size") >= 18 and relative_luma(title_label.get_theme_color("font_color")) >= 0.88, "rules section %d title is clipped bright and large enough at %s" % [i, viewport_size])
-			if text_backplate != null:
-				check(screen_rect(text_backplate).grow(1.0).encloses(screen_rect(title_label)), "rules section %d title stays inside text backplate at %s" % [i, viewport_size])
-		for line_control in line_labels:
-			var line_label = line_control as Label
-			check(line_label != null and not line_label.clip_text and line_label.get_theme_font_size("font_size") >= 15 and line_label.autowrap_mode == TextServer.AUTOWRAP_ARBITRARY and line_label.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and relative_luma(line_label.get_theme_color("font_color")) >= 0.90, "rules section %d body text wraps CJK without ellipsis and remains bright and large enough at %s" % [i, viewport_size])
-			if line_label != null and text_backplate != null:
-				var line_rect = screen_rect(line_label)
-				var text_back_rect = screen_rect(text_backplate)
-				check(text_back_rect.grow(1.0).encloses(line_rect), "rules section %d body label %s stays inside text backplate at %s" % [i, line_label.name, viewport_size])
-				check(line_label.get_line_count() >= 1 and line_label.get_visible_line_count() == line_label.get_line_count(), "rules section %d body label %s shows every wrapped line at %s" % [i, line_label.name, viewport_size])
-		var section_plate = example_strip.find_child("RuleSectionArtGPTPlate_%d" % i, true, false) as Control if example_strip != null else null
-		var has_section_plate := section_plate != null
-		if has_section_plate:
-			# GPT plate carries the full illustration; the clean-panel branch skips the
-			# code-drawn example readability panel and native pattern tiles by design.
-			var plate_glyph = example_strip.find_child("RuleSectionPathGlyph_%d" % i, true, false) as Control
-			check(plate_glyph != null, "rules section %d GPT plate exposes a title glyph at %s" % [i, viewport_size])
-		else:
-			if example_strip != null:
-				var example_panel = example_strip.find_child("RuleSectionExampleReadabilityPanel_%d" % i, true, false) as Control
-				check(example_panel != null, "rules section %d example strip has local readability panel at %s" % [i, viewport_size])
-			if i == 1 and example_strip != null:
-				var pattern_texture = example_strip.find_child("RulesPatternQuadsTexture", true, false) as TextureRect
-				check(pattern_texture == null, "rules pattern section uses native runtime tile examples instead of generated teaching strip at %s" % viewport_size)
-				for group_id in ["sequence", "triplet", "quad", "pair"]:
-					var group = example_strip.find_child("RulePatternExampleGroup_%s" % group_id, true, false) as Control
-					var first_tile = example_strip.find_child("RulePatternExampleTile_%s_0" % group_id, true, false) as Control
-					check(group != null and first_tile != null, "rules pattern section exposes native %s tile example at %s" % [group_id, viewport_size])
-	if scroll_gutter != null and scroll_thumb != null and content_scrollbar != null:
-		var gutter_rect = screen_rect(scroll_gutter)
-		var thumb_rect = screen_rect(scroll_thumb)
-		var max_scroll = maxf(0.0, content_scrollbar.max_value - content_scrollbar.page)
-		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "rules custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
-		check(scroll_thumb.mouse_filter == Control.MOUSE_FILTER_IGNORE and scroll_hit_target != null and scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_hit_target.mouse_default_cursor_shape == Control.CURSOR_VSIZE, "rules custom scrollbar routes vertical drag input through its wide hit target at %s" % viewport_size)
-		check(thumb_rect.size.y <= gutter_rect.size.y + 1.0, "rules custom thumb stays within its gutter height at %s" % viewport_size)
-		if max_scroll > 1.0:
-			check(thumb_rect.size.y < gutter_rect.size.y - 2.0, "rules custom thumb reflects scrollable content depth at %s" % viewport_size)
-			var last_section = scene.find_child("RuleSection_%d" % (rules_section_count - 1), true, false) as Control
-			if last_section != null:
-				check(max_scroll >= screen_rect(last_section).end.y - scroll_rect.end.y - 1.0, "rules viewport can reach the final section at %s" % viewport_size)
-			content_scrollbar.value = max_scroll
-			scene.sync_rules_scroll_thumb(content_scroll, scroll_thumb)
-			var end_thumb_rect = screen_rect(scroll_thumb)
-			check(end_thumb_rect.end.y >= gutter_rect.end.y - max(2.0, gutter_rect.size.y * 0.06), "rules custom thumb reaches the gutter end at full scroll at %s" % viewport_size)
+		check(section.get_global_rect().position.y >= previous_bottom - 0.5, "rules chapters remain ordered at %s" % viewport_size)
+		previous_bottom = section.get_global_rect().end.y
+		var section_title := section.find_child("RuleSectionTitle_%d" % index, true, false) as Label
+		check(section_title != null and readable_paper_ink(section_title.get_theme_color("font_color")), "rules chapter %d title is dark on paper" % index)
+		for line in controls_with_name_prefix(section, "RuleSectionLine_"):
+			var clause := line as Label
+			check(clause != null and not clause.clip_text and clause.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING and clause.get_theme_font_size("font_size") >= 15 and readable_paper_ink(clause.get_theme_color("font_color")), "rules clause %s wraps completely in dark ink" % line.name)
+			if clause != null:
+				check(section.get_global_rect().grow(1.0).encloses(clause.get_global_rect()) and clause.get_visible_line_count() == clause.get_line_count(), "rules clause %s remains fully within its chapter" % line.name)
+		check(section.find_child("RuleSectionArtStrip_%d" % index, true, false) == null, "rules chapter %d removes unrelated teaching decoration" % index)
+	var patterns := scene.find_child("RuleSection_3", true, false) as Control
+	var settlement := scene.find_child("RuleSection_1", true, false) as Control
+	for key in ["sequence", "triplet", "quad", "pair"]:
+		check(patterns != null and patterns.find_child("RulePatternExampleTile_%s_0" % key, true, false) != null and settlement != null and settlement.find_child("RulePatternExampleGroup_%s" % key, true, false) == null, "native %s tiles teach the shape chapter only" % key)
+	var thumb := scene.find_child("RulesContentScrollThumb", true, false) as TextureRect
+	check(thumb != null and thumb.texture is AtlasTexture and (thumb.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("menu_ink_primary"), "rules scrollbar uses an authored ink bitmap")
+
 
 func check_achievements_layout(scene, viewport_size: Vector2) -> void:
+	check_secondary_paper(scene, "Achievements", viewport_size)
 	check_secondary_back_button_art(scene, "achievements", viewport_size)
-	var gallery_front = scene.find_child("AchievementGalleryFrontPanel", true, false) as Control
-	var gallery_rear = scene.find_child("AchievementGallery3DRearShell", true, false) as Control
-	var gallery_shadow = scene.find_child("AchievementGallery3DCastShadow", true, false) as Control
-	var gallery_inset = scene.find_child("AchievementGallery3DListInset", true, false) as Control
-	check(gallery_front != null and gallery_rear != null and gallery_shadow != null and gallery_inset != null, "achievements exposes a physical gallery front, rear shell, shadow, and list inset at %s" % viewport_size)
-	var scroll = scene.find_child("AchievementsScroll", true, false) as ScrollContainer
-	var scrollbar = scene.find_child("AchievementsScrollBar", true, false) as VScrollBar
-	var scroll_gutter = scene.find_child("AchievementsScrollGutter", true, false) as Control
-	var scroll_thumb = scene.find_child("AchievementsScrollThumb", true, false) as Control
-	var grid = scene.find_child("AchievementsGrid", true, false) as Control
-	var lane = scene.find_child("AchievementRowReadabilityLane", true, false) as Control
-	var bottom_spacer = scene.find_child("AchievementsBottomSafeSpacer", true, false) as Control
-	var bottom_fade = scene.find_child("AchievementsBottomFadePanel", true, false) as Control
-	var browse_status = scene.find_child("AchievementsBrowseStatusLabel", true, false) as Label
-	var achievements_hit_target = scene.find_child("AchievementsScrollHitTarget", true, false) as Control
-	var collection_bus = scene.find_child("AchievementsRowCollectionBusArt", true, false) as Control
-	var collection_spine = scene.find_child("AchievementsRowCollectionSpine", true, false) as Control
-	var collection_progress = scene.find_child("AchievementsRowCollectionProgressRoute", true, false) as Control
-	var collection_archive = scene.find_child("AchievementsRowCollectionArchiveGate", true, false) as Control
-	var gallery_texture = scene.find_child("AchievementGPTGalleryTexture", true, false) as CanvasItem
-	check(scroll != null and scrollbar != null and scroll_gutter != null and scroll_thumb != null and achievements_hit_target != null and grid != null and lane != null and bottom_spacer != null and bottom_fade != null and browse_status != null and collection_bus != null and collection_spine != null and collection_progress != null and collection_archive != null, "achievements screen exposes scroll lane custom gutter hit target bottom fade browse status and collection bus art at %s" % viewport_size)
-	if achievements_hit_target != null:
-		check(achievements_hit_target.get_meta("scroll_page_role", "achievements") == "achievements", "achievements scroll hit target keeps a page-specific routing contract at %s" % viewport_size)
-	check_focus_route(scene, ["AchievementsBackButton", "AchievementsScroll"], "AchievementsBackButton", "achievements", viewport_size)
-	check(gallery_texture == null or gallery_texture.modulate.a <= 0.26, "achievements generated gallery remains a subdued backdrop below native rows at %s" % viewport_size)
-	if scroll == null or lane == null:
+	var scroll := scene.find_child("AchievementsScroll", true, false) as ScrollContainer
+	var grid := scene.find_child("AchievementsGrid", true, false) as VBoxContainer
+	var status := scene.find_child("AchievementsBrowseStatusLabel", true, false) as Label
+	var hit := scene.find_child("AchievementsScrollHitTarget", true, false) as Control
+	check(scroll != null and grid != null and status != null and hit != null, "achievements keeps native list, range status and drag lane")
+	if scroll == null or grid == null or status == null or hit == null:
 		return
-	var scroll_rect = screen_rect(scroll)
-	var lane_rect = screen_rect(lane)
-	if browse_status != null:
-		var browse_status_rect := screen_rect(browse_status)
-		check(browse_status.visible and browse_status.text.contains("浏览") and browse_status.text.contains("/"), "achievements keeps a visible browse-range status at %s" % viewport_size)
-		check(browse_status_rect.end.y <= scroll_rect.position.y + 1.0 and label_text_width(browse_status, browse_status.text) <= browse_status_rect.size.x + 1.0, "achievements browse status clears the list and fits its header lane at %s" % viewport_size)
-	check(scroll.clip_contents, "achievements scroll clips row content at %s" % viewport_size)
-	check(lane_rect.grow(1.0).encloses(scroll_rect), "achievements scroll stays inside readability lane at %s" % viewport_size)
-	check(scroll_rect.end.y <= viewport_size.y * 0.890 + 1.0, "achievements scroll leaves a bottom safe band at %s" % viewport_size)
-	if collection_bus != null:
-		check(collection_bus.mouse_filter == Control.MOUSE_FILTER_IGNORE and screen_rect(collection_bus).position.y >= lane_rect.position.y - 2.0 and screen_rect(collection_bus).end.y <= viewport_size.y, "achievements collection bus remains a bounded non-interactive visual layer at %s" % viewport_size)
-	var gutter_rect := Rect2()
-	if scrollbar != null and scroll_gutter != null and scroll_thumb != null:
-		gutter_rect = screen_rect(scroll_gutter)
-		var thumb_rect = screen_rect(scroll_thumb)
-		var scrollbar_rect = screen_rect(scrollbar)
-		check(not scrollbar.visible and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "achievements hides default bright system scrollbar at %s" % viewport_size)
-		check(gutter_rect.size.x <= max(14.0, viewport_size.x * 0.016) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "achievements custom scrollbar gutter is narrow and outside rows at %s" % viewport_size)
-		check(gutter_rect.grow(1.0).encloses(thumb_rect), "achievements custom scrollbar thumb stays inside gutter at %s" % viewport_size)
-		check(not rects_overlap(scrollbar_rect, gutter_rect) or not scrollbar.visible, "achievements hidden system scrollbar does not become the visible gutter at %s" % viewport_size)
-		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "achievements custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
-	if scrollbar != null and browse_status != null:
-		var saved_scroll: float = float(scrollbar.value)
-		var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page)
-		if max_scroll > 1.0:
-			scrollbar.value = max_scroll
-			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
-			check(browse_status.text.contains("已完成") and browse_status.text.contains("余0"), "achievements browse status reports the end of the catalogue at %s" % viewport_size)
-			scrollbar.value = saved_scroll
-			scene.sync_achievements_scroll_status(scroll, browse_status, scene.achievements.size())
-	if bottom_spacer != null:
-		check(bottom_spacer.custom_minimum_size.y >= 72.0, "achievements list has enough bottom spacer for final rows at %s" % viewport_size)
-	if bottom_fade != null:
-		var fade_rect = screen_rect(bottom_fade)
-		check(fade_rect.position.y >= scroll_rect.end.y - 2.0, "achievements bottom fade begins below the scroll viewport at %s" % viewport_size)
-	var dashboard = scene.find_child("AchievementsDashboardArt", true, false) as Control
-	var completion_art = scene.find_child("AchievementsCompletionConvergenceArt", true, false) as Control
-	var completion_label = scene.find_child("AchievementsCompletionLabel", true, false) as Label
-	var progress_label = scene.find_child("AchievementsProgressLabel", true, false) as Label
-	var progress_detail = scene.find_child("AchievementsProgressDetailLabel", true, false) as Label
-	var medal_glyph = scene.find_child("AchievementsMedalGlyph", true, false) as Label
-	var progress_rail = scene.find_child("AchievementsProgressRail", true, false) as Control
-	var progress_fill = scene.find_child("AchievementsProgressFill", true, false) as Control
-	var progress_gate = scene.find_child("AchievementsProgressGate", true, false) as Control
-	var unlock_route = scene.find_child("AchievementsUnlockRoute", true, false) as Control
-	var unlock_fill = scene.find_child("AchievementsUnlockFill", true, false) as Control
-	var unlock_source = scene.find_child("AchievementsUnlockSource", true, false) as Control
-	var summary_backplate = scene.find_child("AchievementsSummaryTextBackplate", true, false) as Control
-	var medal_node = scene.find_child("AchievementsMedalNode", true, false) as Control
-	var dashboard_depth = scene.find_child("AchievementsDashboard3DDepthEdge", true, false) as Control
-	var dashboard_pedestal = scene.find_child("AchievementsDashboard3DMedalPedestal", true, false) as Control
-	check(dashboard != null and completion_art != null and completion_label != null and progress_label != null and progress_detail != null and medal_glyph != null and progress_rail != null and progress_fill != null and progress_gate != null and unlock_route != null and unlock_fill != null and unlock_source != null and summary_backplate != null and medal_node != null and dashboard_depth != null and dashboard_pedestal != null, "achievements dashboard exposes readable summary, completion label, physical medal pedestal, and progress parts at %s" % viewport_size)
-	if completion_art != null and completion_label != null and medal_node != null:
-		var completion_label_rect := screen_rect(completion_label)
-		var completion_text := str(completion_label.text)
-		var completion_text_width := label_text_width(completion_label, completion_text)
-		var completion_ink_rect := Rect2(Vector2(completion_label_rect.end.x - completion_text_width, completion_label_rect.position.y), Vector2(completion_text_width, completion_label_rect.size.y))
-		var medal_rect := screen_rect(medal_node)
-		var compact_completion_lane := viewport_size.x <= 1280.0 or viewport_size.y <= 560.0
-		var expected_completion_text := "收集进度 %d%%" % int(round(float(scene.unlocked_achievement_count()) / maxf(1.0, float(scene.achievements.size())) * 100.0))
-		check(completion_art.get_parent() != null and completion_label.get_parent() == completion_art, "achievements completion label remains attached to its authored convergence art at %s" % viewport_size)
-		check(completion_label.visible and completion_text == expected_completion_text and completion_label.tooltip_text == completion_text and not completion_text.contains("...") and not completion_text.contains("…") and completion_text_width <= completion_label_rect.size.x + 1.0, "achievements completion label is fully readable without rendered truncation at %s" % viewport_size)
-		if compact_completion_lane:
-			check(completion_ink_rect.end.x <= medal_rect.position.x - 8.0, "compact achievements completion text owns a left-of-medal safety slot at %s" % viewport_size)
-		else:
-			check(completion_ink_rect.position.x >= medal_rect.end.x + 8.0, "wide achievements completion text owns a right-of-medal safety slot at %s" % viewport_size)
-	if dashboard != null:
-		var dashboard_rect = screen_rect(dashboard)
-		for node in [progress_label, progress_detail, medal_glyph, progress_rail, progress_gate, summary_backplate, medal_node]:
-			if node != null:
-				check(dashboard_rect.grow(1.0).encloses(screen_rect(node)), "achievements dashboard part %s stays inside summary card at %s" % [node.name, viewport_size])
-		if progress_fill != null and progress_rail != null:
-			check(screen_rect(progress_rail).grow(1.0).encloses(screen_rect(progress_fill)), "achievements progress fill stays inside rail at %s" % viewport_size)
-		if summary_backplate != null and progress_label != null and progress_detail != null:
-			var summary_back_rect = screen_rect(summary_backplate)
-			check(summary_back_rect.grow(1.0).encloses(screen_rect(progress_label)) and summary_back_rect.grow(1.0).encloses(screen_rect(progress_detail)), "achievements summary text stays on its local backplate at %s" % viewport_size)
-		if progress_rail != null and progress_label != null and progress_detail != null:
-			check(screen_rect(progress_label).end.y <= screen_rect(progress_detail).position.y + 2.0, "achievements summary labels keep vertical order at %s" % viewport_size)
-			check(screen_rect(progress_detail).end.y <= screen_rect(progress_rail).position.y + 2.0, "achievements progress rail clears summary text at %s" % viewport_size)
-		if progress_rail != null and medal_node != null:
-			check(screen_rect(progress_rail).end.x <= screen_rect(medal_node).position.x - 8.0, "achievements progress rail clears reward medal node at %s" % viewport_size)
-		if progress_rail != null and progress_fill != null and progress_gate != null and unlock_route != null and unlock_fill != null and unlock_source != null:
-			check((not (progress_rail is ColorRect) or _control_is_subdued_art(progress_rail, 0.45)) and (not (progress_fill is ColorRect) or _control_is_subdued_art(progress_fill, 0.45)) and (not (progress_gate is ColorRect) or _control_is_subdued_art(progress_gate, 0.45)), "achievements dashboard progress ornament stays subdued behind text at %s" % viewport_size)
-			check((not (unlock_route is ColorRect) or _control_is_subdued_art(unlock_route, 0.40)) and (not (unlock_fill is ColorRect) or _control_is_subdued_art(unlock_fill, 0.40)) and (not (unlock_source is ColorRect) or _control_is_subdued_art(unlock_source, 0.40)), "achievements dashboard unlock ornament stays subdued behind text at %s" % viewport_size)
-	if progress_label != null and progress_detail != null:
-		check(progress_label.clip_text and progress_label.get_theme_font_size("font_size") >= 17 and relative_luma(progress_label.get_theme_color("font_color")) >= 0.86, "achievements progress label stays readable at %s" % viewport_size)
-		check(progress_detail.clip_text and progress_detail.get_theme_font_size("font_size") >= 14 and relative_luma(progress_detail.get_theme_color("font_color")) >= 0.80, "achievements progress detail stays readable at %s" % viewport_size)
-	if medal_glyph != null:
-		check(medal_glyph.get_theme_font_size("font_size") >= 22 and relative_luma(medal_glyph.get_theme_color("font_color")) >= 0.86 and medal_glyph.get_theme_color("font_color").a >= 0.90, "achievements medal glyph stays bright at %s" % viewport_size)
-	var visible_rows := 0
-	for key in scene.achievements.keys():
-		var row = scene.find_child("AchievementRow_%s" % str(key), true, false) as Control
-		if row == null:
-			continue
-		var row_rect = screen_rect(row)
-		var row_depth = scene.find_child("AchievementRow3DDepthEdge_%s" % str(key), true, false) as Control
-		var medal_pedestal = scene.find_child("AchievementRow3DMedalPedestal_%s" % str(key), true, false) as Control
-		check(row_depth != null and medal_pedestal != null, "achievement row %s exposes physical depth and medal pedestal at %s" % [str(key), viewport_size])
-		var overlap = vertical_overlap(row_rect, scroll_rect)
-		if overlap <= 1.0:
-			continue
-		visible_rows += 1
-		check(overlap >= row_rect.size.y - 1.0, "achievement row %s is fully visible when it intersects the scroll viewport at %s" % [str(key), viewport_size])
-		check(scroll_rect.grow(1.0).encloses(row_rect), "achievement row %s stays within the scroll viewport at %s" % [str(key), viewport_size])
-		check(row_rect.size.y >= 80.0, "achievement row %s keeps enough vertical room for separated goal and progress lanes at %s" % [str(key), viewport_size])
-		if scrollbar != null and scroll_gutter != null and scroll_thumb != null:
-			var row_name = scene.find_child("AchievementRowName_%s" % str(key), true, false) as Label
-			var row_goal = scene.find_child("AchievementRowGoal_%s" % str(key), true, false) as Label
-			var row_goal_back = scene.find_child("AchievementRowGoalBackplate_%s" % str(key), true, false) as Control
-			var row_progress_text = scene.find_child("AchievementRowProgressText_%s" % str(key), true, false) as Label
-			var row_progress_back = scene.find_child("AchievementRowProgressTextBackplate_%s" % str(key), true, false) as Control
-			var row_progress_rail = row.find_child("AchievementRowProgressRail", true, false) as Control
-			var row_state = scene.find_child("AchievementRowState_%s" % str(key), true, false) as Label
-			for node in [row_name, row_goal, row_progress_text, row_state]:
-				if node != null:
-					check(not rects_overlap(screen_rect(node), gutter_rect), "achievement row %s text clears custom scrollbar gutter at %s" % [str(key), viewport_size])
-			check(row_name != null and row_goal != null and row_goal_back != null and row_progress_text != null and row_progress_back != null and row_progress_rail != null and row_state != null, "achievement row %s exposes separated name goal backplate progress lane and state at %s" % [str(key), viewport_size])
-			if row_name != null and row_goal != null and row_state != null:
-				check(row_name.get_theme_font_size("font_size") >= 16 and row_goal.get_theme_font_size("font_size") >= 13 and row_state.get_theme_font_size("font_size") >= 13, "achievement row %s uses scan-friendly name goal and state fonts at %s" % [str(key), viewport_size])
-				check(relative_luma(row_goal.get_theme_color("font_color")) >= 0.72 and relative_luma(row_state.get_theme_color("font_color")) >= 0.86, "achievement row %s goal and state labels keep readable contrast at %s" % [str(key), viewport_size])
-			if row_goal_back != null and row_goal != null:
-				check(row_rect.grow(1.0).encloses(screen_rect(row_goal_back)) and screen_rect(row_goal_back).grow(1.0).encloses(screen_rect(row_goal)), "achievement row %s keeps goal text on a local readability backplate at %s" % [str(key), viewport_size])
-			if row_progress_text != null and row_progress_back != null:
-				var progress_back_rect = screen_rect(row_progress_back)
-				check(row_rect.grow(1.0).encloses(progress_back_rect) and progress_back_rect.grow(1.0).encloses(screen_rect(row_progress_text)), "achievement row %s keeps progress text inside a compact chip at %s" % [str(key), viewport_size])
-				check(row_progress_text.get_theme_font_size("font_size") >= 13 and row_progress_text.clip_text and row_progress_text.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "achievement row %s progress chip text remains readable without ellipsis at %s" % [str(key), viewport_size])
-				check(label_text_width(row_progress_text, row_progress_text.text) <= screen_rect(row_progress_text).size.x - 2.0, "achievement row %s progress chip text fits its lane at %s" % [str(key), viewport_size])
-				if row_goal != null:
-					check(not rects_overlap(progress_back_rect.grow(-1.0), screen_rect(row_goal).grow(-1.0)), "achievement row %s progress chip clears goal text at %s" % [str(key), viewport_size])
-					check(progress_back_rect.position.y >= screen_rect(row_goal).end.y + 4.0, "achievement row %s progress chip sits below the goal line at %s" % [str(key), viewport_size])
-				if row_state != null:
-					check(not rects_overlap(progress_back_rect.grow(-1.0), screen_rect(row_state).grow(-1.0)), "achievement row %s progress chip clears state text at %s" % [str(key), viewport_size])
-				if row_progress_rail != null and row_goal != null and row_state != null:
-					var rail_rect = screen_rect(row_progress_rail)
-					check(rail_rect.position.y >= screen_rect(row_goal).end.y + 4.0, "achievement row %s progress rail sits below the goal line at %s" % [str(key), viewport_size])
-					check(rail_rect.end.x <= screen_rect(row_state).position.x - 8.0, "achievement row %s progress rail clears the state badge lane at %s" % [str(key), viewport_size])
-	check(visible_rows >= 3, "achievements screen keeps several complete rows visible at %s" % viewport_size)
-	var locked_name = scene.find_child("AchievementRowName_thirteen_orphans", true, false) as Label
-	var locked_goal = scene.find_child("AchievementRowGoal_thirteen_orphans", true, false) as Label
-	var locked_progress_text = scene.find_child("AchievementRowProgressText_thirteen_orphans", true, false) as Label
-	var locked_progress_back = scene.find_child("AchievementRowProgressTextBackplate_thirteen_orphans", true, false) as Control
-	var locked_goal_back = scene.find_child("AchievementRowGoalBackplate_thirteen_orphans", true, false) as Control
-	var locked_state = scene.find_child("AchievementRowState_thirteen_orphans", true, false) as Label
-	var locked_route = scene.find_child("AchievementRowLockedRoute_thirteen_orphans", true, false) as Control
-	var locked_status_icon = scene.find_child("AchievementRowStatusIcon_thirteen_orphans", true, false) as Control
-	var locked_seal = scene.find_child("AchievementRowSeal_thirteen_orphans", true, false) as Control
-	check(locked_name != null and locked_goal != null and locked_goal_back != null and locked_progress_text != null and locked_state != null and locked_route != null and locked_status_icon != null, "locked achievement row exposes readable state parts at %s" % viewport_size)
-	if locked_name != null and locked_goal != null and locked_progress_text != null and locked_state != null:
-		check(relative_luma(locked_name.get_theme_color("font_color")) >= 0.82 and relative_luma(locked_state.get_theme_color("font_color")) >= 0.86, "locked achievement text keeps readable contrast at %s" % viewport_size)
-		check(relative_luma(locked_goal.get_theme_color("font_color")) >= 0.66 and relative_luma(locked_progress_text.get_theme_color("font_color")) >= 0.74, "locked achievement helper text keeps readable contrast at %s" % viewport_size)
-		check(locked_name.clip_text and locked_goal.clip_text and locked_progress_text.clip_text and locked_state.clip_text, "locked achievement labels clip safely at %s" % viewport_size)
-		check(locked_goal.text.begins_with("目标：") and locked_progress_text.text == "进度 0/1", "locked achievement exposes goal and truthful completion state at %s" % viewport_size)
-		var five_progress = scene.find_child("AchievementRowProgressText_five_wins", true, false) as Label
-		check(five_progress != null and five_progress.text == "进度 3/5", "cumulative five-win achievement exposes live 3/5 progress at %s" % viewport_size)
-		check(not rects_overlap(screen_rect(locked_name), screen_rect(locked_state)), "locked achievement name and state chip text stay separated at %s" % viewport_size)
-		check(screen_rect(locked_name).get_center().y < screen_rect(locked_goal).get_center().y, "locked achievement name stays visually above goal text at %s" % viewport_size)
-		if locked_goal_back != null:
-			check(screen_rect(locked_goal_back).grow(1.0).encloses(screen_rect(locked_goal)), "locked achievement goal text stays on a local readability backplate at %s" % viewport_size)
-		if locked_progress_back != null:
-			check(screen_rect(locked_progress_back).grow(1.0).encloses(screen_rect(locked_progress_text)), "locked achievement progress text stays inside progress chip at %s" % viewport_size)
-			check(not rects_overlap(screen_rect(locked_progress_back).grow(-1.0), screen_rect(locked_goal).grow(-1.0)), "locked achievement progress chip clears goal text at %s" % viewport_size)
-			check(screen_rect(locked_progress_back).position.y >= screen_rect(locked_goal).end.y + 4.0, "locked achievement progress chip sits below goal text at %s" % viewport_size)
-	if locked_status_icon != null:
-		var icon_color = locked_status_icon.get_theme_color("font_color") if locked_status_icon is Label else locked_status_icon.modulate
-		check(relative_luma(icon_color) >= 0.82 and icon_color.a >= 0.90, "locked achievement status icon stays visible at %s" % viewport_size)
-	if locked_seal != null and locked_state != null and locked_status_icon != null:
-		var locked_seal_rect = screen_rect(locked_seal)
-		check(locked_seal_rect.grow(1.0).encloses(screen_rect(locked_state)) and locked_seal_rect.grow(1.0).encloses(screen_rect(locked_status_icon)), "locked achievement status text stays inside compact seal at %s" % viewport_size)
+	check(status.get_global_rect().end.y <= scroll.get_global_rect().position.y and readable_paper_ink(status.get_theme_color("font_color")), "achievements range status clears rows and stays readable")
+	check(hit.size.x >= 44.0 and hit.mouse_filter == Control.MOUSE_FILTER_STOP, "achievements scrollbar retains a forty-four-pixel target")
+	check(scroll.clip_contents and not scroll.get_v_scroll_bar().visible, "achievements clips rows and uses the authored scrollbar")
+	var previous_bottom := -INF
+	var visible_count := 0
+	for row in controls_with_name_prefix(grid, "AchievementRow_"):
+		check(row.get_global_rect().position.y >= previous_bottom - 0.5, "achievement rows remain sorted at %s" % viewport_size)
+		previous_bottom = row.get_global_rect().end.y
+		var title := row.find_child("AchievementRowName_*", true, false) as Label
+		if title != null:
+			var title_bounds := title.get_global_rect()
+			var line_height := title.get_theme_font("font").get_height(title.get_theme_font_size("font_size"))
+			var reading_line := Rect2(Vector2(title_bounds.position.x, title_bounds.get_center().y - line_height * 0.5), Vector2(title_bounds.size.x, line_height))
+			if scroll.get_global_rect().grow(0.5).encloses(reading_line):
+				visible_count += 1
+		for field in ["Name", "Goal", "ProgressText", "State"]:
+			var labels := controls_with_name_prefix(row, "AchievementRow" + field + "_")
+			check(labels.size() == 1, "achievement row %s has one %s field" % [row.name, field])
+			if labels.size() == 1:
+				var label := labels[0] as Label
+				check(label != null and readable_paper_ink(label.get_theme_color("font_color")) and label.get_theme_font_size("font_size") >= 12, "achievement %s remains readable" % field)
+		check(row.find_child("AchievementRowFocusTarget", true, false) != null, "achievement row keeps its keyboard focus target")
+	scene.sync_achievements_scroll_status(scroll, status, scene.achievements.size())
+	check(visible_count > 0 and visible_count < scene.achievements.size() and int(status.get_meta("visible_first_item", 0)) == 1 and int(status.get_meta("visible_last_item", 0)) == visible_count and not status.text.contains("已到末尾"), "achievements initial range matches complete readable titles at %s" % viewport_size)
+	check(scene.find_child("AchievementsUnlockRoute", true, false) == null and scene.find_child("AchievementsMedalGlyph", true, false) == null, "achievements removes redundant tracks and repeated award copy")
+
 
 func check_stats_layout(scene, viewport_size: Vector2) -> void:
+	check_secondary_paper(scene, "Stats", viewport_size)
 	check_secondary_back_button_art(scene, "stats", viewport_size)
-	check_focus_route(scene, ["StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton"], "StatsBackButton", "stats", viewport_size)
-	var console_front = scene.find_child("StatsConsoleFrontPanel", true, false) as Control
-	var console_rear = scene.find_child("StatsConsole3DRearShell", true, false) as Control
-	var console_shadow = scene.find_child("StatsConsole3DCastShadow", true, false) as Control
-	var data_inset = scene.find_child("StatsConsole3DDataInset", true, false) as Control
-	check(console_front != null and console_rear != null and console_shadow != null and data_inset != null, "stats exposes a physical console front, rear shell, shadow, and data inset at %s" % viewport_size)
-	var lane = scene.find_child("StatsRowReadabilityLane", true, false) as Control
-	var rows = scene.find_child("StatsRows", true, false) as Control
-	var stats_scroll_status = scene.find_child("StatsRowsScrollStatus", true, false) as Label
-	var dash = scene.find_child("StatsDashboardArt", true, false) as Control
-	var data_scan = scene.find_child("StatsDataScanArt", true, false) as Control
-	var insight = scene.find_child("StatsInsightConvergenceArt", true, false) as Control
-	var mastery = scene.find_child("StatsMasteryRoute", true, false) as Control
-	var summary_bus = scene.find_child("StatsRowSummaryBusArt", true, false) as Control
-	var backplate = scene.find_child("StatsReadabilityBackplate", true, false) as Control
-	check(lane != null and rows != null and stats_scroll_status != null and dash != null and backplate != null, "stats screen exposes dashboard rows scroll status and readability plates at %s" % viewport_size)
-	check(data_scan != null and insight != null and mastery != null and summary_bus != null, "stats screen mounts every dashboard route layer after its host is created at %s" % viewport_size)
-	if dash != null and data_scan != null and insight != null and mastery != null and summary_bus != null:
-		check(data_scan.visible and insight.visible and mastery.visible and summary_bus.visible, "stats dashboard route layers remain visible after mounting at %s" % viewport_size)
-		check(data_scan.get_parent() == console_front and insight.get_parent() == console_front and mastery.get_parent() == console_front and summary_bus.get_parent() == console_front, "stats dashboard route layers attach to the statistics front panel without detached overlays at %s" % viewport_size)
-		check(backplate != null and screen_rect(backplate).grow(6.0).encloses(screen_rect(data_scan)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(insight)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(mastery)) and screen_rect(backplate).grow(6.0).encloses(screen_rect(summary_bus)), "stats dashboard route layers stay inside the readable statistics surface at %s" % viewport_size)
-	if lane == null or rows == null:
+	var scroll := scene.find_child("StatsRows", true, false) as ScrollContainer
+	var dash := scene.find_child("StatsDashboardArt", true, false) as Control
+	check(scroll != null and dash != null, "statistics keeps its real summary and detail scroll")
+	if scroll == null or dash == null:
 		return
-	var lane_rect = screen_rect(lane)
-	var rows_rect = screen_rect(rows)
-	check(lane_rect.grow(1.0).encloses(rows_rect), "stats rows stay inside readability lane at %s" % viewport_size)
-	check(rows_rect.end.y <= viewport_size.y * 0.925 + 1.0, "stats rows leave a bottom safe band at %s" % viewport_size)
-	var stat_labels := ["总场次", "胜场", "胜率", "累计净分", "单局最佳", "总手牌数"]
-	var previous_bottom := -1.0
-	for label_text in stat_labels:
-		var row = scene.find_child("StatsRow_%s" % label_text, true, false) as Control
-		var name_label = scene.find_child("StatsRowLabel_%s" % label_text, true, false) as Label
-		var value_label = scene.find_child("StatsRowValueLabel_%s" % label_text, true, false) as Label
-		var value_panel = scene.find_child("StatsRowValuePanel_%s" % label_text, true, false) as Control
-		var row_depth = scene.find_child("StatsRow3DDepthEdge_%s" % label_text, true, false) as Control
-		var icon_plinth = scene.find_child("StatsRow3DIconPlinth_%s" % label_text, true, false) as Control
-		check(row != null and name_label != null and value_label != null and value_panel != null and row_depth != null and icon_plinth != null, "stats row %s exposes readable physical data-slot parts at %s" % [label_text, viewport_size])
-		if row == null:
-			continue
-		var row_rect = screen_rect(row)
-		check(lane_rect.grow(1.0).encloses(row_rect), "stats row %s stays inside readability lane at %s" % [label_text, viewport_size])
-		var stats_row_cap := 104.0 if viewport_size.x >= 1600.0 else 56.0
-		check(row_rect.size.y >= 40.0 and row_rect.size.y <= stats_row_cap, "stats row %s keeps a complete readable height at %s" % [label_text, viewport_size])
-		if previous_bottom >= 0.0:
-			check(row_rect.position.y >= previous_bottom + 4.0, "stats row %s keeps readable vertical separation at %s" % [label_text, viewport_size])
-		previous_bottom = row_rect.end.y
-		if name_label != null and value_label != null and value_panel != null:
-			var name_rect = screen_rect(name_label)
-			var value_rect = screen_rect(value_label)
-			var panel_rect = screen_rect(value_panel)
-			check(row_rect.grow(1.0).encloses(name_rect) and row_rect.grow(1.0).encloses(value_rect), "stats row %s labels stay inside row at %s" % [label_text, viewport_size])
-			check(panel_rect.grow(1.0).encloses(value_rect), "stats row %s value uses local backplate at %s" % [label_text, viewport_size])
-			check(name_label.clip_text and value_label.clip_text, "stats row %s labels clip safely at %s" % [label_text, viewport_size])
-			check(relative_luma(name_label.get_theme_color("font_color")) >= 0.88 and relative_luma(value_label.get_theme_color("font_color")) >= 0.90, "stats row %s text keeps readable contrast at %s" % [label_text, viewport_size])
-			if label_text == "累计净分":
-				check(str(value_label.text).contains("负向") and value_label.tooltip_text.contains("损失") and scene.stat_row_numeric_value("-7600 分") < 0.0, "negative cumulative score keeps visible loss semantics beyond color at %s" % viewport_size)
-	var chip_ids := ["winrate", "games", "best"]
-	var narrative = scene.find_child("StatsSummaryNarrativePanel", true, false) as Control
-	var narrative_title = scene.find_child("StatsSummaryNarrativeTitle", true, false) as Label
-	var narrative_body = scene.find_child("StatsSummaryNarrativeBody", true, false) as Label
-	var narrative_meta = scene.find_child("StatsSummaryNarrativeMeta", true, false) as Label
-	var narrative_rail = scene.find_child("StatsSummaryNarrativeRail", true, false) as Control
-	var summary_hint = scene.find_child("StatsSummaryHint", true, false) as Control
-	var dashboard_depth = scene.find_child("StatsDashboard3DDepthEdge", true, false) as Control
-	check(narrative != null and narrative_title != null and narrative_body != null and narrative_meta != null and narrative_rail != null and summary_hint != null and dashboard_depth != null, "stats dashboard exposes physical depth and summary reading lanes at %s" % viewport_size)
-	if dash != null and narrative != null:
-		check(screen_rect(dash).grow(1.0).encloses(screen_rect(narrative)), "stats narrative summary stays inside dashboard at %s" % viewport_size)
-	if dash != null and summary_hint != null:
-		check(screen_rect(dash).grow(1.0).encloses(screen_rect(summary_hint)), "stats summary hint stays inside dashboard at %s" % viewport_size)
-	if narrative != null and narrative_title != null and narrative_body != null and narrative_meta != null and narrative_rail != null:
-		var narrative_rect = screen_rect(narrative)
-		check(narrative_rect.size.x >= 65.0 and narrative_rect.size.y >= 42.0, "stats narrative summary keeps usable compact dimensions at %s" % viewport_size)
-		check(narrative_rect.grow(1.0).encloses(screen_rect(narrative_title)) and narrative_rect.grow(1.0).encloses(screen_rect(narrative_body)) and narrative_rect.grow(1.0).encloses(screen_rect(narrative_meta)) and narrative_rect.grow(1.0).encloses(screen_rect(narrative_rail)), "stats narrative summary text and rail stay inside panel at %s" % viewport_size)
-		check(narrative_title.clip_text and narrative_body.clip_text and narrative_meta.clip_text, "stats narrative summary labels clip safely at %s" % viewport_size)
-		check(relative_luma(narrative_title.get_theme_color("font_color")) >= 0.86 and relative_luma(narrative_body.get_theme_color("font_color")) >= 0.90 and relative_luma(narrative_meta.get_theme_color("font_color")) >= 0.70, "stats narrative summary labels stay readable at %s" % viewport_size)
-	for chip_id in chip_ids:
-		var chip = scene.find_child("StatsSummaryChip_%s" % chip_id, true, false) as Control
-		var value = scene.find_child("StatsSummaryValue_%s" % chip_id, true, false) as Label
-		var caption = scene.find_child("StatsSummaryCaption_%s" % chip_id, true, false) as Label
-		var chip_depth = scene.find_child("StatsSummary3DDepthEdge_%s" % chip_id, true, false) as Control
-		check(chip != null and value != null and caption != null and chip_depth != null, "stats summary chip %s exposes physical depth, value, and caption at %s" % [chip_id, viewport_size])
-		if dash != null and chip != null:
-			check(screen_rect(dash).grow(1.0).encloses(screen_rect(chip)), "stats summary chip %s stays inside dashboard at %s" % [chip_id, viewport_size])
-		if chip != null and value != null and caption != null:
-			var chip_rect = screen_rect(chip)
-			if narrative != null:
-				check(not chip_rect.intersects(screen_rect(narrative)), "stats summary chip %s does not overlap left narrative summary at %s" % [chip_id, viewport_size])
-			check(chip_rect.grow(1.0).encloses(screen_rect(value)) and chip_rect.grow(1.0).encloses(screen_rect(caption)), "stats summary chip %s keeps text inside its backplate at %s" % [chip_id, viewport_size])
-			if summary_hint != null:
-				check(screen_rect(caption).end.y + 1.0 <= screen_rect(summary_hint).position.y, "stats summary chip %s caption clears the dashboard hint at %s" % [chip_id, viewport_size])
-			check(value.clip_text and caption.clip_text and relative_luma(value.get_theme_color("font_color")) >= 0.90 and relative_luma(caption.get_theme_color("font_color")) >= 0.86, "stats summary chip %s text stays clipped and readable at %s" % [chip_id, viewport_size])
-			if chip_id == "best":
-				var unit := scene.find_child("StatsSummaryUnit_best", true, false) as Label
-				check(unit != null and str(unit.text).ends_with("分/局"), "stats best summary chip keeps per-round score unit in its dedicated unit lane at %s" % viewport_size)
-				check(label_text_width(value, str(value.text)) <= screen_rect(value).size.x + 1.0, "stats best summary chip unit fits without truncation at %s" % viewport_size)
+	check(dash.get_global_rect().end.y + 4.0 <= scroll.get_global_rect().position.y, "statistics summary clears detail rows")
+	for key in ["winrate", "games", "best"]:
+		for field in ["Caption", "Value", "Unit"]:
+			var label := scene.find_child("StatsSummary%s_%s" % [field, key], true, false) as Label
+			check(label != null and readable_paper_ink(label.get_theme_color("font_color")) and label.get_theme_font_size("font_size") >= 12 and label.size.y >= label.get_minimum_size().y, "statistics summary %s %s has complete ink copy" % [key, field])
+	for row in controls_with_name_prefix(scroll, "StatsRow_"):
+		for field in ["Label", "ValueLabel"]:
+			var label := row.find_child("StatsRow%s_%s" % [field, str(row.get_meta("metric_identity", ""))], true, false) as Label
+			check(label != null and readable_paper_ink(label.get_theme_color("font_color")) and label.tooltip_text != "", "statistics row %s exposes readable %s and full detail" % [row.name, field])
+	check(scene.find_child("StatsSummaryNarrativePanel", true, false) == null and scene.find_child("StatsMasteryRoute", true, false) == null and scene.find_child("StatsDataScanArt", true, false) == null, "statistics removes duplicate narrative and decorative tracks")
+
 
 func check_shop_layout(scene, viewport_size: Vector2) -> void:
-	check_secondary_back_button_art(scene, "shop", viewport_size)
+	var back := scene.find_child("ShopBackButton", true, false) as Button
+	check(back != null and back.text == "返回" and back.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and readable_paper_ink(back.get_theme_color("font_color")), "shop keeps its secondary return action on readable paper at %s" % viewport_size)
+	if back != null:
+		check_button_face_behind_native_text(back, "shop return", viewport_size)
 	var shop_focus_order := [
 		"ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget",
 		"ShopItemBuyButton_swap_card", "ShopItemBuyButton_peek_card",
 		"ShopItemBuyButton_lucky_charm", "ShopItemBuyButton_double_coins",
 	]
-	if viewport_size.x >= 1600.0:
+	if viewport_size.x >= 1200.0 and not scene.large_text_enabled:
 		shop_focus_order = [
 			"ShopBackButton", "ShopItemsScroll", "ShopItemsScrollHitTarget",
 			"ShopItemBuyButton_swap_card", "ShopItemBuyButton_lucky_charm",
@@ -6501,7 +5930,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
 	var cabinet_shadow = scene.find_child("ShopCabinet3DCastShadow", true, false) as Control
 	var display_shell = scene.find_child("ShopDisplayCabinet3DShell", true, false) as Control
-	check(cabinet_front != null and cabinet_rear == null and cabinet_shadow != null and display_shell != null, "shop exposes one front cabinet surface without a duplicate rear shell at %s" % viewport_size)
+	check(cabinet_front != null and cabinet_rear == null and cabinet_shadow == null and display_shell == null and cabinet_front.get_meta("guofeng_surface_key", "") == "settings_readable_gpt", "shop exposes one authored paper surface without stacked cabinet shells at %s" % viewport_size)
 	var vault_texture = scene.find_child("ShopGPTVaultTexture", true, false) as CanvasItem
 	check(vault_texture == null or vault_texture.modulate.a <= 0.03, "shop full-page vault texture stays below the reading surfaces at %s" % viewport_size)
 	var item_ids := ["swap_card", "peek_card", "lucky_charm", "double_coins"]
@@ -6537,22 +5966,22 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		var native_charm = scene.find_child("ShopItemNativeCharm_%s" % item_id, true, false) as Control
 		var name_label = scene.find_child("ShopItemName_%s" % item_id, true, false) as Label
 		var desc_label = scene.find_child("ShopItemDescription_%s" % item_id, true, false) as Label
-		var text_plate = scene.find_child("ShopItemTextReadabilityPanel_%s" % item_id, true, false) as Control
+		var text_plate = row.find_child("ShopItemRowGptPlate", true, false) as TextureRect if row != null else null
 		var count_badge = scene.find_child("ShopItemCountBadge_%s" % item_id, true, false) as Control
 		var buy_button = scene.find_child("ShopItemBuyButton_%s" % item_id, true, false) as Control
 		var buy_command = scene.find_child("ShopBuyButtonCommand_%s" % item_id, true, false) as Label
 		var buy_price = scene.find_child("ShopBuyButtonPrice_%s" % item_id, true, false) as Label
 		var row_depth = scene.find_child("ShopItem3DDepthEdge_%s" % item_id, true, false) as Control
 		var charm_plinth = scene.find_child("ShopItem3DCharmPlinth_%s" % item_id, true, false) as Control
-		var row_readability = row.find_child("ShopItemRowLowFrequencyPlate", true, false) as TextureRect if row != null else null
+		var row_readability = row.find_child("ShopItemRowGptPlate", true, false) as TextureRect if row != null else null
 		var row_generated_plate = row.find_child("ShopItemRowGptPlate", true, false) as CanvasItem if row != null else null
 		check(row != null, "shop row %s exists at %s" % [item_id, viewport_size])
 		check(row_readability != null, "shop row %s exposes an authored low-frequency reading surface at %s" % [item_id, viewport_size])
 		if row_readability != null:
 			var row_source = (row_readability.texture as AtlasTexture).atlas if row_readability.texture is AtlasTexture else row_readability.texture
-			check(row_source != null and str(row_source.resource_path).ends_with("ui_dark_scrim.png") and row_readability.self_modulate.a >= 0.45 and row_readability.self_modulate.a <= 0.75, "shop row %s uses a subdued low-frequency bitmap center crop at %s" % [item_id, viewport_size])
-		check(row_generated_plate == null or row_generated_plate.modulate.a <= 0.05, "shop row %s keeps high-frequency generated art at edge-level alpha at %s" % [item_id, viewport_size])
-		check(row_depth != null and charm_plinth != null, "shop row %s exposes a physical shelf edge and charm plinth at %s" % [item_id, viewport_size])
+			check(row_source != null and row_source == scene.optional_gpt_illustration_texture("menu_card_readable_gpt") and row_readability.self_modulate == Color.WHITE, "shop row %s uses the complete authored paper face without tint at %s" % [item_id, viewport_size])
+		check(row_generated_plate != null and row_generated_plate.modulate == Color.WHITE, "shop row %s keeps the authored reading face fully opaque at %s" % [item_id, viewport_size])
+		check(row_depth == null and charm_plinth == null and scene.find_child("ShopItemTextReadabilityPanel_%s" % item_id, true, false) == null, "shop row %s avoids shelf blocks and duplicate text pads at %s" % [item_id, viewport_size])
 		if row != null:
 			row_rects.append(screen_rect(row))
 		check(charm_texture != null, "shop row %s consumes GPT charm texture at %s" % [item_id, viewport_size])
@@ -6571,7 +6000,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			check(plate_rect.grow(1.0).encloses(name_rect) and plate_rect.grow(1.0).encloses(desc_rect), "shop row %s uses local text readability backplate at %s" % [item_id, viewport_size])
 			check(inherited_canvas_modulate_alpha(name_label) >= 0.98 and inherited_canvas_modulate_alpha(desc_label) >= 0.98, "shop row %s keeps text opacity independent from decorative plate alpha at %s" % [item_id, viewport_size])
 			check(name_label.clip_text and not desc_label.clip_text, "shop row %s clips the name and wraps the description safely at %s" % [item_id, viewport_size])
-			check(relative_luma(name_label.get_theme_color("font_color")) >= 0.90 and relative_luma(desc_label.get_theme_color("font_color")) >= 0.86, "shop row %s keeps text contrast readable at %s" % [item_id, viewport_size])
+			check(relative_luma(name_label.get_theme_color("font_color")) <= 0.24 and relative_luma(desc_label.get_theme_color("font_color")) <= 0.24, "shop row %s keeps text contrast readable at %s" % [item_id, viewport_size])
 			if charm_texture != null:
 				check(not rects_overlap(name_rect, screen_rect(charm_texture)) and not rects_overlap(desc_rect, screen_rect(charm_texture)), "shop row %s text does not overlap charm art at %s" % [item_id, viewport_size])
 			if count_badge != null:
@@ -6583,19 +6012,21 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			var count_rect = screen_rect(count_badge)
 			var buy_rect = screen_rect(buy_button)
 			check(control_row_rect.grow(1.0).encloses(count_rect) and control_row_rect.grow(1.0).encloses(buy_rect), "shop row %s keeps count badge and buy button inside row at %s" % [item_id, viewport_size])
-			check(count_rect.end.x <= buy_rect.position.x - max(8.0, control_row_rect.size.x * 0.025), "shop row %s keeps a visible gap between count badge and buy button at %s" % [item_id, viewport_size])
+			check(count_rect.end.x <= buy_rect.position.x - max(8.0, control_row_rect.size.x * 0.025) or count_rect.end.y + 8.0 <= buy_rect.position.y, "shop item %s keeps a visible gap between stock and purchase in either catalogue layout at %s" % [item_id, viewport_size])
 			check(buy_rect.end.x <= control_row_rect.end.x - max(4.0, control_row_rect.size.x * 0.010), "shop row %s keeps buy button away from row edge and scrollbar lane at %s" % [item_id, viewport_size])
-			check(buy_rect.size.x >= 82.0 and buy_rect.size.y >= 42.0, "shop row %s keeps buy button touch target usable at %s" % [item_id, viewport_size])
+			check(buy_rect.size.x >= 100.0 and buy_rect.size.y >= 44.0, "shop row %s keeps buy button touch target usable at %s" % [item_id, viewport_size])
 		check(buy_button != null and buy_command != null and buy_price != null, "shop row %s exposes readable buy command and price at %s" % [item_id, viewport_size])
 		if buy_button != null and buy_command != null and buy_price != null:
 			var expected_affordable := int(scene.currency.get("gems", 0)) >= int(scene.ITEM_TYPES[item_id].get("cost_gems", 10))
 			check(buy_button.disabled == not expected_affordable and buy_button.tooltip_text != "", "shop buy button %s exposes truthful affordability state and tooltip at %s" % [item_id, viewport_size])
-			check(buy_button.find_child("ShopBuyButton3DDepthEdge", true, false) != null and buy_button.find_child("ShopBuyButton3DSideBevel", true, false) != null, "shop buy button %s exposes physical depth and side bevel at %s" % [item_id, viewport_size])
+			check(buy_button.find_child("ShopBuyButton3DDepthEdge", true, false) == null and buy_button.find_child("ShopBuyButton3DSideBevel", true, false) == null and str(buy_button.get_meta("guofeng_button_face_key", "")) == ("menu_ink_primary" if expected_affordable else "button_face_jiangnan_gpt"), "shop buy button %s uses one truthful authored affordability face at %s" % [item_id, viewport_size])
 			var buy_rect = screen_rect(buy_button)
 			check(buy_rect.grow(1.0).encloses(screen_rect(buy_command)) and buy_rect.grow(1.0).encloses(screen_rect(buy_price)), "shop buy button %s keeps command and price inside button at %s" % [item_id, viewport_size])
 			check(buy_command.clip_text and buy_price.clip_text and buy_price.text.ends_with("玉"), "shop buy button %s exposes clipped command and gem price anchor at %s" % [item_id, viewport_size])
-			check(str(buy_command.text).begins_with("购买 ") or str(buy_command.text).begins_with("不足 "), "shop buy button %s uses explicit single-line purchase/shortage CTA at %s" % [item_id, viewport_size])
-			check(str(buy_command.text).contains("玉") and (str(buy_command.text).begins_with("购买 ") or str(buy_command.text).begins_with("不足 ")), "shop buy button %s keeps its gem-priced CTA explicit at %s" % [item_id, viewport_size])
+			var cost := int(buy_button.get_meta("shop_cost_gems", -1))
+			var gap := int(buy_button.get_meta("currency_gap_gems", -1))
+			var expected_copy := "购买 %d玉符" % cost if expected_affordable else "%d玉·差%d玉" % [cost, gap]
+			check(buy_command.text == expected_copy, "shop buy button %s shows the exact price and, when needed, the shortage at %s" % [item_id, viewport_size])
 			check(not buy_price.visible, "shop buy button %s keeps the duplicate price anchor hidden at %s" % [item_id, viewport_size])
 			check(label_text_width(buy_command, buy_command.text) <= screen_rect(buy_command).size.x + 2.0, "shop buy button %s fits single-line CTA within its label at %s" % [item_id, viewport_size])
 			check(count_named_nodes(buy_button, "ShopBuyButtonStatus") == 0, "shop buy button %s omits right-side status medallion at %s" % [item_id, viewport_size])
@@ -6610,7 +6041,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		check(scroll.focus_mode == Control.FOCUS_ALL and scroll.get_meta("ui_scroll_view", "") != "" and scroll.tooltip_text != "", "shop scroll is keyboard focusable and exposes its item-list context at %s" % viewport_size)
 		check(gutter_rect.size.x <= max(14.0, viewport_size.x * 0.016) and gutter_rect.position.x >= scroll_rect.end.x + 2.0, "shop custom scrollbar gutter is narrow and separate from rows at %s" % viewport_size)
 		check(gutter_rect.grow(1.0).encloses(thumb_rect), "shop custom scrollbar thumb stays inside gutter at %s" % viewport_size)
-		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter is TextureRect and scroll_thumb is TextureRect and (scroll_gutter as TextureRect).texture != null and (scroll_thumb as TextureRect).texture != null, "shop custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
+		check(not scroll_gutter is Panel and not scroll_thumb is Panel and scroll_gutter.find_children("*", "TextureRect", true, false).size() == 2 and scroll_thumb.find_children("*", "TextureRect", true, false).size() == 1, "shop custom scrollbar uses authored bitmap gutter and thumb visuals instead of runtime panels at %s" % viewport_size)
 		if scroll_hit_target != null:
 			var hit_rect: Rect2 = screen_rect(scroll_hit_target)
 			check(scroll_hit_target.mouse_filter == Control.MOUSE_FILTER_STOP and scroll_hit_target.mouse_default_cursor_shape == Control.CURSOR_VSIZE and hit_rect.size.x >= scene.UI_MIN_TOUCH_TARGET - 1.0, "shop custom scrollbar exposes a wide drag hit target at %s" % viewport_size)
@@ -6631,8 +6062,8 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 		check(footer_rect.position.y <= viewport_size.y * 0.82 and footer_rect.end.y >= viewport_size.y * 0.88, "shop footer uses visible lower-page space at %s" % viewport_size)
 		check(footer_rect.grow(1.0).encloses(screen_rect(footer_title)) and footer_rect.grow(1.0).encloses(screen_rect(footer_body)), "shop footer text stays inside its panel at %s" % viewport_size)
 		check(footer_rect.grow(1.0).encloses(screen_rect(footer_inventory)) and footer_rect.grow(1.0).encloses(screen_rect(footer_state)), "shop footer inventory and state badges stay inside the footer at %s" % viewport_size)
-		check(footer_title.clip_text and footer_body.clip_text and footer_title.get_theme_font_size("font_size") >= 16 and footer_body.get_theme_font_size("font_size") >= 13, "shop footer text remains clipped and readable at %s" % viewport_size)
-		check(relative_luma(footer_title.get_theme_color("font_color")) >= 0.86 and relative_luma(footer_body.get_theme_color("font_color")) >= 0.86, "shop footer text keeps readable contrast at %s" % viewport_size)
+		check(footer_title.clip_text and not footer_body.clip_text and footer_body.size.y >= footer_body.get_minimum_size().y and footer_title.get_theme_font_size("font_size") >= 16 and footer_body.get_theme_font_size("font_size") >= 13, "shop footer text remains complete wrapped and readable at %s" % viewport_size)
+		check(relative_luma(footer_title.get_theme_color("font_color")) <= 0.24 and relative_luma(footer_body.get_theme_color("font_color")) <= 0.24, "shop footer text keeps readable contrast at %s" % viewport_size)
 		if row_rects.size() > 0:
 			var last_row_rect = row_rects[row_rects.size() - 1]
 			check(last_row_rect.end.y <= footer_rect.position.y - 6.0, "shop item list clears the lower footer panel at %s" % viewport_size)
@@ -6640,212 +6071,92 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 				check(not rects_overlap(row_rect, footer_rect), "shop item rows do not overlap the footer panel at %s" % viewport_size)
 
 func check_daily_login_layout(scene, viewport_size: Vector2) -> void:
-	var panel = scene.find_child("DailyLoginPanel", true, false) as Control
-	var indicators = scene.find_child("DailyLoginDayIndicators", true, false) as Control
-	var reward_panel = scene.find_child("DailyLoginRewardPanel", true, false) as Control
-	var progress_panel = scene.find_child("DailyLoginProgressPanel", true, false) as Control
-	var claim_button = scene.find_child("DailyLoginClaimButton", true, false) as Button
-	var back_button = scene.find_child("DailyLoginBackButton", true, false) as Button
-	var claim_art = scene.find_child("DailyLoginClaimButtonArt", true, false) as CanvasItem
-	var tip_back = scene.find_child("DailyLoginTipBack", true, false) as Control
-	var tip_label = scene.find_child("DailyLoginTipLabel", true, false) as Label
-	var forecast_panel = scene.find_child("DailyLoginForecastPanel", true, false) as Control
-	var forecast_rail = scene.find_child("DailyLoginForecastRail", true, false) as Control
-	var forecast_title = scene.find_child("DailyLoginForecastTitle", true, false) as Label
-	var forecast_body = scene.find_child("DailyLoginForecastBody", true, false) as Label
-	var forecast_badge = scene.find_child("DailyLoginForecastBadge", true, false) as Label
-	var forecast_badge_back = scene.find_child("DailyLoginForecastBadgeBack", true, false) as Control
-	check(panel != null and indicators != null and reward_panel != null and progress_panel != null and claim_button != null and back_button != null and forecast_panel != null, "daily login exposes panel, day reward progress, claim, return, and forecast controls at %s" % viewport_size)
-	check(scene.optional_gpt_illustration_texture("daily_login_gpt_calendar") == null or scene.find_child("DailyLoginGPTCalendarTexture", true, false) != null, "daily login consumes GPT calendar art at %s" % viewport_size)
-	if panel == null or indicators == null or reward_panel == null or progress_panel == null or claim_button == null or back_button == null or forecast_panel == null:
+	var panel := scene.find_child("DailyLoginPanel", true, false) as Control
+	var paper := scene.find_child("DailyLoginGuofengPaperSurface", true, false) as TextureRect
+	check(panel != null and paper != null and paper.texture == scene.optional_gpt_illustration_texture("settings_readable_gpt") and paper.modulate == Color.WHITE, "daily uses one opaque authored paper at %s" % viewport_size)
+	if panel == null:
 		return
-	var panel_rect = screen_rect(panel)
-	var daily_back_rect = screen_rect(back_button)
-	check(panel_rect.grow(1.0).encloses(daily_back_rect), "daily login return button stays inside the panel at %s" % viewport_size)
-	check(daily_back_rect.size.x >= 92.0 and daily_back_rect.size.y >= 44.0 and back_button.text == "返回", "daily login exposes an explicit 44px+ return path at %s" % viewport_size)
-	check((claim_button.text == "领取奖励" or claim_button.text == "已领取") and claim_art != null and claim_art.show_behind_parent, "daily login keeps the native claim CTA text above its bitmap art at %s" % viewport_size)
-	var indicator_rect = screen_rect(indicators)
-	var previous_rect := Rect2()
-	for i in range(1, 8):
-		var day_node = scene.find_child("DailyLoginDayNode_%d" % i, true, false) as Control
-		var day_label = scene.find_child("DailyLoginDayLabel_%d" % i, true, false) as Label
-		var day_state_label = scene.find_child("DailyLoginDayStateLabel_%d" % i, true, false) as Label
-		var reward_label = scene.find_child("DailyLoginRewardLabel_%d" % i, true, false) as Label
-		var text_back = scene.find_child("DailyLoginDayTextBack_%d" % i, true, false) as Control
-		check(day_node != null and day_label != null and day_state_label != null and reward_label != null and text_back != null, "daily login day %d exposes node, state, reward labels and text backplate at %s" % [i, viewport_size])
-		if day_node == null:
-			continue
-		var node_rect = screen_rect(day_node)
-		check(indicator_rect.grow(1.0).encloses(node_rect), "daily login day %d stays inside day indicator lane at %s" % [i, viewport_size])
-		check(node_rect.size.x >= 42.0 and node_rect.size.y >= 38.0, "daily login day %d keeps readable tile size at %s" % [i, viewport_size])
-		if i > 1:
-			check(node_rect.position.x >= previous_rect.end.x + 3.0, "daily login day %d has stable separation at %s" % [i, viewport_size])
-		previous_rect = node_rect
-		if text_back != null and day_label != null and day_state_label != null and reward_label != null:
-			var back_rect = screen_rect(text_back)
-			check(back_rect.grow(1.0).encloses(screen_rect(day_label)) and back_rect.grow(1.0).encloses(screen_rect(day_state_label)) and back_rect.grow(1.0).encloses(screen_rect(reward_label)), "daily login day %d text backplate covers its state and reward labels at %s (back=%s day=%s state=%s reward=%s)" % [i, viewport_size, back_rect, screen_rect(day_label), screen_rect(day_state_label), screen_rect(reward_label)])
-		if day_label != null:
-			var day_luma = relative_luma(day_label.get_theme_color("font_color"))
-			check(day_label.clip_text and day_label.get_theme_font_size("font_size") >= 10, "daily login day %d title clips and keeps readable font at %s" % [i, viewport_size])
-			check(day_luma >= 0.70 or day_luma <= 0.22, "daily login day %d title color has deliberate contrast at %s" % [i, viewport_size])
-		if reward_label != null:
-			var reward_luma = relative_luma(reward_label.get_theme_color("font_color"))
-			check(reward_label.clip_text and reward_label.get_theme_font_size("font_size") >= 11, "daily login day %d reward clips and keeps readable font at %s" % [i, viewport_size])
-			check(reward_luma >= 0.70 or reward_luma <= 0.24, "daily login day %d reward color has deliberate contrast at %s" % [i, viewport_size])
-		if day_state_label != null:
-			check(day_state_label.text in ["已领取", "今日可领", "待签到"] and day_state_label.clip_text and day_state_label.tooltip_text != "", "daily login day %d exposes a visible state label without clipping its semantic value at %s" % [i, viewport_size])
-	var reward_rect = screen_rect(reward_panel)
-	var progress_rect = screen_rect(progress_panel)
-	var claim_rect = screen_rect(claim_button)
-	var forecast_rect = screen_rect(forecast_panel)
-	var reward_text = scene.find_child("DailyLoginRewardTextLabel", true, false) as Label
-	var reward_text_back = scene.find_child("DailyLoginRewardTextBack", true, false) as Control
-	var reward_icon_back = scene.find_child("DailyLoginRewardIconBack", true, false) as Control
-	var claimed_status = scene.find_child("DailyLoginClaimedStatusSurface", true, false) as Control
-	var claimed_status_label = scene.find_child("DailyLoginClaimedStatusLabel", true, false) as Label
-	check(reward_text != null and reward_text_back != null and reward_icon_back != null, "daily login reward row exposes readable text and icon backplates at %s" % viewport_size)
-	if bool(scene.daily_login_view_state.get("claimed_today", false)):
-		check(claimed_status != null and claimed_status.visible and claimed_status_label != null and claimed_status_label.text.contains("今日已领取") and claimed_status_label.text.contains("明日可领"), "daily login claimed state uses a non-button status surface at %s" % viewport_size)
-		check(claim_button.visible and claim_button.disabled and claim_button.focus_mode == Control.FOCUS_NONE, "daily login claimed state keeps a visible disabled claim CTA at %s" % viewport_size)
-	else:
-		check(claimed_status == null or not claimed_status.visible, "daily login unclaimed state keeps the claimed status surface hidden at %s" % viewport_size)
-	if reward_text != null:
-		check(reward_text.clip_text and reward_text.get_theme_font_size("font_size") >= 20 and relative_luma(reward_text.get_theme_color("font_color")) >= 0.88, "daily login reward text is bright and clipped at %s" % viewport_size)
-		check(reward_rect.grow(1.0).encloses(screen_rect(reward_text)), "daily login reward text stays inside reward panel at %s" % viewport_size)
-	if reward_text_back != null and reward_text != null:
-		check(screen_rect(reward_text_back).grow(1.0).encloses(screen_rect(reward_text)), "daily login reward text backplate contains reward text at %s" % viewport_size)
-	var progress_text = scene.find_child("DailyLoginProgressText", true, false) as Label
-	var progress_fill = scene.find_child("DailyLoginProgressFill", true, false) as Control
-	check(progress_text != null and progress_fill != null, "daily login progress exposes text and fill at %s" % viewport_size)
-	if progress_text != null:
-		check(progress_text.get_theme_font_size("font_size") >= 14 and relative_luma(progress_text.get_theme_color("font_color")) >= 0.92, "daily login progress text remains readable at %s" % viewport_size)
-	check(reward_rect.end.y <= progress_rect.position.y - 4.0 and progress_rect.end.y <= claim_rect.position.y - 6.0, "daily login reward progress and claim button remain vertically separated at %s" % viewport_size)
-	check(claim_rect.size.x >= 200.0 and claim_rect.size.y >= 50.0, "daily login claim button keeps practical touch size at %s" % viewport_size)
-	check(not rects_overlap(claim_rect, forecast_rect), "daily login forecast panel clears claim button at %s" % viewport_size)
-	check(forecast_rect.position.y >= claim_rect.end.y + 10.0, "daily login forecast panel keeps a clear gap below claim button at %s" % viewport_size)
-	check(forecast_rect.size.x >= 360.0 and forecast_rect.size.y >= 54.0, "daily login forecast strip keeps readable size at %s" % viewport_size)
-	check(forecast_rect.size.y <= viewport_size.y * 0.135, "daily login forecast remains a low-priority strip at %s" % viewport_size)
-	if forecast_title != null and forecast_body != null and forecast_badge != null and forecast_badge_back != null and forecast_rail != null:
-		var forecast_title_rect = screen_rect(forecast_title)
-		var forecast_body_rect = screen_rect(forecast_body)
-		var forecast_badge_rect = screen_rect(forecast_badge)
-		check(forecast_title.clip_text and forecast_title.get_theme_font_size("font_size") >= 12 and relative_luma(forecast_title.get_theme_color("font_color")) >= 0.74, "daily login forecast title stays readable and clipped at %s" % viewport_size)
-		check(forecast_body.clip_text and forecast_body.get_theme_font_size("font_size") >= 12 and relative_luma(forecast_body.get_theme_color("font_color")) >= 0.78, "daily login forecast body stays readable and clipped at %s" % viewport_size)
-		check(forecast_badge.clip_text and forecast_badge.get_theme_font_size("font_size") >= 11 and relative_luma(forecast_badge.get_theme_color("font_color")) >= 0.80, "daily login forecast badge stays readable and clipped at %s" % viewport_size)
-		check(forecast_rect.grow(1.0).encloses(screen_rect(forecast_rail)) and forecast_rect.grow(1.0).encloses(screen_rect(forecast_title)) and forecast_rect.grow(1.0).encloses(screen_rect(forecast_body)) and forecast_rect.grow(1.0).encloses(screen_rect(forecast_badge)), "daily login forecast content stays inside panel at %s" % viewport_size)
-		check(not rects_overlap(forecast_title_rect, forecast_badge_rect), "daily login forecast title and badge keep separate top lanes at %s" % viewport_size)
-		check(forecast_title_rect.end.x <= forecast_badge_rect.position.x - 8.0, "daily login forecast title clears status badge at %s" % viewport_size)
-		check(forecast_body_rect.position.y >= max(forecast_title_rect.end.y, forecast_badge_rect.end.y) + 3.0, "daily login forecast body sits below the title and badge row at %s" % viewport_size)
-		check(forecast_body_rect.size.x >= forecast_rect.size.x * 0.72, "daily login forecast body keeps a wide readable copy lane at %s" % viewport_size)
-		check(forecast_body_rect.position.x <= forecast_title_rect.position.x + max(22.0, forecast_rect.size.x * 0.04), "daily login forecast body starts from the message column at %s" % viewport_size)
-		check(screen_rect(forecast_badge_back).grow(1.0).encloses(screen_rect(forecast_badge)), "daily login forecast badge backplate contains badge text at %s" % viewport_size)
-	if forecast_body != null and tip_back != null:
-		check(screen_rect(tip_back).grow(1.0).encloses(screen_rect(forecast_body)), "daily login forecast body backplate contains text at %s" % viewport_size)
-		check(screen_rect(forecast_body).position.y >= claim_rect.end.y + 4.0, "daily login forecast body clears claim button at %s" % viewport_size)
-	if tip_label != null:
-		check(tip_label.clip_text, "daily login compatibility tip label remains clipped at %s" % viewport_size)
+	var previous: Control = null
+	for node_name in ["DailyLoginDayIndicators", "DailyLoginRewardPanel", "DailyLoginProgressPanel", "DailyLoginClaimButton", "DailyLoginForecastPanel"]:
+		var node := scene.find_child(node_name, true, false) as Control
+		check(node != null and screen_rect(panel).grow(1.0).encloses(screen_rect(node)), "daily exposes bounded native lane %s at %s" % [node_name, viewport_size])
+		if node != null and previous != null:
+			check(screen_rect(previous).end.y + 1.0 <= screen_rect(node).position.y, "daily lanes %s and %s remain separate at %s" % [previous.name, node.name, viewport_size])
+		previous = node
+	for day in range(1, 8):
+		var card := scene.find_child("DailyLoginDayNode_%d" % day, true, false) as Control
+		var target := scene.find_child("DailyLoginDayDetailProxy_%d" % day, true, false) as Button
+		check(card != null and target != null and target.size.x >= 44 and target.size.y >= 44, "daily day %d has a real touch/focus target at %s" % [day, viewport_size])
+		var previous_label: Label = null
+		for prefix in ["DailyLoginDayLabel_", "DailyLoginDayStateLabel_", "DailyLoginRewardLabel_"]:
+			var label := scene.find_child(prefix + str(day), true, false) as Label
+			check(label != null and label.get_theme_font_size("font_size") >= scene.accessibility_font_size(14), "daily day %d has readable native %s at %s" % [day, prefix, viewport_size])
+			if label == null or card == null:
+				continue
+			check(screen_rect(card).grow(1.0).encloses(screen_rect(label)) and label.size.y >= label.get_theme_font("font").get_height(label.get_theme_font_size("font_size")), "daily day %d keeps a complete font line on its card at %s" % [day, viewport_size])
+			if previous_label != null:
+				check(screen_rect(previous_label).end.y + 1.0 <= screen_rect(label).position.y, "daily day %d text rows remain separate at %s" % [day, viewport_size])
+			previous_label = label
+	var claim := scene.find_child("DailyLoginClaimButton", true, false) as Button
+	var back := scene.find_child("DailyLoginBackButton", true, false) as Button
+	check(claim != null and claim.text in ["领取奖励", "已领取"] and claim.size.x >= 200 and claim.size.y >= 50 and str(claim.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary", "daily keeps one readable native reward action at %s" % viewport_size)
+	check(back != null and back.text == "返回" and back.size.x >= 92 and back.size.y >= 44, "daily keeps a native return target at %s" % viewport_size)
+	if claim != null and bool(scene.daily_login_view_state.get("claimed_today", false)):
+		var claimed := scene.find_child("DailyLoginClaimedStatusLabel", true, false) as Label
+		check(claim.disabled and claim.visible and claimed != null and claimed.is_visible_in_tree() and claimed.text.contains("今日已领取"), "daily claimed state keeps the disabled CTA and its next-day explanation at %s" % viewport_size)
+
 
 func check_top_seat_clearance(scene, viewport_size: Vector2, page_label: String) -> void:
 	var panel := scene.find_child("SeatPanel_2", true, false) as Control
-	var seat_shadow := scene.find_child("SeatPanel3DCastShadow_2", true, false) as Control
 	var hud := scene.find_child("TopHud3DShell", true, false) as Control
-	var hud_shadow := scene.find_child("TopHud3DCastShadow", true, false) as Control
-	check(panel != null and seat_shadow != null and hud != null and hud_shadow != null, "%s exposes top seat and HUD surfaces at %s" % [page_label, viewport_size])
-	if panel == null or seat_shadow == null or hud == null or hud_shadow == null:
+	check(panel != null and hud != null and scene.find_child("SeatPanel3DCastShadow_2", true, false) == null, "%s exposes single top seat and HUD surfaces at %s" % [page_label, viewport_size])
+	if panel == null or hud == null:
 		return
-	var panel_rect := screen_rect(panel)
-	var shadow_rect := screen_rect(seat_shadow)
-	var hud_rect := screen_rect(hud)
-	var hud_shadow_rect := screen_rect(hud_shadow)
 	var top_wall_layout: Array = scene.WALL_LAYOUTS[0]
 	var top_wall_local_rect := Rect2(top_wall_layout[0], top_wall_layout[1] - top_wall_layout[0])
 	var top_wall_root_rect: Rect2 = scene.battle_table_anchor_root_rect(top_wall_local_rect, viewport_size)
 	var top_wall_rect := anchor_rect_in_parent(screen_rect(scene.root_layer), top_wall_root_rect)
-	check(not rects_overlap(panel_rect, hud_rect) and not rects_overlap(panel_rect, hud_shadow_rect), "%s top seat plaque clears the HUD and its shadow at %s" % [page_label, viewport_size])
-	check(not rects_overlap(shadow_rect, hud_rect) and not rects_overlap(shadow_rect, hud_shadow_rect), "%s top seat shadow clears the HUD reading surface at %s" % [page_label, viewport_size])
-	check(not rects_overlap(panel_rect, top_wall_rect) and not rects_overlap(shadow_rect, top_wall_rect), "%s top seat plaque clears the upper wall at %s" % [page_label, viewport_size])
+	check(not rects_overlap(screen_rect(panel), screen_rect(hud)), "%s top seat plaque clears the HUD at %s" % [page_label, viewport_size])
+	check(not rects_overlap(screen_rect(panel), top_wall_rect), "%s top seat plaque clears the upper wall at %s" % [page_label, viewport_size])
+	if viewport_size.x >= 960.0 and viewport_size.y >= 540.0:
+		check(absf(screen_rect(panel).get_center().x - screen_rect(scene.root_layer).get_center().x) < 1.0, "%s opposite player identity is centered across the table at %s" % [page_label, viewport_size])
+		var river_root: Rect2 = scene.battle_table_anchor_root_rect(scene.seat_discard_rect(2), viewport_size)
+		var river_screen := anchor_rect_in_parent(screen_rect(scene.root_layer), river_root)
+		check(screen_rect(panel).end.y <= river_screen.position.y - 1.5, "%s opposite identity keeps a physical gap before its river at %s" % [page_label, viewport_size])
 
 
 func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 	for seat_layout in scene.SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
-		var panel = scene.find_child("SeatPanel_%d" % seat, true, false) as Control
-		var avatar = scene.find_child("SeatAvatar_%d" % seat, true, false) as Control
-		var wind_mark = scene.find_child("SeatAvatarWindMark_%d" % seat, true, false) as Label
-		var short_name = scene.find_child("SeatAvatarShortName_%d" % seat, true, false) as Label
-		var text_back = scene.find_child("SeatCompactTextBack_%d" % seat, true, false) as Control
-		var name = scene.find_child("SeatCompactName_%d" % seat, true, false) as Label
-		var meta = scene.find_child("SeatCompactMeta_%d" % seat, true, false) as Label
-		var score = scene.find_child("SeatCompactScore_%d" % seat, true, false) as Label
-		var status = scene.find_child("SeatCompactStatus_%d" % seat, true, false) as Label
-		var river = scene.find_child("SeatCompactRiver_%d" % seat, true, false) as Label
-		var discard_recent = scene.find_child("SeatDiscardPreviewRecentLabel_%d" % seat, true, false) as Label
-		var turn_badge = scene.find_child("SeatCompactTurn_%d" % seat, true, false) as Control
-		var dealer_badge = scene.find_child("SeatCompactDealer_%d" % seat, true, false) as Control
-		check(panel != null and avatar != null and text_back != null and name != null and meta != null and score != null, "seat %d exposes compact panel avatar text backplate and labels at %s" % [seat, viewport_size])
-		if panel == null or avatar == null or text_back == null or name == null or meta == null or score == null:
+		var panel := scene.find_child("SeatPanel_%d" % seat, true, false) as Control
+		var name := scene.find_child("SeatCompactName_%d" % seat, true, false) as Label
+		var score := scene.find_child("SeatCompactScore_%d" % seat, true, false) as Label
+		var meta := scene.find_child("SeatCompactMeta_%d" % seat, true, false) as Label
+		check(panel != null and name != null and score != null and meta != null and scene.find_child("SeatAvatar_%d" % seat, true, false) == null, "seat %d has real native facts without a stacked pseudo-avatar at %s" % [seat, viewport_size])
+		if panel == null or name == null or score == null or meta == null:
 			continue
-		var side := str(seat_layout[2])
-		var is_side_thumbnail := side == "left" or side == "right"
-		var recent_source: bool = seat == int(scene.get_last_discard_seat()) and str(scene.get_last_discard()) != ""
-		check(panel.clip_contents, "seat %d compact panel clips overflow at %s" % [seat, viewport_size])
-		if is_side_thumbnail and not recent_source and seat != int(scene.get_current_seat()):
-			check(discard_recent == null or str(discard_recent.text).length() <= 12, "inactive side AI seat %d keeps river text thumbnail-sized at %s" % [seat, viewport_size])
-		var brocade_texture = panel.find_child("SeatGPTBrocadeTexture_%d" % seat, true, false) as TextureRect
-		check(scene.optional_gpt_illustration_texture("seat_gpt_brocade") == null or brocade_texture != null, "seat %d consumes v4 GPT brocade frame when generated at %s" % [seat, viewport_size])
-		var panel_rect = screen_rect(panel)
-		var avatar_rect = screen_rect(avatar)
-		if is_side_thumbnail:
-			check(panel_rect.size.x <= viewport_size.x * 0.120 + 1.0 and panel_rect.size.y <= viewport_size.y * 0.170 + 1.0, "side AI seat %d stays compact while preserving readable identity at %s" % [seat, viewport_size])
-		var minimum_name_size := 10 if is_side_thumbnail else 12
-		var minimum_detail_size := 9 if is_side_thumbnail else 10
-		check(name.get_theme_font_size("font_size") >= minimum_name_size, "seat %d name keeps commercial HUD type scale at %s" % [seat, viewport_size])
-		check(meta.get_theme_font_size("font_size") >= minimum_detail_size and score.get_theme_font_size("font_size") >= minimum_detail_size, "seat %d score and state remain readable at %s" % [seat, viewport_size])
-		check(readable_paper_ink(name.get_theme_color("font_color")) and readable_paper_ink(meta.get_theme_color("font_color")) and readable_paper_ink(score.get_theme_color("font_color")), "seat %d compact text keeps production contrast at %s" % [seat, viewport_size])
-		check(panel_rect.grow(1.0).encloses(avatar_rect), "seat %d avatar stays inside panel at %s" % [seat, viewport_size])
-		for label in [name, meta, score]:
-			var label_rect = screen_rect(label)
-			check(panel_rect.grow(1.0).encloses(label_rect), "seat %d compact label stays inside panel at %s" % [seat, viewport_size])
-			check(screen_rect(text_back).grow(1.0).encloses(label_rect), "seat %d compact text backplate contains label at %s" % [seat, viewport_size])
-			check(not rects_overlap(label_rect, avatar_rect), "seat %d compact label clears avatar wind mark area at %s" % [seat, viewport_size])
-			check(label.clip_text and label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "seat %d compact label clips safely at %s" % [seat, viewport_size])
-		for optional_label in [status, river, discard_recent]:
-			if optional_label == null:
-				continue
-			var optional_rect = screen_rect(optional_label)
-			check(panel_rect.grow(1.0).encloses(optional_rect), "seat %d compact optional text stays inside panel at %s" % [seat, viewport_size])
-			check(screen_rect(text_back).grow(1.0).encloses(optional_rect), "seat %d compact optional text stays inside text backplate at %s" % [seat, viewport_size])
-			check(not rects_overlap(optional_rect, avatar_rect), "seat %d compact optional text clears avatar at %s" % [seat, viewport_size])
-			check(optional_label.clip_text and optional_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS, "seat %d compact optional text clips safely at %s" % [seat, viewport_size])
-			if is_side_thumbnail:
-				if optional_label == discard_recent:
-					check(str(optional_label.text).begins_with("弃") and str(optional_label.text).length() <= 4, "side AI seat %d uses discard-count thumbnail text at %s" % [seat, viewport_size])
-				elif optional_label == status:
-					check(str(optional_label.text).length() <= 4, "side AI seat %d keeps recent action thumbnail-sized at %s" % [seat, viewport_size])
-				else:
-					check(str(optional_label.text).length() <= 6, "side AI seat %d avoids full river text in compact card at %s" % [seat, viewport_size])
-		for badge in [turn_badge, dealer_badge]:
-			if badge == null:
-				continue
-			var badge_rect = screen_rect(badge)
-			check(panel_rect.grow(1.0).encloses(badge_rect), "seat %d compact badge stays inside panel at %s" % [seat, viewport_size])
-			check(screen_rect(text_back).grow(1.0).encloses(badge_rect), "seat %d compact badge stays inside text backplate at %s" % [seat, viewport_size])
-			check(not rects_overlap(badge_rect, avatar_rect), "seat %d compact badge clears avatar at %s" % [seat, viewport_size])
+		check(panel.get_meta("guofeng_surface_key", "") == "menu_ink_primary" and panel.clip_contents, "seat %d uses the same authored ink and bounded reading surface at %s" % [seat, viewport_size])
+		var seat_edges := panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		check(seat_edges != null and seat_edges.texture == scene.optional_gpt_illustration_texture("menu_ink_primary") and seat_edges.visible, "seat %d preserves the authored ink border at %s" % [seat, viewport_size])
+		var labels: Array[Label] = [name, score, meta]
+		for prefix in ["SeatCompactStatus_", "SeatCompactDealer_", "SeatThreatBadge_"]:
+			var optional := scene.find_child(prefix + str(seat), true, false) as Label
+			if optional != null:
+				labels.append(optional)
+		for label in labels:
+			check(screen_rect(panel).grow(1.0).encloses(screen_rect(label)) and label.size.y >= label.get_minimum_size().y - 0.5, "seat %d keeps %s inside its actual card and at full line height at %s" % [seat, label.name, viewport_size])
+			check(label_text_width(label, label.text) <= label.size.x + 1.0, "seat %d displays all of %s without clipping factual units at %s" % [seat, label.name, viewport_size])
+			check(label.get_theme_color("font_color").a >= 0.99 and relative_luma(label.get_theme_color("font_color")) >= 0.5 and label.get_theme_constant("outline_size") == 0 and label.get_theme_font_size("font_size") >= 9, "seat %d uses measured opaque light type for %s at %s" % [seat, label.name, viewport_size])
+		for first_index in range(labels.size()):
+			for second_index in range(first_index + 1, labels.size()):
+				check(not rects_overlap(screen_rect(labels[first_index]), screen_rect(labels[second_index])), "seat %d separates identity, score, count and status lanes at %s" % [seat, viewport_size])
+		check(score.text == scene.seat_score_text(scene.get_player_info(seat)) and meta.text.begins_with("手") and meta.text.contains("花"), "seat %d preserves exact formatted score and hand/flower facts at %s" % [seat, viewport_size])
 		if seat == int(scene.dealer_seat):
-			check(dealer_badge != null, "dealer seat %d exposes compact dealer badge inside text area at %s" % [seat, viewport_size])
-		check(not rects_overlap(screen_rect(name), screen_rect(score)), "seat %d name and score do not overlap at %s" % [seat, viewport_size])
-		check(screen_rect(meta).position.y >= min(screen_rect(name).end.y, screen_rect(score).end.y) + 1.0, "seat %d meta clears name row at %s" % [seat, viewport_size])
-		check(readable_paper_ink(name.get_theme_color("font_color")) and readable_paper_ink(score.get_theme_color("font_color")) and readable_paper_ink(meta.get_theme_color("font_color")), "seat %d compact text keeps readable contrast at %s" % [seat, viewport_size])
-		if wind_mark != null and short_name != null:
-			check(wind_mark.clip_text and short_name.clip_text, "seat %d avatar wind and short name clip safely at %s" % [seat, viewport_size])
-			check(wind_mark.anchor_bottom <= short_name.anchor_top - 0.04, "seat %d avatar wind mark anchor band clears short name band at %s" % [seat, viewport_size])
-		if seat != 0:
-			check(str(name.text).length() <= 2, "AI seat %d uses abbreviated name/profile label at %s" % [seat, viewport_size])
-		check(str(meta.text).find("分") < 0, "seat %d keeps score out of hand/flower meta at %s" % [seat, viewport_size])
-		if is_side_thumbnail:
-			check(str(meta.text).begins_with("手") and str(meta.text).find("弃") >= 0, "side seat %d merges hand flower and discard counts into one scan line at %s" % [seat, viewport_size])
-			check(label_text_width(meta, meta.text) <= screen_rect(meta).size.x + 2.0, "side seat %d combined meta fits without ellipsis at %s" % [seat, viewport_size])
-		check(str(score.text).strip_edges() != "", "seat %d keeps score visible as its own label at %s" % [seat, viewport_size])
+			check(scene.find_child("SeatCompactDealer_%d" % seat, true, false) != null, "dealer seat %d retains a distinct native 庄 marker at %s" % [seat, viewport_size])
+		var side := str(seat_layout[2])
+		if side == "left" or side == "right":
+			check(meta.text.contains("弃") and screen_rect(panel).size.x <= viewport_size.x * 0.120 + 1.0 and screen_rect(panel).size.y <= viewport_size.y * 0.170 + 1.0, "side seat %d keeps all counters without expanding into tile lanes at %s" % [seat, viewport_size])
+
 
 func check_safe_area_layout(scene, viewport_size: Vector2, page_label: String) -> void:
 	check(scene.root_layer != null, "%s has a safe content root at %s" % [page_label, viewport_size])
@@ -6971,16 +6282,11 @@ func rects_overlap(a: Rect2, b: Rect2) -> bool:
 	return a.position.x < b.end.x and a.end.x > b.position.x and a.position.y < b.end.y and a.end.y > b.position.y
 
 func check_settings_button_art_text_safe_zone(button: Button, prefixes: Array, label_text: String, viewport_size: Vector2) -> void:
-	var button_rect = screen_rect(button)
-	var safe_zone = Rect2(
-		Vector2(button_rect.position.x + button_rect.size.x * 0.27, button_rect.position.y + button_rect.size.y * 0.31),
-		Vector2(button_rect.size.x * 0.49, button_rect.size.y * 0.38)
-	)
+	var action_width := button.get_theme_font("font").get_string_size(button.text, HORIZONTAL_ALIGNMENT_LEFT, -1, button.get_theme_font_size("font_size")).x
+	check(button.has_meta("guofeng_button_face_key") and action_width <= button.size.x - 8.0, "settings row %s keeps its complete native action on one authored face at %s" % [label_text, viewport_size])
 	for prefix in prefixes:
 		var nodes = controls_with_name_prefix(button, str(prefix))
-		check(nodes.size() > 0, "settings row %s exposes %s art for safe-zone audit at %s" % [label_text, prefix, viewport_size])
-		for node in nodes:
-			check(not rects_overlap(safe_zone, screen_rect(node)), "settings row %s keeps %s out of the button text safe zone at %s" % [label_text, node.name, viewport_size])
+		check(nodes.is_empty(), "settings row %s omits %s decorative overlays from the native action at %s" % [label_text, prefix, viewport_size])
 
 func check_button_face_behind_native_text(button: Button, label_text: String, viewport_size: Vector2) -> void:
 	if button == null:

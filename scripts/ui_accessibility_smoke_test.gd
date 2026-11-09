@@ -189,6 +189,10 @@ func run() -> void:
 	scene.refresh_current_screen()
 	await settle(0.10)
 
+	var experience_tab := scene.find_child("SettingsSectionNavButton_体验", true, false) as Button
+	if experience_tab != null:
+		experience_tab.pressed.emit()
+		await settle(0.05)
 	var initial_button := profile_button(scene)
 	check(initial_button != null, "settings exposes the reading-assistance selector")
 	if initial_button != null:

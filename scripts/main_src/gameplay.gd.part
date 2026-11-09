@@ -239,7 +239,9 @@ func refresh_battle_hud_lane() -> void:
 	var wall_state_text_value := wall_state_text(wall_count)
 	var last_discard := get_last_discard()
 	var last_discard_text := tile_label(last_discard) if last_discard != "" else "无"
-	var hud_token := "%d|%d|%s|%s|%d|%d" % [1 if compact_hud else 0, wall_count, wall_state_text_value, last_discard, wall_total, get_last_discard_seat()]
+	var hud_status_text := top_hud_short_status_text(compact_hud)
+	var hud_status_tooltip := top_hud_status_tooltip_text()
+	var hud_token := "%d|%d|%s|%s|%d|%d|%s|%s" % [1 if compact_hud else 0, wall_count, wall_state_text_value, last_discard, wall_total, get_last_discard_seat(), hud_status_text, hud_status_tooltip]
 	if str(root_layer.get_meta("battle_hud_view_token", "")) == hud_token:
 		return
 	root_layer.set_meta("battle_hud_view_token", hud_token)
@@ -253,25 +255,35 @@ func refresh_battle_hud_lane() -> void:
 			"wall": root_layer.find_child("TopHudWallText", true, false) as Label,
 			"wall_state": root_layer.find_child("TopHudWallState", true, false) as Label,
 			"center_count": root_layer.find_child("CenterWallCount", true, false) as Label,
+			"center_status": root_layer.find_child("CenterWallStatusLabel", true, false) as Label,
 		}
 	var status := battle_hud_control_index.get("status", null) as Label
 	if status != null:
-		set_dynamic_label_text(status, top_hud_short_status_text(compact_hud), top_hud_status_tooltip_text())
+		set_dynamic_label_text(status, hud_status_text, hud_status_tooltip)
 	var wall := battle_hud_control_index.get("wall", null) as Label
 	var wall_state := battle_hud_control_index.get("wall_state", null) as Label
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [wall_count, wall_total, wall_state_text_value, last_discard_text]
+	var compact_wall_count := wall != null and bool(wall.get_meta("compact_wall_count", false))
 	if wall != null:
-		set_dynamic_label_text(wall, "余牌 %d/%d" % [wall_count, wall_total], wall_detail)
+		set_dynamic_label_text(wall, ("%d/%d" if compact_wall_count else "余牌 %d/%d") % [wall_count, wall_total], wall_detail)
 		wall.set_meta("wall_count", wall_count)
 		wall.set_meta("wall_total", wall_total)
+		wall.set_meta("wall_state", wall_state_text_value)
 	if wall_state != null:
-		set_dynamic_label_text(wall_state, "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text], wall_detail)
+		var wall_state_display := "余牌 · %s" % wall_state_text_value.replace("牌墙", "") if compact_wall_count else "状态 · %s · 上张%s" % [wall_state_text_value.replace("牌墙", ""), last_discard_text]
+		set_dynamic_label_text(wall_state, wall_state_display, wall_detail)
+		wall_state.add_theme_color_override("font_color", Color(0.55, 0.17, 0.10) if wall_is_low(wall_count) else Color(0.11, 0.23, 0.18))
 	var center_count := battle_hud_control_index.get("center_count", null) as Label
 	if center_count != null:
 		var center_wall_token := "%d/%d" % [wall_count, wall_total]
 		if str(center_count.get_meta("wall_view_token", "")) != center_wall_token:
 			set_dynamic_label_text(center_count, "%d" % wall_count, "牌墙剩余 %d/%d 张" % [wall_count, wall_total])
 			center_count.set_meta("wall_view_token", center_wall_token)
+	var center_status := battle_hud_control_index.get("center_status", null) as Label
+	if center_status != null:
+		var compact_center := viewport_size.x <= 960.0 or viewport_size.y < 720.0
+		var center_wall_model := center_wall_view_model(wall_count, wall_total, compact_center)
+		set_dynamic_label_text(center_status, str(center_wall_model.get("label_text", "牌墙")), str(center_wall_model.get("tooltip", "")))
 
 func schedule_game_render_flush(delay_seconds: float) -> void:
 	var timer := game_render_delay_timer
@@ -328,6 +340,7 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 	if seat < 0 or seat >= players.size():
 		return ""
 	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
+	rect = battle_seat_layout_rect(seat, rect, resolved_viewport)
 	var snapshot_current_seat := int(discard_snapshot.get("current_seat", -1)) if not discard_snapshot.is_empty() else -1
 	var current_seat_snapshot := snapshot_current_seat if snapshot_current_seat >= 0 else get_current_seat()
 	var snapshot_discard_seat := int(discard_snapshot.get("seat", -1)) if not discard_snapshot.is_empty() else -1
@@ -355,6 +368,8 @@ func battle_seat_identity_signature(seat: int, rect: Rect2, side: String, seat_t
 		str(resolved_viewport),
 		str(safe_area_margins),
 		mode,
+		str(large_text_enabled),
+		str(high_contrast_enabled),
 		str(current_seat_snapshot),
 		str(latest_discard_seat),
 		latest_discard_tile,
@@ -504,12 +519,12 @@ func battle_action_chrome_identity_signature(button_snapshot = null, pending_cla
 	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
 	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
-	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode
 	var focus_token := ""
 	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
 	if focus_owner != null and is_instance_valid(focus_owner):
 		focus_token = "%s|%s" % [str(focus_owner.name), str(focus_owner.get("text"))]
 	var auto_pass_active := pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec()
+	var has_intent := not pending_claim_mode and not danger_confirm_mode and not ended_action_mode and (mode == "online_game" or auto_pass_active)
 	var signature_parts: Array[String] = [
 		mode,
 		str(viewport_size),
@@ -550,39 +565,32 @@ func retain_battle_action_chrome_for_render() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
 	var dock := root_layer.find_child("ActionButtonDock", true, false) as Control
-	var shadow := root_layer.find_child("ActionDock3DCastShadow", true, false) as Control
 	var current_signature := battle_action_chrome_identity_signature()
-	if dock != null and shadow != null and is_instance_valid(dock) and is_instance_valid(shadow) and not dock.is_queued_for_deletion() and not shadow.is_queued_for_deletion():
+	if dock != null and is_instance_valid(dock) and not dock.is_queued_for_deletion():
 		var dock_signature := str(dock.get_meta("action_chrome_render_signature", ""))
-		if dock_signature != "" and dock_signature == current_signature:
-			var dock_parent := dock.get_parent()
-			var shadow_parent := shadow.get_parent()
-			if dock_parent != null and shadow_parent != null:
-				dock_parent.remove_child(dock)
-				shadow_parent.remove_child(shadow)
-				retained_battle_action_dock = dock
-				retained_battle_action_dock_shadow = shadow
-				retained_battle_action_dock_signature = dock_signature
-				dock.set_meta("retained_for_battle_render", true)
-				shadow.set_meta("retained_for_battle_render", true)
-		var intent := root_layer.find_child("ActionIntentDock", true, false) as Control
-		if intent != null and is_instance_valid(intent) and not intent.is_queued_for_deletion():
-			var intent_parent := intent.get_parent()
-			var intent_signature := str(intent.get_meta("action_chrome_render_signature", ""))
-			if intent_parent != null and intent_signature == current_signature:
-				intent_parent.remove_child(intent)
-				retained_battle_action_intent = intent
-				retained_battle_action_intent_signature = intent_signature
-				intent.set_meta("retained_for_battle_render", true)
+		var dock_parent := dock.get_parent()
+		if dock_signature != "" and dock_signature == current_signature and dock_parent != null:
+			dock_parent.remove_child(dock)
+			retained_battle_action_dock = dock
+			retained_battle_action_dock_signature = dock_signature
+			dock.set_meta("retained_for_battle_render", true)
+	var intent := root_layer.find_child("ActionIntentDock", true, false) as Control
+	if intent != null and is_instance_valid(intent) and not intent.is_queued_for_deletion():
+		var intent_parent := intent.get_parent()
+		var intent_signature := str(intent.get_meta("action_chrome_render_signature", ""))
+		if intent_parent != null and intent_signature == current_signature:
+			intent_parent.remove_child(intent)
+			retained_battle_action_intent = intent
+			retained_battle_action_intent_signature = intent_signature
+			intent.set_meta("retained_for_battle_render", true)
 
 func release_retained_battle_action_chrome() -> void:
-	for retained in [retained_battle_action_dock, retained_battle_action_dock_shadow, retained_battle_action_intent]:
+	for retained in [retained_battle_action_dock, retained_battle_action_intent]:
 		if retained != null and is_instance_valid(retained):
 			if retained.get_parent() != null:
 				retained.get_parent().remove_child(retained)
 			retained.queue_free()
 	retained_battle_action_dock = null
-	retained_battle_action_dock_shadow = null
 	retained_battle_action_dock_signature = ""
 	retained_battle_action_intent = null
 	retained_battle_action_intent_signature = ""
@@ -596,13 +604,28 @@ func battle_action_bar_can_retain() -> bool:
 		return false
 	return action_bar != null and is_instance_valid(action_bar) and action_bar.get_parent() == root_layer
 
+func offline_action_input_signature(hand: Array) -> String:
+	return "%s|%s|%d|%d|%d|%d|%d|%s|%d|%d" % [
+		hand_render_identity_signature(hand),
+		offline_phase,
+		get_current_seat(),
+		1 if offline_turn_needs_draw else 0,
+		offline_claim_sequence,
+		offline_danger_confirmation_sequence,
+		pending_danger_discard_index,
+		pending_danger_discard_tile,
+		1 if player_ai_assist_enabled() else 0,
+		1 if offline_restart_confirming else 0,
+	]
+
+
 func battle_action_bar_state_signature() -> String:
 	var hand := get_self_hand()
 	return "%s|%s|%s|%s|%s|%d|%s|%s|%d|%d|%d|%d" % [
 		mode,
 		offline_phase,
 		active_rule_variant(),
-		hand_identity_fingerprint(hand),
+		offline_action_input_signature(hand),
 		str(offline_claim_discard_bans),
 		1 if player_ai_assist_enabled() else 0,
 		str(ai_advice_hand_signature),
@@ -799,23 +822,21 @@ func retain_battle_seats_for_render() -> void:
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var panel := root_layer.get_node_or_null("SeatPanel_%d" % seat) as Control
-		var shadow := root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat) as Control
-		if panel == null or shadow == null or not is_instance_valid(panel) or not is_instance_valid(shadow):
+		if panel == null or not is_instance_valid(panel):
 			continue
-		if panel.is_queued_for_deletion() or shadow.is_queued_for_deletion():
+		if panel.is_queued_for_deletion():
 			continue
 		var identity := battle_seat_identity_signature(seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_retention_viewport_snapshot)
-		if identity == "" or str(panel.get_meta("seat_identity_signature", "")) != identity or str(shadow.get_meta("seat_identity_signature", "")) != identity:
+		if identity == "" or str(panel.get_meta("seat_identity_signature", "")) != identity:
 			continue
 		root_layer.remove_child(panel)
-		root_layer.remove_child(shadow)
-		retained_battle_seats[seat] = {"panel": panel, "shadow": shadow, "signature": identity}
+		retained_battle_seats[seat] = {"panel": panel, "signature": identity}
 
 func release_retained_battle_seat(seat: int) -> void:
 	var entry_variant = retained_battle_seats.get(seat, null)
 	if typeof(entry_variant) == TYPE_DICTIONARY:
 		var entry: Dictionary = entry_variant
-		for node_key in ["panel", "shadow"]:
+		for node_key in ["panel"]:
 			var control := entry.get(node_key, null) as Control
 			if control == null or not is_instance_valid(control):
 				continue
@@ -991,7 +1012,7 @@ func retain_battle_hand_tray_for_render() -> void:
 	if tray == null or not is_instance_valid(tray) or tray.is_queued_for_deletion():
 		return
 	var hand_snapshot := get_self_hand()
-	var current_signature := "%s|%s" % [hand_identity_fingerprint(hand_snapshot), mode]
+	var current_signature := hand_render_identity_signature(hand_snapshot)
 	hand_render_snapshot_signature = current_signature
 	hand_render_snapshot_state_signature = hand_visual_state_signature(hand_snapshot)
 	hand_render_snapshot_valid = true
@@ -1075,6 +1096,9 @@ func retain_battle_atmosphere_for_render() -> void:
 	atmosphere.set_meta("retained_for_battle_render", true)
 
 func clear_screen() -> void:
+	if mode != "offline" and (offline_ai_active or offline_ai_run_queued or not offline_human_discard_callback.is_null()):
+		cancel_offline_ai_run()
+	preserve_chat_panel_for_redraw()
 	ui_page_generation += 1
 	loading_screen_active = false
 	telemetry_sheet_open = false
@@ -1100,6 +1124,8 @@ func clear_screen() -> void:
 	clear_screen_tweens()
 	clear_fx_overlays()
 	clear_toast_on_mode_change()
+	if toast_current != null and is_instance_valid(toast_current):
+		call_deferred("reflow_active_toast")
 	if mode != "offline" and mode != "online_game":
 		release_retained_battle_views()
 	for child in get_children():
@@ -1152,11 +1178,8 @@ func clear_screen() -> void:
 	pending_claim_live_root_id = 0
 	pending_claim_timer_label = null
 	pending_claim_warning_labels.clear()
-	pending_claim_timer_fill = null
-	pending_claim_priority_label = null
 	pending_claim_last_timer_text = ""
 	pending_claim_last_warning_text = ""
-	pending_claim_last_priority_text = ""
 	diagnostic_dialog_open = false
 	safe_area_margins = current_safe_area_margins()
 	emit_ui_qa_marker("safe_area|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f" % [safe_area_margins.x, safe_area_margins.y, safe_area_margins.z, safe_area_margins.w, effective_viewport_size().x, effective_viewport_size().y])
@@ -1658,6 +1681,7 @@ func start_offline(instant: bool = false) -> void:
 		play_screen_transition(_build, false, "ink_wash")
 
 func _start_offline_impl() -> void:
+	cancel_offline_ai_run()
 	var should_begin_tutorial: bool = tutorial_step == TUTORIAL_STEP_NEW
 	hand_keyboard_selection = -1
 	interactive_guide_target_index = -1
@@ -1726,7 +1750,7 @@ func _start_offline_impl() -> void:
 	# Add floating ambient spirits to table scene
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless" and ui_enhancements != null and is_instance_valid(ui_enhancements) and ambient_layer != null and is_instance_valid(ambient_layer):
 		ui_enhancements.create_floating_spirit(ambient_layer, ambient_layer.get_rect() if ambient_layer.get_rect().size.x > 0 else Rect2(Vector2.ZERO, get_viewport().size), 4)
-	if offline_progress_loaded_state and offline_phase == "await_discard" and current_seat != 0:
+	if offline_progress_loaded_state and offline_phase == "await_discard" and (current_seat != 0 or offline_turn_needs_draw):
 		schedule_ai_until_human()
 
 
@@ -1945,10 +1969,11 @@ func render_game(state_changed: bool = false) -> void:
 	}
 	table.set_meta("battle_render_context", battle_render_context)
 	draw_table_atmosphere_frame(table)
-	draw_walls(table)
+	draw_walls(table, false)
 	draw_table_living_illustration(table)
 	draw_center(table)
 	draw_discards(table, battle_render_context)
+	draw_opponent_hands(root_layer, battle_render_context)
 
 	var battle_discard_snapshot := {"tile": get_last_discard(), "seat": get_last_discard_seat(), "current_seat": render_current_seat}
 	var battle_seat_viewport_snapshot := battle_render_viewport
@@ -2162,9 +2187,11 @@ func refresh_ai_advisor_panel() -> void:
 	var current_root_generation := int(root_layer.get_meta("ui_page_generation", ui_page_generation))
 	var current_fingerprint := JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
 	var existing_panel := root_layer.get_node_or_null("AdvisorPanel")
+	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation and ai_advisor_fingerprint == current_fingerprint:
+		return
+	ai_render_report_snapshot.clear()
+	ai_render_report_snapshot_ready = false
 	if existing_panel != null and is_instance_valid(existing_panel) and ai_advisor_root_generation == current_root_generation:
-		if ai_advisor_fingerprint == current_fingerprint:
-			return
 		refresh_advisor_panel_cards(existing_panel)
 		ai_advisor_fingerprint = current_fingerprint
 		root_layer.set_meta("advisor_card_update_mode", "in_place")
@@ -2235,12 +2262,11 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 	for seat_layout in SEAT_LAYOUTS:
 		var seat := int(seat_layout[0])
 		var old_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
-		var old_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var old_report = previous_reports.get(seat, {})
 		var next_report = current_seat_threat_reports.get(seat, {})
 		var old_revision := int(old_report.get("seat_revision", seat_threat_report_revision(old_report))) if typeof(old_report) == TYPE_DICTIONARY else 0
 		var next_revision := int(next_report.get("seat_revision", seat_threat_report_revision(next_report))) if typeof(next_report) == TYPE_DICTIONARY else 0
-		if old_panel != null and is_instance_valid(old_panel) and old_shadow != null and is_instance_valid(old_shadow) and old_revision == next_revision:
+		if old_panel != null and is_instance_valid(old_panel) and old_revision == next_revision:
 			continue
 		changed_seats.append(seat)
 		var old_panel_index := old_panel.get_index() if old_panel != null and is_instance_valid(old_panel) else -1
@@ -2248,20 +2274,10 @@ func update_seat_threats_display(seat_threat_reports: Dictionary) -> void:
 			kill_screen_tweens_for_subtree(old_panel)
 			root_layer.remove_child(old_panel)
 			old_panel.queue_free()
-		var old_shadow_index := old_shadow.get_index() if old_shadow != null and is_instance_valid(old_shadow) else -1
-		if old_shadow != null and is_instance_valid(old_shadow):
-			kill_screen_tweens_for_subtree(old_shadow)
-			root_layer.remove_child(old_shadow)
-			old_shadow.queue_free()
 		draw_seat(root_layer, seat, seat_layout[1], str(seat_layout[2]), current_seat_threat_reports, {}, seat_refresh_viewport_snapshot)
-		var new_shadow = root_layer.get_node_or_null("SeatPanel3DCastShadow_%d" % seat)
 		var new_panel = root_layer.get_node_or_null("SeatPanel_%d" % seat)
 		if new_panel != null and old_panel != null and is_instance_valid(old_panel):
 			copy_local_ui_contract_metadata(old_panel, new_panel)
-		if new_shadow != null and old_shadow != null and is_instance_valid(old_shadow):
-			copy_local_ui_contract_metadata(old_shadow, new_shadow)
-		if new_shadow != null and old_shadow_index >= 0:
-			root_layer.move_child(new_shadow, mini(old_shadow_index, root_layer.get_child_count() - 1))
 		if new_panel != null and old_panel_index >= 0:
 			root_layer.move_child(new_panel, mini(old_panel_index, root_layer.get_child_count() - 1))
 	root_layer.set_meta("seat_threat_changed_seats", changed_seats)
@@ -2360,14 +2376,40 @@ func human_discard(index: int) -> void:
 		set_tutorial_checkpoint(TUTORIAL_STEP_RESPONSE, "已完成首次出牌")
 	elif tutorial_step == TUTORIAL_STEP_WIN:
 		complete_tutorial("已完成摸切与响应练习")
+	queue_offline_discard_resolution(0, tile)
 	render_game(true)
-	get_tree().process_frame.connect(Callable(self, "resolve_human_discard_after_frame").bind(tile), CONNECT_ONE_SHOT)
 
-func resolve_human_discard_after_frame(tile: String) -> void:
-	if mode != "offline" or offline_phase != "resolving" or last_discard_seat != 0 or last_discard != tile:
+func queue_offline_discard_resolution(from_seat: int, tile: String) -> void:
+	if runtime_shutdown_requested or mode != "offline" or offline_phase != "resolving" or from_seat != last_discard_seat or tile != last_discard:
 		return
-	resolve_after_discard(0, tile)
-	if mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
+	offline_human_discard_sequence += 1
+	disconnect_queued_human_discard_callback()
+	if from_seat == 0:
+		offline_human_discard_callback = Callable(self, "resolve_human_discard_after_frame").bind(tile, offline_ai_run_generation, active_round_id, offline_human_discard_sequence)
+	else:
+		offline_human_discard_callback = Callable(self, "resolve_offline_discard_after_frame").bind(from_seat, tile, offline_ai_run_generation, active_round_id, offline_human_discard_sequence)
+	get_tree().process_frame.connect(offline_human_discard_callback, CONNECT_ONE_SHOT)
+
+func disconnect_queued_human_discard_callback() -> void:
+	if offline_human_discard_callback.is_null():
+		return
+	var runtime_tree := get_tree()
+	if runtime_tree != null and runtime_tree.process_frame.is_connected(offline_human_discard_callback):
+		runtime_tree.process_frame.disconnect(offline_human_discard_callback)
+	offline_human_discard_callback = Callable()
+
+
+func resolve_human_discard_after_frame(tile: String, request_generation: int, request_round_id: String, request_sequence: int) -> void:
+	resolve_offline_discard_after_frame(0, tile, request_generation, request_round_id, request_sequence)
+
+func resolve_offline_discard_after_frame(from_seat: int, tile: String, request_generation: int, request_round_id: String, request_sequence: int) -> void:
+	if not offline_ai_run_is_current(request_generation, request_round_id) or request_sequence != offline_human_discard_sequence or offline_human_discard_callback.is_null():
+		return
+	disconnect_queued_human_discard_callback()
+	if mode != "offline" or offline_phase != "resolving" or last_discard_seat != from_seat or last_discard != tile:
+		return
+	resolve_after_discard(from_seat, tile)
+	if mode == "offline" and offline_phase == "await_discard" and (current_seat != 0 or offline_turn_needs_draw):
 		schedule_ai_until_human()
 
 func human_discard_by_tile(tile: String) -> void:
@@ -2383,15 +2425,39 @@ func human_discard_by_tile(tile: String) -> void:
 		clear_pending_danger_discard()
 	human_discard(index)
 
+func confirm_pending_danger_discard() -> void:
+	if not has_pending_danger_discard():
+		return
+	var hand := get_self_hand()
+	var index: int = pending_danger_discard_index
+	if index < 0 or index >= hand.size() or str(hand[index]) != pending_danger_discard_tile:
+		return
+	human_discard(index)
+
+
 func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 	claim = claim.strip_edges().to_lower()
 	if mode != "offline" or offline_phase != "pending_claim":
 		return
 	# A tap can arrive between two countdown frames. Expired claims always pass.
 	if pending_claim_remaining_seconds() == 0:
-		if claim != "pass":
-			human_claim("pass")
+		claim = "pass"
+	var from_seat = int(offline_pending_claim.get("from_seat", -1))
+	var tile = str(offline_pending_claim.get("tile", ""))
+	if from_seat <= 0 or from_seat >= players.size() or tile == "":
 		return
+	var options: Array = offline_pending_claim.get("options", [])
+	if claim != "pass":
+		if not options.has(claim):
+			return
+		if claim == "chi" and not chi_choice.is_empty():
+			if typeof(chi_choice.get("meld", null)) != TYPE_ARRAY or typeof(chi_choice.get("needed", null)) != TYPE_ARRAY or not is_valid_pending_chi_choice(chi_choice):
+				return
+		if bool(offline_pending_claim.get("rob_gang", false)):
+			if claim != "hu" or not can_finish_offline_round(0, tile, false, from_seat, "rob_gang"):
+				return
+		elif not is_valid_offline_claim(0, from_seat, tile, claim, chi_choice):
+			return
 	# Invalidate the visible response stack before mutating the table. This closes
 	# the double-click window while the deferred full render is being scheduled.
 	invalidate_pending_claim_action_stack()
@@ -2400,10 +2466,6 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 	interactive_guide_target_index = -1
 	clear_pending_danger_discard()
 	hand_keyboard_selection = -1
-	var from_seat = int(offline_pending_claim.get("from_seat", -1))
-	var tile = str(offline_pending_claim.get("tile", ""))
-	if from_seat < 0 or tile == "":
-		return
 	if claim == "pass":
 		play_pending_claim_choice_confirmation_fx(claim, from_seat, tile)
 		var pending_options: Array = offline_pending_claim.get("options", [])
@@ -2427,11 +2489,6 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 				schedule_ai_until_human()
 			if tutorial_step == TUTORIAL_STEP_CLAIM:
 				set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
-			return
-	var options: Array = offline_pending_claim.get("options", [])
-	if not options.has(claim):
-		return
-	if claim == "chi" and not chi_choice.is_empty() and not is_valid_pending_chi_choice(chi_choice):
 		return
 	var was_rob_gang = bool(offline_pending_claim.get("rob_gang", false))
 	play_pending_claim_choice_confirmation_fx(claim, from_seat, tile)
@@ -3787,13 +3844,45 @@ func write_ai_commercial_strength_evidence_pack(pack: Dictionary, output_dir: St
 	return out
 
 
+func cancel_offline_ai_run() -> void:
+	offline_ai_run_generation += 1
+	offline_ai_active = false
+	offline_ai_run_queued = false
+	disconnect_queued_offline_ai_callback()
+	disconnect_queued_human_discard_callback()
+
+
+func disconnect_queued_offline_ai_callback() -> void:
+	if offline_ai_queued_callback.is_null():
+		return
+	var runtime_tree := get_tree()
+	if runtime_tree != null and runtime_tree.process_frame.is_connected(offline_ai_queued_callback):
+		runtime_tree.process_frame.disconnect(offline_ai_queued_callback)
+	offline_ai_queued_callback = Callable()
+
+
+func offline_ai_run_is_current(run_generation: int, run_round_id: String) -> bool:
+	return not runtime_shutdown_requested and mode == "offline" and run_generation == offline_ai_run_generation and run_round_id == active_round_id
+
+
+func finish_offline_ai_run(run_generation: int) -> void:
+	if run_generation == offline_ai_run_generation:
+		offline_ai_active = false
+
+
 func schedule_ai_until_human() -> void:
 	if mode != "offline" or offline_ai_active or offline_ai_run_queued:
 		return
 	offline_ai_run_queued = true
-	get_tree().process_frame.connect(Callable(self, "run_ai_until_human"), CONNECT_ONE_SHOT)
+	offline_ai_queued_callback = Callable(self, "run_ai_until_human").bind(offline_ai_run_generation, active_round_id)
+	get_tree().process_frame.connect(offline_ai_queued_callback, CONNECT_ONE_SHOT)
 
-func run_ai_until_human() -> void:
+func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "") -> void:
+	var run_generation := offline_ai_run_generation
+	var run_round_id := active_round_id
+	if queued_generation >= 0 and (queued_generation != run_generation or queued_round_id != run_round_id):
+		return
+	disconnect_queued_offline_ai_callback()
 	offline_ai_run_queued = false
 	if runtime_shutdown_requested or offline_ai_active:
 		return
@@ -3802,10 +3891,10 @@ func run_ai_until_human() -> void:
 	offline_ai_active = true
 	if last_discard_seat == 0:
 		await pace_after_human_discard_response()
-		if runtime_shutdown_requested:
-			offline_ai_active = false
+		if not offline_ai_run_is_current(run_generation, run_round_id):
+			finish_offline_ai_run(run_generation)
 			return
-	while mode == "offline" and offline_phase == "await_discard" and current_seat != 0:
+	while offline_ai_run_is_current(run_generation, run_round_id) and offline_phase == "await_discard" and current_seat != 0:
 		var seat = current_seat
 		var tsumo_continue_discard = ""
 		# 杠后补牌留下的当前自摸资格也必须走同一套 AI 决策；此前这里会
@@ -3824,7 +3913,7 @@ func run_ai_until_human() -> void:
 				finish_wall_draw()
 				break
 			await wait_for_runtime_delay(ai_draw_delay())
-			if mode != "offline" or offline_phase != "await_discard" or current_seat != seat:
+			if not offline_ai_run_is_current(run_generation, run_round_id) or offline_phase != "await_discard" or current_seat != seat:
 				break
 			var drawn = draw_turn_tile_or_finish(seat)
 			if drawn == "":
@@ -3858,12 +3947,16 @@ func run_ai_until_human() -> void:
 			if ai_declared_gang and mode == "offline" and offline_phase == "await_discard":
 				request_game_render()
 				await pace_after_visible_ai_action()
+				if not offline_ai_run_is_current(run_generation, run_round_id):
+					break
 				# 补牌后的自摸资格要在下一轮优先裁决，再决定是否继续出牌。
 				continue
 			if should_yield_before_ai_discard():
 				await get_tree().process_frame
+				if not offline_ai_run_is_current(run_generation, run_round_id):
+					break
 			await wait_for_runtime_delay(ai_discard_delay())
-		if mode != "offline" or offline_phase != "await_discard" or current_seat == 0:
+		if not offline_ai_run_is_current(run_generation, run_round_id) or offline_phase != "await_discard" or current_seat != seat:
 			break
 		seat = current_seat
 		var tile = tsumo_continue_discard if tsumo_continue_discard != "" else choose_ai_discard_for_seat(seat)
@@ -3882,12 +3975,12 @@ func run_ai_until_human() -> void:
 			break
 		if mode == "offline" and offline_phase == "await_discard":
 			await pace_after_visible_ai_action(current_seat == 0)
-	if mode == "offline" and offline_phase == "await_discard" and current_seat == 0 and offline_turn_needs_draw:
+	if offline_ai_run_is_current(run_generation, run_round_id) and offline_phase == "await_discard" and current_seat == 0 and offline_turn_needs_draw:
 		if wall.is_empty():
 			finish_wall_draw()
 		else:
 			await wait_for_runtime_delay(human_draw_delay())
-			if mode == "offline" and offline_phase == "await_discard" and current_seat == 0:
+			if offline_ai_run_is_current(run_generation, run_round_id) and offline_phase == "await_discard" and current_seat == 0 and offline_turn_needs_draw:
 				var drawn = draw_turn_tile_or_finish(0)
 				if drawn != "":
 					sort_player_hand(0)
@@ -3897,7 +3990,7 @@ func run_ai_until_human() -> void:
 					else:
 						add_log("轮到你出牌。")
 					render_game(true)
-	offline_ai_active = false
+	finish_offline_ai_run(run_generation)
 
 func discard_tile_by_index(seat: int, index: int) -> String:
 	if seat < 0 or seat >= players.size():
@@ -3908,7 +4001,7 @@ func discard_tile_by_index(seat: int, index: int) -> String:
 	var tile = str(hand[index])
 	if not is_valid_offline_discard(seat, tile):
 		return ""
-	if not commit_discard(seat, tile):
+	if not commit_discard(seat, tile, index):
 		return ""
 	return tile
 
@@ -3939,13 +4032,15 @@ func is_valid_offline_discard(seat: int, tile: String) -> bool:
 		return false
 	return count_tile(players[seat].get("hand", []), tile) > 0
 
-func commit_discard(seat: int, tile: String) -> bool:
+func commit_discard(seat: int, tile: String, preferred_index: int = -1) -> bool:
 	tile = normalize_tile_code(tile)
 	if not is_valid_offline_discard(seat, tile):
 		return false
 	var hand: Array = players[seat]["hand"]
-	var index = find_tile_in_hand(hand, tile)
+	var index := preferred_index if preferred_index >= 0 else find_tile_in_hand(hand, tile)
 	if index < 0:
+		return false
+	if index >= hand.size() or normalize_tile_code(str(hand[index])) != tile:
 		return false
 	hand.remove_at(index)
 	var hand_instance_serials: Array = players[seat].get("hand_instance_serials", [])
@@ -3981,6 +4076,7 @@ func resolve_after_discard(from_seat: int, tile: String) -> void:
 		var human_options = get_claim_options(0, from_seat, tile, human_hand_counts)
 		var visible_human_options = filter_human_claim_options(human_options, from_seat, ai_claim)
 		if not visible_human_options.is_empty():
+			offline_claim_sequence += 1
 			offline_pending_claim = {
 				"from_seat": from_seat,
 				"tile": tile,

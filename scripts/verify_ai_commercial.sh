@@ -117,7 +117,9 @@ run_check() {
 	EXECUTED=$((EXECUTED + 1))
 	started="$(date +%s)"
 	echo "==> $name"
-	if (cd "$ROOT_DIR" && "$@") >"$log_path" 2>&1; then
+	if (cd "$ROOT_DIR" &&
+		printf '=== QA BATCH: %s ===\n=== RUNTIME SOURCE FINGERPRINT: %s ===\n' "$QA_BATCH_ID" "$RUNTIME_SOURCE_DIFF_FINGERPRINT" &&
+		"$@") >"$log_path" 2>&1; then
 		if [ "$RUNTIME_SOURCE_STATE" = "clean" ]; then
 			printf '\n=== QA REVISION: %s ===\n' "$REVISION_FULL" >>"$log_path"
 		else
@@ -162,6 +164,7 @@ run_godot_check "Information fairness" 13 "added-gang decisions ignore concealed
 run_godot_check "Rule legality" 41 "discard furiten blocks ron and chankan"
 run_godot_check "Rule legality" 42 "passed-win state follows the local contract"
 run_godot_check "Rule legality" 57 "passed-win multi-wait lifecycle remains correct"
+run_godot_check "Rule legality" 294 "expired human responses pass once instead of deadlocking or accepting stale claims"
 run_godot_check "Rule legality" 58 "post-claim discard bans cannot deadlock play"
 run_godot_check "Rule legality" 60 "package-payer settlement remains conserved"
 run_godot_check "Rule legality" 61 "wall-draw tenpai payments remain conserved"
@@ -184,7 +187,9 @@ run_godot_check "Strength evidence" 89 "independent fixed-player pressure sample
 run_godot_check "Strength evidence" 90 "only actionable danger counts against hard AI"
 run_godot_check "Information fairness" 91 "hidden-hand swaps cannot alter added-gang AI"
 run_godot_check "Information fairness" 281 "added-gang threat cache tracks public tile state"
+run_godot_check "Runtime stability" 295 "added-gang memo tracks difficulty, wall depth and temporary furiten"
 run_godot_check "Strategy quality" 96 "own concealed tiles inform defensive visibility"
+run_godot_check "Strategy quality" 293 "exhausted honors exclude meld hands but preserve thirteen-orphans risk"
 run_godot_check "Endgame policy" 290 "hard two-away guard accepts a safer improving line"
 run_godot_check "Endgame policy" 92 "hard guard covers catastrophic thin-tenpai pressure"
 run_godot_check "Strategy quality" 93 "avoidable all-opponent danger telemetry stays actionable"
@@ -193,6 +198,10 @@ run_godot_check "Strategy quality" 95 "exact-score discard ties preserve decisio
 run_godot_check "Strategy quality" 97 "exposed melds affect numeric route scoring"
 run_godot_check "Strategy quality" 287 "declined ron still evaluates legal meld claims"
 run_godot_check "Cache correctness" 268 "discard reports invalidate on scoring and decision input changes"
+run_godot_check "Cache correctness" 296 "discard and threat caches track passed wins and output-sink lifecycle"
+run_godot_check "Runtime stability" 297 "visible AI coroutines retain round ownership across redeal restore redraw and shutdown"
+run_godot_check "Candidate inventory" 298 "projected waits conserve discarded copies and self-discard quality"
+run_godot_check "Post-claim prediction" 299 "future meld inventory route and scoring match legal committed claims"
 
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
@@ -234,6 +243,7 @@ fi
 	echo "- Endgame claims: late-wall open claims and self-gangs must preserve tenpai discipline while useful actions remain available."
 	echo "- Fairness: decisions under test use only public information; concealed-hand swaps cannot change added-gang declarations."
 	echo "- Defensive visibility: the acting AI counts its own concealed tiles for wall, feed, and deal-in risk without inspecting opponents' concealed tiles."
+	echo "- Exhausted honors: four self-known copies exclude meld-hand ron and honor-pattern bonuses; closed thirteen-orphans and numbered sequence waits retain risk, including added-gang evaluation and own-hand cache changes."
 	echo "- Integrity: every sampled terminal hand keeps the 144-tile physical ledger and the four-seat score ledger."
 	echo "- Difficulty and strength: easy/normal/hard conservation is exercised; paired easy/hard multi-seed packs and an independent fixed-player probe must pass."
 	echo "- Strength outcome telemetry: raw danger and whole-table ron incidence remain recorded; actionable safer alternatives and deal-ins to the fixed player probe decide the commercial defense gate."

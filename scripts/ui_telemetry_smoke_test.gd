@@ -79,12 +79,13 @@ func run() -> void:
 		check(card_rect.grow(1.0).encloses(screen_rect(control)), "telemetry control %s stays inside the reading card" % control.name)
 	check(body.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART and not body.clip_text and body.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "telemetry explanation wraps without trimming in its scroll surface")
 	check(consent_button.custom_minimum_size.y >= 44.0 and export_button.custom_minimum_size.y >= 44.0 and clear_button.custom_minimum_size.y >= 44.0, "telemetry actions retain touch-sized minimum heights")
+	check(clear_button.disabled, "empty diagnostics queue disables a meaningless clear operation")
 	check(status.text == "未同意 · 默认不记录" and export_status.text == "导出：未导出" and consent_button.text == "同意记录", "telemetry defaults to an explicit no-record state")
 
 	scene.toggle_telemetry_consent()
 	await settle()
 	check(scene.telemetry_consent and scene.telemetry_consent_decided and scene.telemetry_outbox.size() == 1, "telemetry consent records one local consent event")
-	check(status.text == "已同意 · 本地队列 1 条" and consent_button.text == "关闭记录", "telemetry sheet refreshes to the consented state")
+	check(status.text == "已同意 · 本地队列 1 条" and consent_button.text == "关闭并清空", "telemetry sheet refreshes to the consented state")
 
 	scene.clear_telemetry_data()
 	await settle()
@@ -98,6 +99,7 @@ func run() -> void:
 	scene.toggle_telemetry_consent()
 	await settle()
 	check(not scene.telemetry_consent and scene.telemetry_consent_decided and scene.telemetry_outbox.is_empty(), "revoking telemetry consent clears all local events")
+	check(clear_button.disabled, "revocation clears the queue and disables clear")
 	check(status.text == "已关闭 · 不记录" and consent_button.text == "同意记录", "telemetry sheet exposes the revoked state")
 	check(not scene.telemetry_record_event("round_started", {"rule_variant": "yangzhou", "difficulty": "QA", "hand_number": 2}), "revoked telemetry rejects new events")
 

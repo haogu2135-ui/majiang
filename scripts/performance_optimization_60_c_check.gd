@@ -429,15 +429,16 @@ func run() -> void:
 	action_test_bar.add_child(action_test_button)
 	scene.action_bar = action_test_bar
 	scene.draw_action_dock(action_root)
-	var first_action_dock := action_root.get_node_or_null("ActionButtonDock") as Control
-	var first_action_intent := action_root.get_node_or_null("ActionIntentDock") as Control
-	var first_action_shadow := action_root.get_node_or_null("ActionDock3DCastShadow") as Control
-	var first_action_pulse := first_action_dock.find_child("ActionButtonDockPulseDriver", true, false) as Control if first_action_dock != null else null
+	var first_action_dock := action_root.get_node_or_null("ActionButtonDock") as TextureRect
+	var first_action_intent := action_root.get_node_or_null("ActionIntentDock") as TextureRect
+	var first_action_intent_text := first_action_intent.get_node_or_null("ActionIntentText") as Label if first_action_intent != null else null
 	var first_action_dock_id: int = first_action_dock.get_instance_id() if first_action_dock != null else 0
 	var first_action_intent_id: int = first_action_intent.get_instance_id() if first_action_intent != null else 0
-	var first_action_shadow_id: int = first_action_shadow.get_instance_id() if first_action_shadow != null else 0
+	var first_action_intent_text_id: int = first_action_intent_text.get_instance_id() if first_action_intent_text != null else 0
+	check(first_action_dock != null and first_action_intent != null and first_action_dock.texture is AtlasTexture and first_action_dock.texture.atlas == scene.optional_gpt_illustration_texture("menu_card_readable_gpt") and first_action_intent.texture is AtlasTexture and first_action_intent.texture.atlas == first_action_dock.texture.atlas, "normal action chrome uses the actual authored paper surfaces")
+	check(action_root.get_node_or_null("ActionDock3DCastShadow") == null and first_action_dock != null and first_action_dock.get_node_or_null("ActionButtonDockPulseDriver") == null, "normal action chrome does not restore retired shadow or pulse decoration")
 	scene.retain_battle_action_chrome_for_render()
-	check(scene.retained_battle_action_dock != null and scene.retained_battle_action_dock_shadow != null and scene.retained_battle_action_intent != null, "unchanged action chrome enters bounded render retention")
+	check(scene.retained_battle_action_dock == first_action_dock and scene.retained_battle_action_intent == first_action_intent and first_action_dock != null and first_action_dock.get_parent() == null and first_action_intent != null and first_action_intent.get_parent() == null and scene.retained_battle_action_dock_signature != "" and scene.retained_battle_action_intent_signature != "", "unchanged real action surfaces enter detached bounded render retention")
 	action_test_bar.queue_free()
 	var second_action_test_bar := HBoxContainer.new()
 	second_action_test_bar.name = "ActionTestBarSecond"
@@ -452,9 +453,8 @@ func run() -> void:
 	scene.draw_action_dock(action_root)
 	var second_action_dock := action_root.get_node_or_null("ActionButtonDock") as Control
 	var second_action_intent := action_root.get_node_or_null("ActionIntentDock") as Control
-	var second_action_shadow := action_root.get_node_or_null("ActionDock3DCastShadow") as Control
-	var second_action_pulse := second_action_dock.find_child("ActionButtonDockPulseDriver", true, false) as Control if second_action_dock != null else null
-	check(second_action_dock != null and second_action_dock.get_instance_id() == first_action_dock_id and second_action_intent != null and second_action_intent.get_instance_id() == first_action_intent_id and second_action_shadow != null and second_action_shadow.get_instance_id() == first_action_shadow_id and second_action_pulse != null and second_action_pulse.get_instance_id() == first_action_pulse.get_instance_id(), "unchanged action redraw reuses dock shadow intent and pulse owner")
+	var second_action_intent_text := second_action_intent.get_node_or_null("ActionIntentText") as Label if second_action_intent != null else null
+	check(second_action_dock != null and second_action_dock.get_instance_id() == first_action_dock_id and second_action_intent != null and second_action_intent.get_instance_id() == first_action_intent_id and second_action_intent_text != null and second_action_intent_text.get_instance_id() == first_action_intent_text_id, "unchanged action redraw reuses both real surfaces and the native intent text owner")
 	scene.retain_battle_action_chrome_for_render()
 	second_action_test_bar.queue_free()
 	var pending_action_test_bar := HBoxContainer.new()
@@ -705,26 +705,19 @@ func run() -> void:
 	var first_summary_scrim := summary_root.find_child("RoundSummaryBackdropScrim", true, false) as Control
 	var first_summary_rows := summary_root.find_children("RoundSummaryRankRow_*", "Control", true, false)
 	var first_summary_row := first_summary_rows[0] as Control if not first_summary_rows.is_empty() else null
-	var first_summary_preview := first_summary_panel.find_child("AnimationPreview_victory_sparkle", true, false) as Control if first_summary_panel != null else null
+	var first_summary_body := first_summary_panel.find_child("RoundSummaryBody", true, false) as Label if first_summary_panel != null else null
+	var first_summary_body_id: int = first_summary_body.get_instance_id() if first_summary_body != null else 0
 	var first_summary_panel_id: int = first_summary_panel.get_instance_id() if first_summary_panel != null else 0
 	var first_summary_shield_id: int = first_summary_shield.get_instance_id() if first_summary_shield != null else 0
 	var first_summary_scrim_id: int = first_summary_scrim.get_instance_id() if first_summary_scrim != null else 0
 	check(scene.fx_enabled_effective(), "settlement test enables the runtime FX layer")
-	check(scene.animation_asset_spec("victory_sparkle").size() > 0, "settlement test can resolve the victory preview asset")
 	check(first_summary_panel != null and first_summary_shield != null and first_summary_scrim != null and str(first_summary_panel.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature() and str(first_summary_shield.get_meta("round_summary_render_signature", "")) == scene.battle_round_summary_identity_signature(), "production summary draw writes the paired modal retention signature")
-	check(scene.screen_tweens.size() > 0, "animated settlement registers transient screen work")
+	check(DisplayServer.get_name().to_lower() == "headless" or scene.screen_tweens.size() > 0, "settlement fade only registers work on a rendering display")
 	check(first_summary_row != null, "animated settlement includes a reusable rank row")
-	check(first_summary_preview != null, "animated settlement includes a reusable animation preview")
+	check(first_summary_body != null and first_summary_panel.find_child("AnimationPreview_victory_sparkle", true, false) == null, "settlement retains its actual native text without the retired victory preview")
 	if first_summary_panel != null:
 		first_summary_panel.modulate = Color(1.0, 1.0, 1.0, 0.17)
 		first_summary_panel.scale = Vector2(0.88, 0.88)
-	if first_summary_row != null:
-		first_summary_row.modulate = Color(1.0, 1.0, 1.0, 0.12)
-		first_summary_row.offset_left = -18.0
-		first_summary_row.offset_right = -18.0
-	if first_summary_preview != null:
-		first_summary_preview.modulate.a = 0.31
-		first_summary_preview.rotation = 0.08
 	scene.retain_battle_round_summary_for_render()
 	check(scene.retained_battle_round_summary_panel != null and scene.retained_battle_round_summary_shield != null and scene.retained_battle_round_summary_signature != "", "unchanged settlement modal enters bounded retention")
 	scene.clear_screen()
@@ -735,11 +728,11 @@ func run() -> void:
 	var second_summary_scrim := summary_root.find_child("RoundSummaryBackdropScrim", true, false) as Control
 	var second_summary_rows := summary_root.find_children("RoundSummaryRankRow_*", "Control", true, false)
 	var second_summary_row := second_summary_rows[0] as Control if not second_summary_rows.is_empty() else null
-	var second_summary_preview := second_summary_panel.find_child("AnimationPreview_victory_sparkle", true, false) as Control if second_summary_panel != null else null
+	var second_summary_body := second_summary_panel.find_child("RoundSummaryBody", true, false) as Label if second_summary_panel != null else null
 	check(second_summary_panel != null and second_summary_panel.get_instance_id() == first_summary_panel_id and second_summary_shield != null and second_summary_shield.get_instance_id() == first_summary_shield_id and second_summary_scrim != null and second_summary_scrim.get_instance_id() == first_summary_scrim_id and scene.retained_battle_round_summary_panel == null and scene.retained_battle_round_summary_shield == null, "unchanged settlement redraw reuses the panel, input shield, and backdrop scrim")
 	check(second_summary_panel != null and is_equal_approx(second_summary_panel.modulate.a, 1.0) and second_summary_panel.scale.is_equal_approx(Vector2.ONE), "retained settlement restores the panel transform")
-	check(second_summary_row != null and is_equal_approx(second_summary_row.modulate.a, 1.0) and is_equal_approx(second_summary_row.offset_left, 0.0) and is_equal_approx(second_summary_row.offset_right, 0.0), "retained settlement restores the rank row transform")
-	check(second_summary_preview != null and is_equal_approx(second_summary_preview.rotation, 0.0) and is_equal_approx(second_summary_preview.modulate.a, 1.0), "retained settlement restores the animation preview transform")
+	check(second_summary_row != null and first_summary_row != null and second_summary_row.get_instance_id() == first_summary_row.get_instance_id(), "retained settlement reuses the actual rank row owner")
+	check(second_summary_body != null and second_summary_body.get_instance_id() == first_summary_body_id and second_summary_body.text.contains("庄家连庄"), "retained settlement preserves the native full-text owner")
 	scene.retain_battle_round_summary_for_render()
 	scene.round_summary += " 结算记录已归档。"
 	scene.draw_round_summary(summary_root)
@@ -1548,7 +1541,7 @@ func run() -> void:
 	scene.draw_hand(tray_root_155)
 	var tray_node_155 := tray_root_155.get_node_or_null("HandTray") as Control
 	var tray_badge_155 := tray_root_155.get_node_or_null("HandTray/HandTrayStateBadge") as Control
-	check(tray_node_155 != null and str(tray_node_155.get_meta("hand_tray_state_snapshot_policy", "")) == "one_state_text_and_color_snapshot_per_draw", "手牌托盘每次重绘只解析一次状态颜色")
+	check(tray_node_155 != null and str(tray_node_155.get_meta("hand_tray_state_snapshot_policy", "")) == "one_state_text_snapshot_per_draw", "手牌托盘每次重绘只解析一次原生状态文本")
 	check(tray_node_155 != null and str(tray_node_155.get_meta("hand_tray_state_text_snapshot", "")) == state_text_155 and tray_badge_155 != null and str(tray_badge_155.get_meta("state_text_snapshot", "")) == state_text_155, "状态徽章消费托盘发布的文本快照")
 	scene.offline_phase = "ended"
 	check(tray_node_155 != null and str(tray_node_155.get_meta("hand_tray_state_text_snapshot", "")) == state_text_155, "后续实时状态变化不改写已绘制状态快照")
@@ -1570,14 +1563,13 @@ func run() -> void:
 	scene.hand_keyboard_selection = -1
 	scene.draw_hand(tray_root_156)
 	var tray_node_156 := tray_root_156.get_node_or_null("HandTray") as Control
-	var momentum_156 := tray_root_156.get_node_or_null("HandTray/HandTrayMomentumArt") as Control
-	var completion_156 := tray_root_156.get_node_or_null("HandTray/HandTrayCompletionBusArt") as Control
-	var suit_156 := tray_root_156.get_node_or_null("HandTray/HandTraySuitFlow") as Control
-	check(tray_node_156 != null and momentum_156 != null and completion_156 != null and suit_156 != null, "宽屏手牌装饰节点仍完整创建")
-	check(bool(momentum_156.get_meta("hand_active_snapshot", false)) and not bool(momentum_156.get_meta("hand_danger_snapshot", true)) and bool(completion_156.get_meta("hand_active_snapshot", false)) and not bool(suit_156.get_meta("hand_danger_snapshot", true)), "手牌装饰复用一次活动与危险状态快照")
+	var tile_lane_156 := tray_root_156.get_node_or_null("HandTray/HandTrayTiles") as Control
+	check(tray_node_156 != null and tile_lane_156 != null and tray_node_156.find_child("HandTrayMomentumArt", true, false) == null and tray_node_156.find_child("HandTrayCompletionBusArt", true, false) == null and tray_node_156.find_child("HandTraySuitFlow", true, false) == null, "宽屏手牌保留原生牌区而非冗余装饰树")
+	check(tile_lane_156 != null and bool(tile_lane_156.get_meta("hand_can_self_discard_snapshot", false)) and not bool(tile_lane_156.get_meta("hand_pending_danger_discard_snapshot", true)) and not bool(tile_lane_156.get_meta("hand_pending_claim_window_snapshot", true)), "原生手牌复用一次活动、危险与响应状态快照")
 	scene.pending_danger_discard_tile = "1W"
 	scene.pending_danger_discard_index = 0
-	check(scene.has_pending_danger_discard() and not bool(momentum_156.get_meta("hand_danger_snapshot", true)) and not bool(suit_156.get_meta("hand_danger_snapshot", true)), "后续危险状态变化不改写已绘制装饰快照")
+	check(scene.has_pending_danger_discard() and tile_lane_156 != null and not bool(tile_lane_156.get_meta("hand_pending_danger_discard_snapshot", true)), "后续危险状态变化不改写已绘制原生牌区快照")
+
 	tray_root_156.queue_free()
 	scene.root_layer = null
 
@@ -2762,10 +2754,11 @@ func run() -> void:
 	scene.draw_seat(seat_viewport_snapshot_root_206, 0, seat_rect_206, seat_side_206, {}, {}, seat_live_viewport_206)
 	var seat_panel_206 := seat_viewport_snapshot_root_206.get_node_or_null("SeatPanel_0") as Control
 	var seat_shadow_206 := seat_viewport_snapshot_root_206.get_node_or_null("SeatPanel3DCastShadow_0") as Control
+	var seat_surface_206 := seat_panel_206 as TextureRect
 	check(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat draw publishes one viewport snapshot")
 	check(str(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot_policy", "")) == "one_viewport_snapshot_per_seat_draw", "seat draw declares one viewport read per seat")
 	check(seat_panel_206 != null and seat_panel_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat panel retains the draw viewport snapshot")
-	check(seat_shadow_206 != null and seat_shadow_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == seat_live_viewport_206, "seat shadow retains the draw viewport snapshot")
+	check(seat_surface_206 != null and seat_surface_206.texture is AtlasTexture and seat_surface_206.texture.atlas == scene.optional_gpt_illustration_texture("menu_card_readable_gpt") and seat_surface_206.get_meta("seat_viewport_snapshot_policy", "") == "one_viewport_snapshot_per_seat_draw" and seat_shadow_206 == null, "seat viewport snapshot belongs to the actual authored paper without restoring retired shadow")
 	var saved_seat_viewport_206: Vector2 = seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO)
 	scene.large_text_enabled = true
 	check(seat_viewport_snapshot_root_206.get_meta("seat_viewport_snapshot", Vector2.ZERO) == saved_seat_viewport_206, "later state changes do not rewrite the completed seat snapshot")

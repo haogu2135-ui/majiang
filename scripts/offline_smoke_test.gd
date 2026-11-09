@@ -39,6 +39,12 @@ const NAMED_VISUAL_NODE_KEYWORDS := [
 const GENERATED_GPT_ILLUSTRATION_CANDIDATE_PNGS := [
 	"wall_strip_material_reference_v1.png",
 ]
+# Retained, superseded GPT outputs remain auditable without runtime registration.
+const REPLACED_GPT_ILLUSTRATION_PNG_SHA256 := {
+	"table_gpt_backdrop_bright_gpt_r185.png": "547e38cca82843f49e5f6881ee0d8085ca1e2d0750c1c97178a0e28bde8974b8",
+	"menu_ink_entry_gpt.png": "fb9575d19609ee19699b71a158368efd70279016ae73f53b1130ff61ae7fb34f",
+	"menu_moonlit_garden_gpt.png": "6faae0d3da62681e76ffc400aeffa871cfa3c272e9f4e59a32adf9070cc4dcfa",
+}
 const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MeldKindBadge",
 	"MeldKindBadgeLabel",
@@ -51,6 +57,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ChatPanelTableLogButton",
 	"CenterDiceSimpleSeal",
 	"CenterGPTCompassTexture",
+	"CenterWindGPTCompassArt",
 	"CenterLastTileInkWash",
 	"CenterLastTileSeal",
 	"CenterWindSimpleSealTexture",
@@ -66,6 +73,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"HandTrayActionPathStreamFill",
 	"HandTrayActionPathTarget",
 	"OnlineHandReadOnlyBadge",
+	"OnlineLobbyEmptyStateGptPlate",
 	"HandProgressInkFill",
 	"HandProgressInkRail",
 	"HandProgressRoundSeal",
@@ -91,6 +99,7 @@ const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"MenuSeasonScrollTexture",
 	"MenuSeasonTrophyLoopTexture",
 	"MenuTutorialEntryBanner",
+	"MenuTitleReadingPlate",
 	"TableActionReadinessActionFill",
 	"TableActionReadinessActionRoute",
 	"TableActionReadinessFill",
@@ -257,6 +266,14 @@ func _initialize() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	var runtime_script := load("res://scripts/main.gd") as Script
+	if runtime_script == null or not runtime_script.can_instantiate():
+		check(false, "runtime script must compile before offline assertions")
+		quit(1)
+		return
+	var user_dir := DirAccess.open("user://")
+	if user_dir != null and user_dir.file_exists("offline_progress.cfg"):
+		user_dir.remove("offline_progress.cfg")
 	var scene = load("res://Main.tscn").instantiate()
 	root.add_child(scene)
 	await process_frame
@@ -382,12 +399,13 @@ func run() -> void:
 	check(scene.UPDATE_URL == "http://127.0.0.1:18081/YunzhuoMahjongGodot-v1.0.180-godot.apk", "fallback update APK URL uses this release's immutable APK path")
 	check(bool(ProjectSettings.get_setting("audio/general/text_to_speech", false)), "Godot text-to-speech project setting is enabled")
 	check(bool(ProjectSettings.get_setting("audio/driver/enable_input", false)), "audio input is enabled for voice features")
-	check(all_illustration_png_files_are_declared_or_optional_gpt(scene), "all illustration PNG files are declared as fixed UI assets or optional GPT targets")
+	check_required(all_illustration_png_files_are_declared_or_optional_gpt(scene), "illustration registry covers active PNGs, atlas sources and hash-pinned replaced GPT images")
+	check_required(not generated_illustration_candidate_is_tracked(scene, "unknown_unregistered_smoke_fixture.png", []), "an unknown PNG is rejected rather than broadly exempted")
 	check(all_declared_illustration_paths_are_png_files(scene), "all declared UI illustration assets point to existing PNG files")
 	check(all_main_illustration_texture_keys_are_declared(scene), "all literal UI illustration texture usages are declared in the asset registry")
 	check(scene.illustration_textures.size() == scene.ILLUSTRATION_ASSET_PATHS.size(), "all configured UI illustration PNGs load into the illustration texture registry")
 	check(all_declared_illustration_keys_load(scene), "every declared UI illustration key resolves through the illustration texture accessor")
-	check(scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_hero_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_primary_3d_stage_overlay") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("loading_scene_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("daily_login_gpt_calendar") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("shop_gpt_vault") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("claim_response_trail") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("discard_splash_wash") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_result_stage") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("round_summary_score_flow_bus") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("rules_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("stats_gpt_dashboard") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("achievement_gpt_gallery") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_gpt_lobby") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_lobby_panel_frame") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_lobby_group_plate") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("settings_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("offline_table_3d_overlay") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_gpt_tray") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_completion_gpt_bus") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("action_gpt_dock") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("pending_claim_action_dock") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("pending_claim_status_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("wall_live_feedback_kit") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_log_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("advisor_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("top_hud_gpt_banner") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_gpt_brocade") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("exit_gpt_confirm") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("chat_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("update_gpt_dialog") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("diagnostic_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("toast_gpt_banner") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("reset_gpt_warning") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_detail_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_celebration_gpt_burst") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("voice_gpt_channel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_feedback_gpt_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_turn_gpt_flow") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("center_wind_gpt_compass") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("danger_gpt_discard") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_tutorial_gpt_hint") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_tutorial_gpt_hint") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("flower_gpt_bloom") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_discard_gpt_preview") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_flower_gpt_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("center_wall_gpt_warning") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("top_hud_wall_gpt_warning") and all_optional_gpt_illustration_paths_are_png_targets(scene), "optional GPT illustration registry declares future PNG targets without forcing generated files")
+	check(scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_hero_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_primary_3d_stage_overlay") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("loading_scene_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("daily_login_gpt_calendar") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("shop_gpt_vault") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("claim_response_trail") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("discard_splash_wash") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_result_stage") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("round_summary_score_flow_bus") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("rules_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("stats_gpt_dashboard") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("achievement_gpt_gallery") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_gpt_lobby") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_lobby_panel_frame") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_lobby_group_plate") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("settings_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_gpt_backdrop") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("offline_table_3d_overlay") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_gpt_tray") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_completion_gpt_bus") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("action_gpt_dock") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("pending_claim_action_dock") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("pending_claim_status_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("wall_live_feedback_kit") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_log_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("advisor_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("top_hud_gpt_banner") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_gpt_brocade") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("exit_gpt_confirm") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("chat_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("update_gpt_dialog") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("diagnostic_gpt_panel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("toast_gpt_banner") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("reset_gpt_warning") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_detail_gpt_scroll") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("win_celebration_gpt_burst") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("voice_gpt_channel") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("online_feedback_gpt_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("table_turn_gpt_flow") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("center_wind_gpt_compass") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("danger_gpt_discard") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("menu_tutorial_gpt_hint") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("hand_tutorial_gpt_hint") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("flower_gpt_bloom") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_discard_gpt_preview") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("seat_flower_gpt_strip") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("center_wall_gpt_warning") and scene.GPT_ILLUSTRATION_ASSET_PATHS.has("top_hud_wall_gpt_warning") and all_optional_gpt_illustration_paths_are_bitmap_targets(scene), "optional GPT illustration registry avoids non-bitmap targets and accepts authored atlases without forcing future PNG files")
 	check(scene.optional_gpt_illustration_textures.size() <= scene.GPT_ILLUSTRATION_ASSET_PATHS.size(), "optional GPT illustration texture registry tolerates missing generated PNGs")
 	check(all_named_main_visual_nodes_have_smoke_references(), "every named visual node in main.gd has an explicit offline smoke reference")
 	check(scene.illustration_texture("menu_hero") != null and scene.illustration_texture("table_wash") != null and scene.illustration_texture("win_fanfare") != null and scene.illustration_texture("toast_notice_wave") != null and scene.illustration_texture("loading_tip_scroll") != null and scene.illustration_texture("settings_overview_scroll") != null and scene.illustration_texture("settings_section_brocade") != null and scene.illustration_texture("settings_close_silk") != null and scene.illustration_texture("hand_tutorial_scroll") != null and scene.illustration_texture("pending_claim_silk") != null and scene.illustration_texture("danger_choice_lattice") != null and scene.illustration_texture("diagnostic_signal_map") != null and scene.illustration_texture("update_stage_canopy") != null and scene.illustration_texture("update_notes_canopy") != null and scene.illustration_texture("tutorial_hint_ribbon") != null and scene.illustration_texture("online_status_silk") != null and scene.illustration_texture("flower_bloom_shadow") != null, "core menu table win toast loading settings tutorial claim danger diagnostic update online and flower bloom illustration textures are available")
@@ -400,10 +418,17 @@ func run() -> void:
 	var dynamic_atlas_texture = scene.add_optional_gpt_atlas_texture(dynamic_illustration_parent, "wall_live_feedback_kit", Rect2(40, 60, 548, 70), scene.rect_full(0.0, 0.0, 0.2, 0.2), 0.5, false)
 	check(scene.optional_gpt_illustration_texture("wall_live_feedback_kit") == null or (dynamic_atlas_texture != null and dynamic_atlas_texture.texture is AtlasTexture and dynamic_atlas_texture.modulate.a > 0.49 and dynamic_atlas_texture.modulate.a < 0.51), "optional GPT atlas texture factory slices generated sheet assets")
 	dispose_node(dynamic_illustration_parent)
+	# This synchronous appearance assertion needs a settled paper, independent
+	# of the user's saved motion profile. Animated entry has separate UI smoke.
+	var loading_test_reduce_motion: bool = scene.reduce_motion_enabled
+	scene.reduce_motion_enabled = true
 	scene.show_loading_screen()
+	scene.reduce_motion_enabled = loading_test_reduce_motion
 	check(scene.find_child("LoadingPanel", true, false) != null, "loading screen exposes its named root panel for live-resize rebuild checks")
 	check(scene.find_child("LoadingCenterPanel", true, false) != null, "loading screen exposes center panel for readability and layout checks")
-	check(scene.find_child("LoadingVersionReadabilityPlate", true, false) != null, "loading screen gives the version label an authored readability plate")
+	var loading_paper := scene.find_child("LoadingCenterPanel", true, false) as TextureRect
+	var loading_version := scene.find_child("LoadingVersionLabel", true, false) as Label
+	check(loading_paper != null and loading_paper.modulate == Color.WHITE and loading_version != null and loading_version.text.contains("1.0.180") and relative_luma(loading_version.get_theme_color("font_color")) <= 0.24, "loading version exposes native dark text on the opaque shared paper")
 	check(scene.find_child("LoadingGateTexture", true, false) != null, "loading screen renders reusable moon-gate PNG texture")
 	check(scene.optional_gpt_illustration_texture("loading_scene_gpt_backdrop") == null or scene.find_child("LoadingGPTBackdropTexture", true, false) != null, "loading screen consumes optional GPT backdrop texture when generated")
 	check(scene.find_child("LoadingMoon", true, false) != null and scene.find_child("MoonGlowBloom", true, false) != null and scene.find_child("LoadingFarMountain", true, false) != null and scene.find_child("LoadingWater", true, false) != null, "loading screen renders moon shader bloom art and ink-wash environment layers")
@@ -428,12 +453,17 @@ func run() -> void:
 	check(scene.find_child("DailyLoginStreakArt", true, false) != null and scene.find_child("DailyLoginStreakRail", true, false) != null and scene.find_child("DailyLoginStreakFill", true, false) != null, "daily login renders streak rail illustration")
 	check(scene.find_child("DailyLoginDayIndicators", true, false) != null and scene.find_child("DailyLoginRewardPanel", true, false) != null and scene.find_child("DailyLoginProgressPanel", true, false) != null, "daily login renders named day reward and progress panels")
 	check(count_nodes_with_name_prefix(scene, "DailyLoginDayNode_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginStreakNode_") == 7, "daily login renders seven visible day nodes and streak nodes")
-	check(count_nodes_with_name_prefix(scene, "DailyLoginDayTextBack_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginDayLabel_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginRewardLabel_") == 7, "daily login exposes seven readable day text groups")
+	check(count_nodes_with_name_prefix(scene, "DailyLoginDayLabel_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginDayStateLabel_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginRewardLabel_") == 7 and count_nodes_with_name_prefix(scene, "DailyLoginDayDetailProxy_") == 7, "daily login exposes seven native day state reward groups and detail actions")
 	var daily_forecast_title = scene.find_child("DailyLoginForecastTitle", true, false) as Label
 	var daily_forecast_badge = scene.find_child("DailyLoginForecastBadge", true, false) as Label
-	check(scene.find_child("DailyLoginForecastPanel", true, false) != null and scene.find_child("DailyLoginForecastRail", true, false) != null and daily_forecast_title != null and scene.find_child("DailyLoginForecastBody", true, false) != null and daily_forecast_badge != null and scene.find_child("DailyLoginForecastBadgeBack", true, false) != null, "daily login exposes seven-day reward forecast panel title body rail and badge")
+	var daily_forecast_body := scene.find_child("DailyLoginForecastBody", true, false) as Label
+	var daily_forecast_spacing := scene.find_child("DailyLoginForecastRail", true, false) as Control
+	check(daily_forecast_spacing != null and daily_forecast_spacing.get_class() == "Control" and daily_forecast_spacing.get_child_count() == 0, "daily forecast spacing host does not paint decoration")
+	check(scene.find_child("DailyLoginForecastPanel", true, false) != null and daily_forecast_title != null and daily_forecast_body != null and not daily_forecast_body.text.is_empty() and daily_forecast_badge != null, "daily login exposes complete native seven-day forecast title body and achievement state")
 	check(daily_forecast_title != null and daily_forecast_title.text == "七日奖励预告" and daily_forecast_badge != null and daily_forecast_badge.text == "已达成", "daily login completed streak forecast shows seven-day title and achieved badge")
-	check(scene.find_child("DailyLoginRewardTextBack", true, false) != null and scene.find_child("DailyLoginRewardIconBack", true, false) != null and scene.find_child("DailyLoginRewardTextLabel", true, false) != null and scene.find_child("DailyLoginProgressText", true, false) != null and scene.find_child("DailyLoginTipBack", true, false) != null and scene.find_child("DailyLoginTipLabel", true, false) != null, "daily login exposes readable reward progress and tip text backplates")
+	var daily_reward_text := scene.find_child("DailyLoginRewardTextLabel", true, false) as Label
+	var daily_progress_text := scene.find_child("DailyLoginProgressText", true, false) as Label
+	check(daily_reward_text != null and not daily_reward_text.text.is_empty() and daily_progress_text != null and not daily_progress_text.text.is_empty() and relative_luma(daily_reward_text.get_theme_color("font_color")) <= 0.24 and relative_luma(daily_progress_text.get_theme_color("font_color")) <= 0.24, "daily login exposes complete native dark reward and progress text")
 	check(scene.find_child("DailyLoginCurrentHalo", true, false) != null and scene.find_child("DailyLoginSevenDayGate", true, false) != null and scene.find_child("DailyLoginSevenDayGlyph", true, false) != null and scene.find_child("DailyLoginMilestoneGlow", true, false) != null and scene.find_child("DailyLoginMilestoneSealTexture", true, false) != null, "daily login highlights current milestone reward and seven-day GPT seal")
 	check(scene.find_child("DailyLoginRewardArt", true, false) != null and scene.find_child("DailyLoginRewardRoute", true, false) != null and scene.find_child("DailyLoginRewardRouteFill", true, false) != null and scene.find_child("DailyLoginRewardSeal", true, false) != null and scene.find_child("DailyLoginRewardMilestoneBurst", true, false) != null, "daily login reward panel renders milestone reward route and seal")
 	var daily_login_progress_fill = scene.find_child("DailyLoginProgressFill", true, false)
@@ -567,28 +597,15 @@ func run() -> void:
 	scene.start_new_offline_match()
 	check(not scene.offline_progress_loaded_state and scene.offline_hand_number == 1 and scene.active_round_id != old_round_id and scene.round_event_sequence == 1, "starting a new offline match clears the old snapshot before dealing")
 	scene.fx_enabled = saved_fx
-	check(count_nodes_with_name_prefix(scene, "SeatCompactTextBack_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarWindMark_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarShortName_") == 4, "seat panels expose avatar wind marks short names and readable text backplates")
-	check(scene.find_child("TopHudHandProgress", true, false) != null and scene.find_child("HandProgressRail", true, false) != null and scene.find_child("HandProgressDealerBadge", true, false) != null and scene.find_child("HandProgressLabel", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressPip_") == scene.MATCH_MAX_HANDS, "top HUD renders hand progress rail dealer badge label and match pips")
-	check(scene.find_child("HandProgressRouteFill", true, false) != null and scene.find_child("HandProgressActiveGlow", true, false) != null and scene.find_child("HandProgressCurrentCursor", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressRhythmTick_") == 3, "top HUD hand progress renders route fill active glow current cursor and rhythm ticks")
-	check(scene.find_child("HandProgressDealerRoute", true, false) != null and scene.find_child("HandProgressDealerRouteFill", true, false) != null and scene.find_child("HandProgressDealerRouteGate", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressDealerRouteTick_") == 2, "top HUD hand progress renders dealer route")
-	check(scene.find_child("HandProgressWallSyncRoute", true, false) != null and scene.find_child("HandProgressWallSyncRail", true, false) != null and scene.find_child("HandProgressWallSyncFill", true, false) != null, "top HUD hand progress renders wall sync route")
-	check(scene.find_child("HandProgressWallSyncSource", true, false) != null and scene.find_child("HandProgressWallSyncGate", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressWallSyncTick_") == 3, "top HUD hand progress renders wall sync source gate and rhythm ticks")
-	var low_wall_progress_parent = Control.new()
-	root.add_child(low_wall_progress_parent)
-	var previous_wall = scene.wall.duplicate()
-	scene.wall.clear()
-	for i in range(24):
-		scene.wall.append("1W")
-	scene.draw_top_hud_hand_progress(low_wall_progress_parent)
-	check(low_wall_progress_parent.find_child("HandProgressWallSyncLowWarning", true, false) != null, "top HUD hand progress renders low wall sync warning")
-	scene.wall = previous_wall
-	dispose_node(low_wall_progress_parent)
+	check(count_nodes_with_name_prefix(scene, "SeatPanel_") == 4 and count_nodes_with_name_prefix(scene, "SeatAvatarWindMark_") == 0 and count_nodes_with_name_prefix(scene, "SeatCompactScore_") == 4, "four single-surface seat cards preserve their exact native score labels")
+	check(scene.find_child("TopHudHandProgress", true, false) != null and scene.find_child("HandProgressLabel", true, false) != null and scene.find_child("HandProgressDealerLabel", true, false) != null and count_nodes_with_name_prefix(scene, "HandProgressPip_") == 0, "top HUD exposes textual match progress and dealer without fake progress pips")
+	check(scene.find_child("HandProgressRouteFill", true, false) == null and scene.find_child("HandProgressWallSyncRoute", true, false) == null, "top HUD does not construct pseudo progress fills or wall sync maps")
 	var repeat_progress_parent = Control.new()
 	root.add_child(repeat_progress_parent)
 	var previous_dealer_repeat = scene.offline_dealer_repeat
 	scene.offline_dealer_repeat = true
 	scene.draw_top_hud_hand_progress(repeat_progress_parent)
-	check(repeat_progress_parent.find_child("HandProgressRepeatBadge", true, false) != null and repeat_progress_parent.find_child("HandProgressDealerRepeatRing", true, false) != null, "top HUD hand progress renders repeat dealer badge and GPT ring when dealer repeats")
+	check(has_label_text(repeat_progress_parent, "%s庄 · 连庄" % scene.CENTER_WIND_LABELS[scene.dealer_seat]) and repeat_progress_parent.find_child("HandProgressDealerRepeatRing", true, false) == null, "top HUD exposes repeat dealer as actual text rather than a decorative ring")
 	scene.offline_dealer_repeat = previous_dealer_repeat
 	dispose_node(repeat_progress_parent)
 	check(scene.find_child("HandTrayActionPath", true, false) == null and scene.find_child("HandTrayActionDeliveryRoute", true, false) == null and count_nodes_with_name_prefix(scene, "HandTrayActionPathTick_") == 0, "hand tray omits procedural action path route ticks")
@@ -892,12 +909,10 @@ func run() -> void:
 	)
 	var action_button_normal_style = action_style_button.get_theme_stylebox("normal")
 	check(action_button_normal_style is StyleBoxEmpty and scene.style_cache.size() == 0 and action_style_button.find_child("ActionButtonArt", true, false) != null, "action buttons build compact button styles plus reusable icon accents")
-	check(action_style_button.find_child("ActionButtonResponseTexture_action", true, false) != null and action_style_button.find_child("ActionButtonRoleRail", true, false) != null and count_nodes_with_name_prefix(action_style_button, "ActionButtonEnergyDot_") == 3, "action buttons render response PNG texture role rail and energy dots without extra styleboxes")
-	check(action_style_button.find_child("ActionButtonIconBack", true, false) == null and action_style_button.find_child("ActionButtonCommandRoute", true, false) == null and action_style_button.find_child("ActionButtonExecutionGate", true, false) == null and action_style_button.find_child("ActionButtonConfirmRoute", true, false) == null and action_style_button.find_child("ActionButtonDecisionBridge", true, false) == null, "action buttons drop old code-drawn command/execution/confirm/decision decorative lines")
-	check((scene.optional_gpt_illustration_texture("action_button_panel") == null) or (action_style_button.find_child("ActionButtonPanelPlate", true, false) != null), "action buttons use optional GPT panel plate instead of code-drawn lines")
-	scene.play_action_button_press_feedback(action_style_button, "action", Color(0.25, 0.58, 0.48))
-	check(action_style_button.find_child("ActionButtonPressFeedback", true, false) != null and action_style_button.find_child("ActionButtonPressRail", true, false) != null and action_style_button.find_child("ActionButtonPressFill", true, false) != null and action_style_button.find_child("ActionButtonPressGate", true, false) != null and action_style_button.find_child("ActionButtonPressSource", true, false) != null and action_style_button.find_child("ActionButtonPressSeal", true, false) != null, "action button press feedback renders source rail fill gate and seal")
-	check(count_nodes_with_name_prefix(action_style_button, "ActionButtonPressTick_") == 3, "action button press feedback renders rhythm ticks")
+	check(action_style_button.text == "动作" and action_style_button.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt", "action buttons retain native text on one existing paper face")
+	for retired in ["ActionButtonResponseTexture_action", "ActionButtonRoleRail", "ActionButtonEnergyDot_0", "ActionButtonPanelPlate", "ActionButtonPressRail"]:
+		check(action_style_button.find_child(retired, true, false) == null, "action buttons retire decorative route %s" % retired)
+	check(action_style_button.find_child("ActionButtonFocusMarker", true, false) != null and bool(action_style_button.get_meta("hit_rect_stable", false)) and action_style_button.get_signal_connection_list("button_down").size() > 0, "action buttons preserve native focus and existing stable touch feedback without a duplicate press effect")
 	dispose_node(action_style_button)
 	var voice_action_button = scene.make_action_button("语音", Color(0.24, 0.52, 0.72), func() -> void:
 		pass
@@ -910,12 +925,12 @@ func run() -> void:
 	var fallback_action_button = scene.make_action_button("测试", Color(0.25, 0.58, 0.48), func() -> void:
 		pass
 	)
-	check(fallback_action_button.find_child("ActionButtonFallbackIcon", true, false) != null, "fallback action buttons render fallback glyph without code-drawn icon backplate")
+	check(fallback_action_button.text == "测试" and fallback_action_button.find_child("ActionButtonFallbackIcon", true, false) == null, "action labels remain native rather than duplicating a fallback glyph")
 	dispose_node(fallback_action_button)
 	var safe_action_button = scene.make_action_button("安全", Color(0.25, 0.58, 0.48), func() -> void:
 		pass
 	)
-	check(safe_action_button.find_child("ActionButtonPulse", true, false) != null, "priority action buttons render pulse focus art")
+	check(safe_action_button.get_meta("guofeng_button_face_key", "") == "menu_ink_primary" and safe_action_button.find_child("ActionButtonPulse", true, false) == null, "priority action buttons use the authored ink face without a pulse strip")
 	dispose_node(safe_action_button)
 	scene.style_cache.clear()
 	scene.style_cache_order.clear()
@@ -1095,9 +1110,11 @@ func run() -> void:
 	check(scene.screen_layer != null and scene.root_layer != null and scene.root_layer.get_parent() == scene.screen_layer and scene.find_child("ScreenLayer", true, false) != null and scene.find_child("SafeContent", true, false) != null, "screen redraw separates full-bleed background from named safe content layer")
 	check(is_equal_approx(scene.root_layer.offset_left, scene.safe_area_margins.x) and is_equal_approx(scene.root_layer.offset_top, scene.safe_area_margins.y) and is_equal_approx(scene.root_layer.offset_right, -scene.safe_area_margins.z) and is_equal_approx(scene.root_layer.offset_bottom, -scene.safe_area_margins.w), "safe content layer applies display safe-area offsets")
 	dispose_node(one_shot_sfx)
-	var test_tone_cleanup_deadline = Time.get_ticks_msec() + 4000
+	var test_tone_cleanup_deadline = Time.get_ticks_msec() + 15000
 	while scene.find_child("TestTonePlayer", true, false) != null and Time.get_ticks_msec() < test_tone_cleanup_deadline:
 		await process_frame
+		await create_timer(0.1).timeout
+	await process_frame
 	check(scene.find_child("TestTonePlayer", true, false) == null, "test tone player is cleaned up after playback")
 	check(not scene.android_tts_runtime_available(), "headless smoke test does not enter Android TTS path")
 	check(not scene.speech_backend_ready(), "headless smoke test does not report TTS backend ready")
@@ -1160,7 +1177,9 @@ func run() -> void:
 	check(scene.find_child("UpdateDialogInstallRoute", true, false) != null and scene.find_child("UpdateDialogInstallFill", true, false) != null and scene.find_child("UpdateDialogInstallSource", true, false) != null and scene.find_child("UpdateDialogInstallGate", true, false) != null and scene.find_child("UpdateDialogInstallGlyph", true, false) != null, "update dialog renders verify-to-install handoff route")
 	check(count_nodes_with_name_prefix(scene, "UpdateDialogInstallTick_") == 2, "update dialog install handoff renders rhythm ticks")
 	check(scene.find_child("UpdateDialogStageMap", true, false) != null and scene.find_child("UpdateStageCanopyTexture", true, false) != null and scene.find_child("UpdateDialogStageRail", true, false) != null and scene.find_child("UpdateDialogStageFill", true, false) != null and scene.find_child("UpdateDialogStageGate", true, false) != null and count_nodes_with_name_prefix(scene, "UpdateDialogStageNode_") == 4, "update dialog renders stage map with reusable canopy texture")
-	check(scene.find_child("UpdateDialogStageNode_downloading", true, false) != null and scene.find_child("UpdateDialogStageGlyph_ready", true, false) != null and count_nodes_with_name_prefix(scene, "UpdateDialogStageGlyph_") == 4, "update dialog stage map names download and verify stages")
+	var native_download_stage := scene.find_child("UpdateDialogStageGlyph_downloading", true, false) as Label
+	var native_verify_stage := scene.find_child("UpdateDialogStageGlyph_ready", true, false) as Label
+	check(native_download_stage != null and native_download_stage.text == "▸ 下载" and native_verify_stage != null and native_verify_stage.text == "校验" and count_nodes_with_name_prefix(scene, "UpdateDialogStageGlyph_") == 4, "update phase text exposes active download and pending verification")
 	check(count_nodes_with_name_prefix(scene, "UpdateDialogStageTick_") == 3, "update dialog stage map renders route ticks")
 	check(scene.find_child("UpdateReleaseNotesTexture", true, false) != null and scene.find_child("UpdateReleaseNotesCanopyTexture", true, false) != null and scene.find_child("UpdateReleaseNotesArt", true, false) != null and scene.find_child("UpdateReleaseNotesRail", true, false) != null and scene.find_child("UpdateReleaseNotesFill", true, false) != null and scene.find_child("UpdateReleaseNotesSeal", true, false) != null and scene.find_child("UpdateReleaseNotesLabel", true, false) != null, "update dialog renders reusable PNG release notes canopy summary route and seal")
 	check(count_nodes_with_name_prefix(scene, "UpdateReleaseNotesTick_") == 3 and count_nodes_with_name_prefix(scene, "UpdateReleaseNotesNode_") == 2, "update dialog release notes art renders rhythm ticks and nodes")
@@ -1183,7 +1202,8 @@ func run() -> void:
 	var update_convergence_fill = scene.find_child("UpdateStatusConvergenceFill", true, false) as Control
 	check(update_stage_fill != null and update_stage_fill.anchor_right > 0.30 and update_stage_fill.anchor_right < 0.36, "update dialog stage fill tracks active stage")
 	check(update_stage_gate != null and update_stage_gate.anchor_left > 0.32 and update_stage_gate.anchor_left < 0.35, "update dialog stage gate follows active stage")
-	check(update_install_fill != null and update_install_fill.anchor_right <= 0.09, "downloading update dialog keeps install handoff pending before verification")
+	var native_stage_current := scene.find_child("UpdateDialogStageCurrentLabel", true, false) as Label
+	check(update_primary_button.disabled and update_primary_button.text == "下载中" and native_stage_current != null and native_stage_current.text.contains("下载升级包") and not bool(native_verify_stage.get_meta("update_stage_active", true)), "downloading state exposes disabled installation and pending verification")
 	check(update_convergence_fill != null and update_convergence_fill.anchor_right > 0.39 and update_convergence_fill.anchor_right < 0.41, "update dialog status convergence fill tracks active stage")
 	check(scene.find_child("UpdatePackageTexture", true, false) != null, "update dialog renders reusable package PNG texture")
 	scene.update_state = "ready"
@@ -1209,50 +1229,42 @@ func run() -> void:
 	check(update_install_fill != null and update_install_fill.anchor_right > 0.90, "ready update dialog fills verify-to-install handoff route")
 	check(update_stage_ready_color.a > update_stage_downloading_color.a and update_stage_ready_color.a > update_stage_checking_color.a and update_stage_install_color.a < update_stage_checking_color.a, "ready update dialog stage nodes highlight verify stage and dim future install stage")
 	scene.update_state = "idle"
+	scene.dismiss_active_toast()
 	scene.show_toast("任务完成！+30金币", 1000)
-	check(scene.optional_gpt_illustration_texture("toast_gpt_banner") == null or scene.find_child("ToastGPTBannerTexture", true, false) != null, "toast consumes optional GPT banner texture when generated")
-	check(scene.find_child("Toast", true, false) != null and scene.find_child("ToastContainer", true, false) != null and scene.find_child("ToastRibbonTexture", true, false) != null and scene.find_child("ToastNoticeWaveTexture", true, false) != null, "toast renders container with reusable ribbon and notice-wave PNG textures")
-	check(scene.find_child("ToastIconSeal", true, false) != null and scene.find_child("ToastSheen", true, false) != null and count_nodes_with_name_prefix(scene, "ToastSpark_") == 3, "success toast renders icon seal sheen and reward sparks")
-	check(scene.find_child("ToastMessageRoute", true, false) != null and scene.find_child("ToastMessageRouteFill", true, false) != null and scene.find_child("ToastTypeNode", true, false) != null and count_nodes_with_name_prefix(scene, "ToastMessageRouteNode_") == 3, "toast renders message route and type node")
-	check(scene.find_child("ToastEntryFeedback", true, false) != null and scene.find_child("ToastEntrySource", true, false) != null and scene.find_child("ToastEntryRoute", true, false) != null and scene.find_child("ToastEntryFill", true, false) != null and scene.find_child("ToastEntryGate", true, false) != null, "toast entry feedback renders source route fill and gate")
-	check(scene.find_child("ToastEntryAckNode", true, false) != null and scene.find_child("ToastEntryAckGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "ToastEntryTick_") == 3, "toast entry feedback renders acknowledgement node and rhythm ticks")
-	check(scene.find_child("ToastLifeRail", true, false) != null and scene.find_child("ToastLifeFill", true, false) != null and count_nodes_with_name_prefix(scene, "ToastStatusDot_") == 3, "toast renders lifetime rail fill and status dots")
-	check(scene.find_child("ToastConfirmRoute", true, false) != null and scene.find_child("ToastConfirmFill", true, false) != null and scene.find_child("ToastConfirmGate", true, false) != null and count_nodes_with_name_prefix(scene, "ToastConfirmTick_") == 2, "toast renders confirmation route and ticks")
-	check(scene.find_child("ToastAckBridge", true, false) != null and scene.find_child("ToastAckBridgeFill", true, false) != null and scene.find_child("ToastAckBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ToastAckBridgeTick_") == 2, "toast renders acknowledgement bridge route and ticks")
-	check(scene.find_child("ToastRewardBridge", true, false) != null and scene.find_child("ToastRewardBridgeRail", true, false) != null and scene.find_child("ToastRewardBridgeFill", true, false) != null and scene.find_child("ToastRewardGate", true, false) != null, "reward toast renders reward bridge route")
-	check(scene.find_child("ToastRewardSourceNode", true, false) != null and count_nodes_with_name_prefix(scene, "ToastRewardPip_") == 3 and count_nodes_with_name_prefix(scene, "ToastRewardTick_") == 2, "reward toast renders source node pips and rhythm ticks")
-	check(scene.toast_icon_name("钻石不足") == "triangle-alert" and scene.toast_icon_name("正在下载更新") == "download" and scene.toast_icon_name("已发送: 碰") == "message-check", "toast illustrations choose contextual icons")
+	var notice := scene.find_child("Toast", true, false) as Control
+	var notice_message := notice.get_node_or_null("ToastMessageLabel") as Label if notice != null else null
+	var notice_face := notice.get_node_or_null("ToastGptFacePlate") as TextureRect if notice != null else null
+	var notice_pending := notice.get_node_or_null("ToastPendingLabel") as Label if notice != null else null
+	var notice_detail := notice.get_node_or_null("ToastDetailButton") as Button if notice != null else null
+	check(scene.find_child("ToastContainer", true, false) != null and notice_face != null and notice_face.texture is AtlasTexture and notice_face.texture.atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt"), "toast uses one existing opaque paper surface")
+	check(notice_message != null and notice_message.text == "任务完成！+30金币" and notice_message.get_theme_constant("shadow_offset_x") == 0 and notice_message.get_theme_color("font_color").r < 0.25, "reward toast preserves the actual native dark message without ornamental signals")
+	check(notice_pending != null and not notice_pending.visible and notice_detail != null, "toast owns independent optional status and explicit full-text action")
+	check(scene.find_child("ToastEntryFeedback", true, false) == null and scene.find_child("ToastEntryAckGlyph", true, false) == null and scene.find_child("ToastMessageRoute", true, false) == null, "toast does not recreate retired delivery glyphs or visual routes")
 	scene.show_toast("已发送: 准备好了", 1000)
-	check(scene.find_child("ToastChatSendArt", true, false) != null and scene.find_child("ToastChatStreamTexture", true, false) != null, "chat send toast renders reusable chat stream texture")
-	check(scene.find_child("ToastChatSendSource", true, false) != null and scene.find_child("ToastChatSendRoute", true, false) != null and scene.find_child("ToastChatSendFill", true, false) != null and scene.find_child("ToastChatSendGate", true, false) != null, "chat send toast renders delivery route")
-	check(scene.find_child("ToastChatReceiptNode", true, false) != null and (scene.find_child("ToastChatSendSealTexture", true, false) != null or scene.find_child("ToastChatReceiptGlyph", true, false) != null) and count_nodes_with_name_prefix(scene, "ToastChatPacket_") == 3 and count_nodes_with_name_prefix(scene, "ToastChatSendTick_") == 2, "chat send toast renders receipt node seal/glyph packets and rhythm ticks")
-	scene.show_toast("购买成功！获得换牌卡", 1000)
-	check(scene.toast_item_key_for_text("购买成功！获得换牌卡") == "swap_card" and scene.find_child("ToastItemActivationTexture", true, false) != null and scene.find_child("ToastItemBadge", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemPip_") == 3, "item toast renders reusable PNG charm item badge and stock pips")
-	check(scene.find_child("ToastItemActivationRoute", true, false) != null and scene.find_child("ToastItemActivationFill", true, false) != null and scene.find_child("ToastItemActivationGate", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemActivationTick_") == 2, "item toast renders activation route and ticks")
-	check(scene.find_child("ToastItemEffectRoute", true, false) != null and scene.find_child("ToastItemEffectRail", true, false) != null and scene.find_child("ToastItemEffectFill", true, false) != null, "item toast renders effect confirmation route")
-	check(scene.find_child("ToastItemEffectSource", true, false) != null and scene.find_child("ToastItemEffectGate", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemEffectNode_") == 3 and count_nodes_with_name_prefix(scene, "ToastItemEffectTick_") == 2, "item toast renders effect source gate nodes and rhythm ticks")
-	check(scene.find_child("ToastItemInventoryRoute", true, false) != null and scene.find_child("ToastItemInventoryRail", true, false) != null and scene.find_child("ToastItemInventoryFill", true, false) != null and scene.find_child("ToastItemInventorySource", true, false) != null and scene.find_child("ToastItemInventoryGate", true, false) != null, "item toast renders inventory change route")
-	check(scene.find_child("ToastItemInventoryCountNode", true, false) != null and scene.find_child("ToastItemInventoryCountGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemInventoryStockNode_") == 3 and count_nodes_with_name_prefix(scene, "ToastItemInventoryTick_") == 2, "item toast renders stock count node glyph and rhythm ticks")
+	check(scene.toast_queue.size() == 1 and str(scene.toast_queue[0].get("text", "")) == "已发送: 准备好了" and notice_pending.text == "还有1条", "chat feedback waits in the real FIFO rather than creating a second receipt illustration")
+	scene.dismiss_active_toast()
+	scene.show_toast("通知全文".repeat(32), 1000)
+	scene.open_toast_detail()
+	var notification_panel := scene.find_child("ToastDetailPanel", true, false) as Control
+	var notification_title := scene.find_child("ToastDetailTitle", true, false) as Label
+	var notification_scroll := scene.find_child("ToastDetailScroll", true, false) as ScrollContainer
+	var notification_body := scene.find_child("ToastDetailText", true, false) as RichTextLabel
+	var notification_close := scene.find_child("ToastDetailCloseButton", true, false) as Button
+	check(scene.find_child("ToastDetailOverlay", true, false) != null and notification_panel != null and notification_title != null and notification_title.text == "通知详情", "notification details use an explicit native reading overlay")
+	check(notification_scroll != null and notification_body != null and notification_body.text == "通知全文".repeat(32) and notification_body.fit_content and not notification_body.scroll_active and notification_close != null, "notification details preserve the full bounded message and native reading controls")
+	check(not scene.toast_tween.is_running() and scene.handle_ui_cancel() and scene.toast_detail_panel == null, "notification details pause dwell and close with Esc")
+	scene.dismiss_active_toast()
 	scene.inventory = {"swap_card": 1}
-	check(scene.use_item("swap_card") and int(scene.inventory.get("swap_card", 0)) == 0 and scene.find_child("ToastItemCore", true, false) != null, "using an item decrements inventory and renders item toast art")
-	check(scene.find_child("ToastItemActivationRoute", true, false) != null and scene.find_child("ToastItemActivationFill", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemActivationTick_") >= 2, "using an item renders activation route feedback")
-	check(scene.find_child("ToastItemEffectRoute", true, false) != null and scene.find_child("ToastItemEffectFill", true, false) != null and scene.find_child("ToastItemEffectGate", true, false) != null, "using an item renders effect confirmation route feedback")
-	check(scene.find_child("ToastItemInventoryRoute", true, false) != null and scene.find_child("ToastItemInventoryCountNode", true, false) != null and scene.find_child("ToastItemInventoryEmptyLock", true, false) != null, "using the last item renders depleted inventory feedback")
-	check(not scene.use_item("peek_card") and int(scene.inventory.get("peek_card", 0)) == 0, "using a missing item fails without changing inventory")
-	check(scene.find_child("ToastItemActivationTexture", true, false) != null and scene.find_child("ToastItemInventoryEmptyLock", true, false) != null, "missing item feedback still renders item texture and empty inventory lock")
-	check(scene.find_child("ToastItemDeniedRoute", true, false) != null and scene.find_child("ToastItemDeniedRail", true, false) != null and scene.find_child("ToastItemDeniedFill", true, false) != null and scene.find_child("ToastItemDeniedSource", true, false) != null and scene.find_child("ToastItemDeniedLock", true, false) != null, "missing item feedback renders denied route and lock")
-	check(scene.find_child("ToastItemDeniedGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "ToastItemDeniedBlock_") == 2 and count_nodes_with_name_prefix(scene, "ToastItemDeniedTick_") == 2, "missing item feedback renders denied glyph blocks and rhythm ticks")
+	check(scene.use_item("swap_card") and int(scene.inventory.get("swap_card", 0)) == 0 and scene.toast_current.get_meta("toast_text", "") == "使用道具：" + scene.item_display_name("swap_card"), "using an item decrements inventory and keeps its actual native notification")
+	scene.dismiss_active_toast()
+	check(not scene.use_item("peek_card") and int(scene.inventory.get("peek_card", 0)) == 0 and scene.toast_current.get_meta("toast_text", "") == "道具不足：" + scene.item_display_name("peek_card") and scene.toast_active_minimum_dwell_msec >= 2600, "using a missing item fails without changing inventory and keeps the important minimum-dwell reason")
+	scene.dismiss_active_toast()
 	var coins_before_task_reward = int(scene.currency.get("coins", 0))
 	scene.claim_task_reward({"reward_coins": 25})
-	check(int(scene.currency.get("coins", 0)) == coins_before_task_reward + 25 and scene.find_child("ToastIconSeal", true, false) != null, "task reward updates currency and renders illustrated toast")
+	check(int(scene.currency.get("coins", 0)) == coins_before_task_reward + 25 and scene.toast_current != null, "task reward updates currency and produces a native notification")
 	scene.achievements["first_win"] = false
 	check(scene.achievement_display_name("first_win") == "首次胡牌" and scene.unlock_achievement("first_win"), "achievement unlock maps keys to display names and succeeds once")
-	check(scene.find_child("ToastAchievementGlowTexture", true, false) != null, "achievement unlock toast renders reusable medal glow PNG texture")
-	check(scene.find_child("ToastAchievementMedal", true, false) != null and scene.find_child("ToastAchievementMedalCore", true, false) != null and count_nodes_with_name_prefix(scene, "ToastAchievementRay_") == 4, "achievement unlock toast renders medal and rays")
-	check(scene.optional_gpt_illustration_texture("achievement_medal_gold") == null or scene.find_child("ToastAchievementMedalTexture", true, false) != null, "achievement unlock toast consumes optional GPT medal texture when generated")
-	check(scene.find_child("ToastAchievementUnlockRoute", true, false) != null and scene.find_child("ToastAchievementUnlockFill", true, false) != null and scene.find_child("ToastAchievementUnlockGate", true, false) != null and count_nodes_with_name_prefix(scene, "ToastAchievementUnlockTick_") == 3, "achievement unlock toast renders unlock route and rhythm ticks")
-	check(scene.find_child("ToastAchievementArchiveRoute", true, false) != null and scene.find_child("ToastAchievementArchiveFill", true, false) != null and scene.find_child("ToastAchievementArchiveSource", true, false) != null and scene.find_child("ToastAchievementArchiveGate", true, false) != null and scene.find_child("ToastAchievementArchiveGlyph", true, false) != null, "achievement unlock toast renders medal-to-archive handoff route")
-	check(count_nodes_with_name_prefix(scene, "ToastAchievementArchiveTick_") == 2, "achievement unlock toast renders archive handoff rhythm ticks")
+	check(scene.toast_queue.size() > 0 and str(scene.toast_queue.back().get("text", "")).contains("首次胡牌"), "achievement reward keeps its real identifying text in the notification FIFO")
 	check(not scene.unlock_achievement("first_win"), "achievement unlock does not replay for already unlocked achievements")
 	scene.play_screen_transition(func() -> void:
 		pass
@@ -1297,8 +1309,8 @@ func run() -> void:
 	check(scene.find_child("OfflineTable3DFloorShadow", true, false) != null and scene.find_child("OfflineTable3DFrontApron", true, false) != null and scene.find_child("BattleTablePerspectiveDepth", true, false) != null, "3D offline table renders floor shadow front apron and perspective depth")
 	check(true, "battle uses single commercial table stage without stacked GPT full-table overlays")
 	check(scene.find_child("Table3DInsetShadow", true, false) != null and scene.find_child("Table3DFeltVignette", true, false) != null and scene.find_child("Table3DCenterSpotlight", true, false) != null, "3D offline table atmosphere exists")
-	check(scene.find_child("TopHud3DShell", true, false) != null and scene.find_child("TopHud3DCastShadow", true, false) != null and scene.find_child("TopHud3DDepthEdge", true, false) != null, "3D top HUD shell exists")
-	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) != null and scene.find_child("TopHud3DJadeRail", true, false) != null, "top HUD keeps one primary surface without a duplicate rear lacquer shell")
+	check(scene.find_child("TopHud3DShell", true, false) != null and scene.find_child("TopHud3DCastShadow", true, false) == null and scene.find_child("TopHud3DDepthEdge", true, false) == null, "top HUD exposes a single authored paper surface without stacked console shadows")
+	check(scene.find_child("TopHud3DRearShell", true, false) == null and scene.find_child("TopHud3DTopRim", true, false) == null and scene.find_child("TopHud3DJadeRail", true, false) == null, "top HUD keeps one primary surface without a duplicate rear lacquer shell")
 	var top_hud_banner = scene.find_child("TopHudGPTBannerTexture", true, false) as TextureRect
 	if top_hud_banner != null:
 		check(top_hud_banner.modulate.a <= 0.40, "top HUD banner stays subdued behind status text")
@@ -1307,11 +1319,11 @@ func run() -> void:
 	var seat_jade = scene.find_child("SeatPanel3DJadeLip_0", true, false)
 	var seat_right_bevel = scene.find_child("SeatPanel3DRightBevel_0", true, false)
 	var seat_jade_wash = scene.find_child("SeatPanel3DJadeWash_0", true, false)
-	check(seat_shadow != null and seat_rear != null and seat_jade != null and seat_right_bevel != null and seat_jade_wash != null, "seat HUD uses commercial multi-layer 3D shell")
+	check(seat_shadow == null and seat_rear == null and seat_jade == null and seat_right_bevel == null and seat_jade_wash == null, "seat HUD retires the multi-layer shell and uses one paper surface")
 	var action_rear = scene.find_child("ActionDock3DRearShell", true, false)
 	var action_jade = scene.find_child("ActionDock3DJadeTrack", true, false)
-	check(action_rear != null and action_jade != null and scene.find_child("ActionDock3DFrontApron", true, false) != null, "action dock uses commercial 3D rear shell and jade track")
-	check(scene.find_child("HandTray3DCastShadow", true, false) != null and scene.find_child("HandTray3DFrontLip", true, false) != null and scene.find_child("HandTray3DSideBevel", true, false) != null and count_nodes_with_name_prefix(scene, "HandTile_") > 0, "2D hand tray shell and authored hand tiles exist")
+	check(action_rear == null and action_jade == null and scene.find_child("ActionDock3DFrontApron", true, false) == null and scene.find_child("ActionButtonDock", true, false).get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "action dock uses one authored paper surface rather than stacked shell and track")
+	check_required(scene.find_child("HandTray3DCastShadow", true, false) == null and scene.find_child("HandTray3DFrontLip", true, false) == null and scene.find_child("HandTray3DSideBevel", true, false) == null and scene.find_child("HandTray", true, false).get_meta("guofeng_surface_key", "") == "hand_tray_jiangnan_gpt" and count_nodes_with_name_prefix(scene, "HandTile_") > 0, "hand tray uses one authored Jiangnan surface and keeps every 2D hand tile")
 	var offline_commercial_stage = scene.find_child("OfflineCommercial3DStage", true, false) as CanvasItem
 	check(offline_commercial_stage == null, "battle does not mount a 3D tile stage")
 	var menu_probe = scene.find_child("MenuCommercial3DStage", true, false)
@@ -1428,13 +1440,8 @@ func run() -> void:
 		hud_press_count["value"] = int(hud_press_count.get("value", 0)) + 1
 	)
 	check(top_button.custom_minimum_size == scene.TOP_HUD_BUTTON_SIZE and top_button.clip_text, "top HUD buttons keep mobile touch target and clipped labels")
-	check(top_button.find_child("ButtonPressSheen", true, false) != null, "top HUD buttons render a press sheen overlay")
-	check(top_button.find_child("TopHudButtonIconBack_设置", true, false) != null and top_button.find_child("TopHudButtonRail_设置", true, false) != null and top_button.find_child("TopHudButtonRailFill_设置", true, false) != null and top_button.find_child("TopHudButtonSeal_设置", true, false) != null, "top HUD buttons render compact icon material accents")
-	check(top_button.find_child("TopHudButtonCommandRoute_设置", true, false) == null and top_button.find_child("TopHudButtonCommandFill_设置", true, false) == null and top_button.find_child("TopHudButtonCommandGate_设置", true, false) == null and count_nodes_with_name_prefix(top_button, "TopHudButtonCommandTick_设置_") == 0, "top HUD buttons omit command route and rhythm clutter")
-	scene.play_top_hud_button_press_feedback(top_button, "设置", Color(0.22, 0.42, 0.54))
-	check(top_button.find_child("TopHudButtonPressFeedback_设置", true, false) != null and top_button.find_child("TopHudButtonPressWash_设置", true, false) != null and top_button.find_child("TopHudButtonPressGlow_设置", true, false) != null, "top HUD button press feedback renders compact wash and glow")
-	check(top_button.find_child("TopHudButtonPressSeal_设置", true, false) != null and top_button.find_child("TopHudButtonPressGlyph_设置", true, false) != null and count_nodes_with_name_prefix(top_button, "TopHudButtonPressTick_设置_") == 0, "top HUD button press feedback renders seal glyph and omits rhythm ticks")
-	check(top_button.find_child("TopHudButtonPressSource_设置", true, false) == null and top_button.find_child("TopHudButtonPressRoute_设置", true, false) == null and top_button.find_child("TopHudButtonPressFill_设置", true, false) == null and top_button.find_child("TopHudButtonPressGate_设置", true, false) == null, "top HUD button press feedback omits source route fill and gate")
+	check(top_button.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and top_button.find_child("ButtonPressSheen", true, false) == null, "top HUD button keeps its authored paper face without a press overlay")
+	check(top_button.find_child("TopHudButtonFocusMarker", true, false) != null and top_button.find_child("TopHudButtonIconBack_设置", true, false) == null and top_button.find_child("TopHudButtonRail_设置", true, false) == null, "top HUD button exposes a native focus marker instead of icon-back rails")
 	top_button.pressed.emit()
 	check(int(hud_press_count.get("value", 0)) == 1, "top HUD buttons trigger on native activation")
 	dispose_node(top_button)
@@ -1597,127 +1604,76 @@ func run() -> void:
 	scene.offline_phase = center_previous_phase
 	scene.current_seat = center_previous_seat
 	scene.offline_turn_needs_draw = center_previous_turn_needs_draw
-	var ribbon = scene.draw_summary_victory_ribbon(illustration_parent)
-	check(ribbon != null and illustration_parent.find_child("SummaryVictoryRibbon", true, false) != null and illustration_parent.find_child("SummaryRibbonGoldFoil", true, false) != null and illustration_parent.find_child("SummaryRibbonLeftTail", true, false) != null and illustration_parent.find_child("SummaryRibbonRightTail", true, false) != null and count_texture_rects(ribbon) >= 1, "round summary renders victory ribbon illustration with foil and tails")
-	var summary_previous_hand_number = scene.offline_hand_number
-	scene.last_score_deltas.clear()
-	for score_delta in [-1200, 3600, -1200, -1200]:
-		scene.last_score_deltas.append(score_delta)
-	scene.offline_last_winner = 1
-	scene.offline_hand_number = 3
-	var summary_ambience = scene.draw_round_summary_ambience(illustration_parent)
-	check(summary_ambience != null and illustration_parent.find_child("RoundSummaryAmbience", true, false) != null and illustration_parent.find_child("RoundSummaryAmbienceWash", true, false) != null and illustration_parent.find_child("RoundSummaryScoreOrbit", true, false) != null, "round summary ambience renders wash and score orbit art")
-	check(illustration_parent.find_child("RoundSummaryVictoryBadgeTexture", true, false) != null and illustration_parent.find_child("VictoryBadgeGoldFoil", true, false) != null and illustration_parent.find_child("RoundSummarySettlementWave", true, false) != null and illustration_parent.find_child("RoundSummaryLaurelTexture", true, false) != null, "round summary ambience renders reusable victory badge gold foil settlement wave and laurel art")
-	check(scene.optional_gpt_illustration_texture("win_result_stage") == null or illustration_parent.find_child("RoundSummaryGPTWinStageTexture", true, false) != null, "round summary ambience consumes optional GPT win stage texture when generated")
-	check(illustration_parent.find_child("RoundSummaryScoreFlowBus", true, false) != null and illustration_parent.find_child("RoundSummaryScoreFlowSpine", true, false) != null and illustration_parent.find_child("RoundSummaryScoreFlowSpineFill", true, false) != null, "round summary ambience renders score flow bus and spine")
-	check(scene.optional_gpt_illustration_texture("round_summary_score_flow_bus") == null or illustration_parent.find_child("RoundSummaryScoreFlowGPTTexture", true, false) != null, "round summary ambience consumes optional GPT score flow bus texture when generated")
-	check(illustration_parent.find_child("RoundSummaryScoreFlowWinnerGate", true, false) != null and illustration_parent.find_child("RoundSummaryScoreFlowWinnerGlyph", true, false) != null and illustration_parent.find_child("RoundSummaryScoreFlowArchive", true, false) != null and illustration_parent.find_child("RoundSummaryScoreFlowArchiveGlyph", true, false) != null, "round summary score flow bus renders winner and archive gates")
-	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummaryScoreFlowNode_") == 4 and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryScoreFlowPayerRoute_") == 3 and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryScoreFlowPayerTick_") == 6 and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryScoreFlowTick_") == 3, "round summary score flow bus renders one node per seat and payer routes")
-	check(illustration_parent.find_child("RoundSummaryWinnerBeacon", true, false) != null and illustration_parent.find_child("RoundSummaryWinnerBeaconSeal", true, false) != null and illustration_parent.find_child("RoundSummaryWinnerBeaconRay", true, false) != null, "round summary ambience renders winner beacon seal and ray")
-	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummaryScoreNode_") == 4 and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryDeltaSpark_") == 4, "round summary ambience renders one score node and delta spark per changed seat")
-	check(illustration_parent.find_child("RoundSummarySettlementRoute", true, false) != null and illustration_parent.find_child("RoundSummarySettlementFill", true, false) != null and illustration_parent.find_child("RoundSummarySettlementGate", true, false) != null, "round summary ambience renders winner-to-settlement route")
-	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummarySettlementTick_") == 3, "round summary ambience renders settlement rhythm ticks")
-	check(illustration_parent.find_child("RoundSummaryWinnerSettlementBridge", true, false) != null and illustration_parent.find_child("RoundSummaryWinnerSettlementFill", true, false) != null and illustration_parent.find_child("RoundSummaryWinnerSettlementSource", true, false) != null and illustration_parent.find_child("RoundSummaryWinnerSettlementGate", true, false) != null, "round summary ambience renders winner settlement bridge")
-	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummaryWinnerSettlementTick_") == 3, "round summary winner settlement bridge renders rhythm ticks")
-	check(illustration_parent.find_child("RoundSummarySettlementCommitArt", true, false) != null and illustration_parent.find_child("RoundSummarySettlementCommitSource", true, false) != null and illustration_parent.find_child("RoundSummarySettlementCommitRoute", true, false) != null and illustration_parent.find_child("RoundSummarySettlementCommitFill", true, false) != null and illustration_parent.find_child("RoundSummarySettlementCommitGate", true, false) != null, "round summary ambience renders settlement commit route")
-	check(illustration_parent.find_child("RoundSummarySettlementArchiveNode", true, false) != null and illustration_parent.find_child("RoundSummarySettlementArchiveGlyph", true, false) != null and count_nodes_with_name_prefix(illustration_parent, "RoundSummarySettlementCommitTick_") == 3 and count_nodes_with_name_prefix(illustration_parent, "RoundSummarySettlementArchivePip_") == 2, "round summary settlement commit renders archive node glyph ticks and pips")
-	check(illustration_parent.find_child("RoundSummaryNextHandGate", true, false) != null and count_nodes_with_name_prefix(illustration_parent, "RoundSummaryNextHandPip_") == 3, "round summary ambience renders next-hand gate pips")
-	check(illustration_parent.find_child("RoundSummaryNextActionRoute", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionFill", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionSource", true, false) != null and illustration_parent.find_child("RoundSummaryNextActionGate", true, false) != null, "round summary ambience renders route toward next action")
-	check(count_nodes_with_name_prefix(illustration_parent, "RoundSummaryNextActionTick_") == 2, "round summary next action route renders rhythm ticks")
-	var summary_panel_parent = Control.new()
-	root.add_child(summary_panel_parent)
-	var summary_previous_mode = scene.mode
-	var summary_previous_phase = scene.offline_phase
-	var summary_previous_win_score = scene.last_win_score.duplicate(true)
-	scene.mode = "offline"
-	scene.offline_phase = "ended"
-	scene.last_win_score = {}
-	scene.draw_round_summary(summary_panel_parent)
-	check(summary_panel_parent.find_child("RoundSummaryPanel", true, false) != null, "round summary renders its named settlement panel")
-	dispose_node(summary_panel_parent)
-	scene.mode = summary_previous_mode
-	scene.offline_phase = summary_previous_phase
-	scene.last_win_score = summary_previous_win_score
-	var match_complete_parent = Control.new()
-	root.add_child(match_complete_parent)
-	scene.offline_hand_number = scene.MATCH_MAX_HANDS
-	scene.draw_round_summary_ambience(match_complete_parent)
-	check(match_complete_parent.find_child("RoundSummaryMatchCompleteArt", true, false) != null and match_complete_parent.find_child("RoundSummaryMatchCompleteLaurel", true, false) != null and match_complete_parent.find_child("RoundSummaryMatchCompleteRail", true, false) != null and match_complete_parent.find_child("RoundSummaryMatchCompleteFill", true, false) != null and match_complete_parent.find_child("RoundSummaryMatchArchiveGate", true, false) != null and match_complete_parent.find_child("RoundSummaryMatchArchiveGlyph", true, false) != null, "round summary ambience renders match-complete laurel and filled archive route")
-	check(match_complete_parent.find_child("RoundSummaryChampionNode", true, false) != null and match_complete_parent.find_child("RoundSummaryChampionGlyph", true, false) != null and match_complete_parent.find_child("RoundSummaryFinalRankRoute", true, false) != null and match_complete_parent.find_child("RoundSummaryFinalRankFill", true, false) != null, "round summary match-complete art links champion glyph to final rank route")
-	check(count_nodes_with_name_prefix(match_complete_parent, "RoundSummaryFinalRankNode_") == 4 and count_nodes_with_name_prefix(match_complete_parent, "RoundSummaryFinalRankDrop_") == 4, "round summary match-complete art renders one final rank node per seat")
-	check(count_nodes_with_name_prefix(match_complete_parent, "RoundSummaryMatchCompleteTick_") == 4 and match_complete_parent.find_child("RoundSummaryFinalSeal", true, false) != null, "round summary match-complete art renders rhythm ticks and final seal")
-	check(match_complete_parent.find_child("RoundSummaryNextHandGate", true, false) == null, "round summary match-complete art omits next-hand gate")
-	check(match_complete_parent.find_child("RoundSummaryNextActionRoute", true, false) == null, "round summary match-complete art omits next-action route")
-	dispose_node(match_complete_parent)
-	scene.offline_hand_number = summary_previous_hand_number
+	# Settlement now uses native facts on its single authored paper. Exercise
+	# the same production detail/rank paths without reviving retired chrome.
 	scene.players[1]["name"] = "青竹道人"
-	var win_detail_parent = Control.new()
+	scene.offline_last_winner = 1
+	var win_detail_parent := Control.new()
 	root.add_child(win_detail_parent)
 	scene.draw_win_detail_section(win_detail_parent, {
-		"winner": 1,
-		"fan": 4,
-		"points": 3200,
-		"reasons": ["平胡", "自摸", "花牌"],
-		"win_tile": "5W",
-		"self_draw": true,
+		"winner": 1, "fan": 4, "points": 3200,
+		"reasons": ["平胡", "自摸", "花牌"], "win_tile": "5W", "self_draw": true,
 	})
-	check(win_detail_parent.find_child("WinDetailPanel", true, false) != null and win_detail_parent.find_child("WinDetailScrollTexture", true, false) != null, "win detail renders its named panel and reusable scroll PNG texture")
-	check(scene.optional_gpt_illustration_texture("win_detail_gpt_scroll") == null or win_detail_parent.find_child("WinDetailGPTScrollTexture", true, false) != null, "win detail consumes optional GPT scroll texture when generated")
-	check(win_detail_parent.find_child("WinDetailShowcase", true, false) != null and win_detail_parent.find_child("WinDetailTile", true, false) != null and win_detail_parent.find_child("WinDetailSeal", true, false) != null and win_detail_parent.find_child("WinDetailYakuBadges", true, false) != null, "win detail renders tile showcase, seal, and readable yaku badges")
-	check(win_detail_parent.find_child("WinDetailShowcaseRoute", true, false) != null and win_detail_parent.find_child("WinDetailShowcaseRouteFill", true, false) != null and win_detail_parent.find_child("WinDetailShowcaseScoreGate", true, false) != null, "win detail showcase renders tile-to-score route")
-	check(count_nodes_with_name_prefix(win_detail_parent, "WinDetailShowcaseRouteTick_") == 3 and count_nodes_with_name_prefix(win_detail_parent, "WinDetailShowcaseFanPip_") == 4, "win detail showcase renders route rhythm ticks and fan pips")
-	check(win_detail_parent.find_child("WinDetailYakuTrack", true, false) != null and win_detail_parent.find_child("WinDetailYakuRail", true, false) != null and count_nodes_with_name_prefix(win_detail_parent, "WinDetailYakuNode_") == 3, "win detail renders yaku track rail and one node per reason")
-	check(win_detail_parent.find_child("WinDetailYakuLeadGlow", true, false) != null, "win detail highlights the leading yaku track node")
-	check(win_detail_parent.find_child("WinDetailYakuRailFill", true, false) != null and win_detail_parent.find_child("WinDetailYakuGate", true, false) != null and count_nodes_with_name_prefix(win_detail_parent, "WinDetailYakuTick_") == 3, "win detail yaku track renders fill gate and rhythm ticks")
-	var win_yaku_fill = win_detail_parent.find_child("WinDetailYakuRailFill", true, false) as Control
-	check(win_yaku_fill != null and win_yaku_fill.anchor_right > 0.55 and win_yaku_fill.anchor_right < 0.65, "win detail yaku rail fill tracks yaku count")
-	check(win_detail_parent.find_child("WinDetailScoreConstellation", true, false) != null and win_detail_parent.find_child("WinDetailScoreRail", true, false) != null and win_detail_parent.find_child("WinDetailScoreArc", true, false) != null and win_detail_parent.find_child("WinDetailScoreCore", true, false) != null and win_detail_parent.find_child("WinDetailScoreFanGlyph", true, false) != null and win_detail_parent.find_child("WinDetailScorePulse", true, false) != null, "win detail renders score constellation rail art")
-	check(count_nodes_with_name_prefix(win_detail_parent, "WinDetailScoreStar_") == 3 and count_nodes_with_name_prefix(win_detail_parent, "WinDetailScoreStarGlyph_") == 3 and win_detail_parent.find_child("WinDetailScorePointLabel", true, false) != null, "win detail renders one score constellation star and glyph per yaku with a point label")
-	check(win_detail_parent.find_child("WinDetailScoreRoute", true, false) != null and win_detail_parent.find_child("WinDetailScoreRouteFill", true, false) != null and win_detail_parent.find_child("WinDetailScoreGate", true, false) != null, "win detail renders yaku-to-score route")
-	check(count_nodes_with_name_prefix(win_detail_parent, "WinDetailScoreRouteTick_") == 3, "win detail renders score route rhythm ticks")
-	var win_score_route_fill = win_detail_parent.find_child("WinDetailScoreRouteFill", true, false) as Control
-	check(win_score_route_fill != null and win_score_route_fill.anchor_right > 0.45 and win_score_route_fill.anchor_right < 0.55, "win detail score route fill tracks fan strength")
-	check(win_detail_parent.find_child("WinDetailResolutionBridge", true, false) != null and win_detail_parent.find_child("WinDetailResolutionSeal", true, false) != null and win_detail_parent.find_child("WinDetailResolutionRail", true, false) != null and win_detail_parent.find_child("WinDetailResolutionFill", true, false) != null and win_detail_parent.find_child("WinDetailResolutionGate", true, false) != null, "win detail renders fan-to-score resolution bridge seal")
-	check(win_detail_parent.find_child("WinDetailResolutionFanNode", true, false) != null and win_detail_parent.find_child("WinDetailResolutionFanGlyph", true, false) != null and win_detail_parent.find_child("WinDetailResolutionScoreNode", true, false) != null and win_detail_parent.find_child("WinDetailResolutionScoreGlyph", true, false) != null and win_detail_parent.find_child("WinDetailResolutionYakuRoute", true, false) != null and win_detail_parent.find_child("WinDetailResolutionYakuFill", true, false) != null, "win detail resolution bridge renders fan score glyphs and yaku route nodes")
-	check(count_nodes_with_name_prefix(win_detail_parent, "WinDetailResolutionTick_") == 3 and count_nodes_with_name_prefix(win_detail_parent, "WinDetailResolutionPip_") == 2, "win detail resolution bridge renders rhythm ticks and confirmation pips")
+	var detail_winner := win_detail_parent.find_child("WinDetailWinnerLabel", true, false) as Label
+	var detail_score := win_detail_parent.find_child("WinDetailScoreLabel", true, false) as Label
+	var yaku := win_detail_parent.find_child("WinDetailYakuBadges", true, false) as Container
+	var detail_panel := win_detail_parent.find_child("WinDetailPanel", true, false) as Control
+	check(detail_panel != null and detail_winner != null and detail_score != null and yaku != null and detail_panel.is_ancestor_of(detail_winner) and detail_panel.is_ancestor_of(detail_score) and detail_panel.is_ancestor_of(yaku), "win detail keeps winner score and reasons in the actual detail owner")
+	check(detail_winner != null and detail_winner.text == "青竹道人 自摸 5万" and detail_score != null and detail_score.text == "4番  3200分", "win detail displays the exact winner tile fan and points")
+	check(yaku != null and yaku.get_child_count() == 3 and win_detail_parent.find_child("WinDetailTile", true, false) != null, "win detail preserves the authored 2D winning tile and every reason")
+	check(win_detail_parent.find_child("WinDetailScoreConstellation", true, false) == null and win_detail_parent.find_child("WinDetailShowcaseRoute", true, false) == null, "win detail removes duplicate decorative score tracks")
 	dispose_node(win_detail_parent)
-	var limit_win_detail_parent = Control.new()
-	root.add_child(limit_win_detail_parent)
-	scene.draw_win_detail_section(limit_win_detail_parent, {
-		"winner": 1,
-		"fan": 13,
-		"points": 32000,
-		"reasons": ["十三幺"],
-		"win_tile": "P",
-		"self_draw": false,
-		"limit_name": "役满",
-	})
-	check(limit_win_detail_parent.find_child("WinDetailLimitBadge", true, false) != null and limit_win_detail_parent.find_child("WinDetailLimitArt", true, false) != null and limit_win_detail_parent.find_child("WinDetailLimitRoute", true, false) != null and limit_win_detail_parent.find_child("WinDetailLimitFill", true, false) != null and limit_win_detail_parent.find_child("WinDetailLimitGate", true, false) != null, "win detail limit hand renders named limit badge and confirmation route")
-	check(limit_win_detail_parent.find_child("WinDetailLimitBurst", true, false) != null and count_nodes_with_name_prefix(limit_win_detail_parent, "WinDetailLimitTick_") == 3 and count_nodes_with_name_prefix(limit_win_detail_parent, "WinDetailLimitSpark_") == 4, "win detail limit hand renders burst sparks and rhythm ticks")
-	var limit_fill = limit_win_detail_parent.find_child("WinDetailLimitFill", true, false) as Control
-	check(limit_fill != null and limit_fill.anchor_right > 0.90, "win detail limit route fill reaches the high-value gate")
-	dispose_node(limit_win_detail_parent)
+	var limit_parent := Control.new()
+	root.add_child(limit_parent)
+	scene.draw_win_detail_section(limit_parent, {"winner": 1, "fan": 8, "points": 25600, "reasons": ["十三幺"], "win_tile": "P", "self_draw": false, "limit_name": "封顶"})
+	var limit := limit_parent.find_child("WinDetailLimitBadge", true, false) as Label
+	check(limit != null and limit.text == "封顶" and limit_parent.find_child("WinDetailLimitArt", true, false) == null, "limit hand retains its real native limit without another decoration layer")
+	dispose_node(limit_parent)
 	var delta_fixture: Array[int] = [3600, -1200, 0, -2400]
 	scene.last_score_deltas = delta_fixture
 	scene.refresh_score_delta_cache()
-	check(is_equal_approx(scene.round_summary_delta_bar_fraction(3600), 1.0) and is_equal_approx(scene.round_summary_delta_bar_fraction(-1200), 1.0 / 3.0), "round summary delta bars scale by the largest score change")
-	var rank_row_parent = Control.new()
-	root.add_child(rank_row_parent)
-	scene.draw_round_summary_rank_row(rank_row_parent, 1, 1)
-	check(rank_row_parent.find_child("RankRowRibbonTexture_1", true, false) != null, "round summary rank row renders reusable ribbon PNG texture")
-	check(rank_row_parent.find_child("RoundSummaryRankRow_1", true, false) != null and rank_row_parent.find_child("RoundSummaryWinnerSeal", true, false) != null, "round summary rank row renders winner seal")
-	check(rank_row_parent.find_child("RoundSummaryDeltaBar", true, false) != null and rank_row_parent.find_child("RoundSummaryDeltaBarFill", true, false) != null, "round summary rank row renders animated score delta bar")
-	check(rank_row_parent.find_child("RoundSummaryDeltaCenterGate", true, false) != null and count_nodes_with_name_prefix(rank_row_parent, "RoundSummaryDeltaTick_") == 3, "round summary rank row renders delta direction gate and ticks")
-	check(rank_row_parent.find_child("RoundSummaryRankRouteArt", true, false) != null and rank_row_parent.find_child("RoundSummaryRankRouteRail", true, false) != null and rank_row_parent.find_child("RoundSummaryRankRouteFill", true, false) != null, "round summary rank row renders rank route art")
-	check(count_nodes_with_name_prefix(rank_row_parent, "RoundSummaryRankRouteNode_") == 4 and rank_row_parent.find_child("RoundSummaryRankTrendGlow", true, false) != null and count_nodes_with_name_prefix(rank_row_parent, "RoundSummaryRankTrendSpark_") == 3, "round summary rank row renders route nodes and score trend sparks")
-	dispose_node(rank_row_parent)
+	var rank_parent := Control.new()
+	root.add_child(rank_parent)
+	scene.draw_round_summary_rank_row(rank_parent, 1, 1)
+	var rank_delta := rank_parent.find_child("RoundSummaryDeltaLabel", true, false) as Label
+	var rank_score := rank_parent.find_child("RoundSummaryScoreLabel", true, false) as Label
+	check(rank_delta != null and rank_delta.text == "-1200" and rank_score != null and rank_score.text == str(int(scene.players[1].get("score", 0))), "settlement rank shows precise live total and signed hand delta")
+	check(rank_parent.find_child("RoundSummaryDeltaBar", true, false) == null and rank_parent.find_child("RoundSummaryRankRouteArt", true, false) == null, "settlement rank does not encode points in decorative meters")
+	dispose_node(rank_parent)
+	var summary_previous_phase: String = str(scene.offline_phase)
+	var summary_previous_kind: String = str(scene.round_result_kind)
+	var summary_previous_text: String = str(scene.round_summary)
+	var summary_previous_score: Dictionary = scene.last_win_score
+	scene.offline_phase = "ended"
+	scene.round_result_kind = "win"
+	scene.round_summary = "青竹道人自摸5万，4番3200分。庄家连庄。"
+	scene.last_win_score = {"winner": 1, "fan": 4, "points": 3200, "reasons": ["平胡", "自摸", "花牌"], "win_tile": "5W", "self_draw": true}
+	var summary_parent := Control.new()
+	summary_parent.size = Vector2(root.size)
+	root.add_child(summary_parent)
+	scene.draw_round_summary(summary_parent)
+	var summary_panel := summary_parent.find_child("RoundSummaryPanel", true, false) as TextureRect
+	var summary_body := summary_parent.find_child("RoundSummaryBody", true, false) as Label
+	var summary_detail := summary_parent.find_child("WinDetailPanel", true, false) as Control
+	check(summary_panel != null and summary_panel.texture is AtlasTexture and (summary_panel.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt") and summary_panel.self_modulate == Color.WHITE, "ended settlement owns one opaque authored account paper")
+	check(summary_panel != null and summary_body != null and summary_detail != null and summary_panel.is_ancestor_of(summary_body) and summary_panel.is_ancestor_of(summary_detail) and summary_body.text.contains(scene.round_summary), "settlement paper contains the actual full explanation and winning detail")
+	dispose_node(summary_parent)
+	scene.offline_phase = summary_previous_phase
+	scene.round_result_kind = summary_previous_kind
+	scene.round_summary = summary_previous_text
+	scene.last_win_score = summary_previous_score
 	dispose_node(illustration_parent)
 	var advisor_panel_parent = Control.new()
+	advisor_panel_parent.size = Vector2(root.size)
 	root.add_child(advisor_panel_parent)
 	scene.draw_advisor_panel(advisor_panel_parent, true)
-	check(advisor_panel_parent.find_child("AdvisorMapTexture", true, false) != null, "advisor panel renders reusable decision-map PNG texture")
-	check(scene.optional_gpt_illustration_texture("advisor_gpt_panel") == null or advisor_panel_parent.find_child("AdvisorGPTPanelTexture", true, false) != null, "advisor panel consumes optional GPT panel texture when generated")
-	check(advisor_panel_parent.find_child("AdvisorPanelAnalysisScan", true, false) != null and advisor_panel_parent.find_child("AdvisorPanelAnalysisSource", true, false) != null and advisor_panel_parent.find_child("AdvisorPanelAnalysisGate", true, false) != null, "advisor panel renders analysis scan layer")
+	var advisor_panel := advisor_panel_parent.find_child("AdvisorPanel", true, false) as Control
+	check_required(advisor_panel != null and advisor_panel.get_meta("advisor_layout_mode", "") in ["compact_summary", "detail_only"] and advisor_panel.find_child("AdvisorPanelPaper", true, false) is TextureRect, "advisor exposes one compact panel with authored paper")
+	var advisor_title := advisor_panel_parent.find_child("AdvisorPanelTitle", true, false) as Label
+	var advisor_context := advisor_panel_parent.find_child("AdvisorPanelContext", true, false) as Label
+	var advisor_detail_only: bool = advisor_panel != null and advisor_panel.get_meta("advisor_layout_mode", "") == "detail_only"
+	check_required(advisor_title != null and advisor_title.text == ("牌势" if advisor_detail_only else scene.advisor_compact_conclusion_text()) and advisor_title.get_meta("ui_full_text", "") == scene.advisor_compact_conclusion_text(), "advisor title exposes the live conclusion and its full accessible text")
+	check_required(advisor_context != null and advisor_context.text == scene.advisor_compact_context_text() and advisor_context.visible == not advisor_detail_only and advisor_context.get_meta("ui_full_text", "") == scene.advisor_detail_text(), "advisor context preserves live risk summary and full analysis")
 	var advisor_detail_previous_mode: String = str(scene.mode)
 	var advisor_detail_previous_assist: bool = bool(scene.ai_assist_enabled)
 	var advisor_detail_previous_open: bool = bool(scene.advisor_detail_open)
@@ -1725,7 +1681,7 @@ func run() -> void:
 	scene.ai_assist_enabled = true
 	scene.advisor_detail_open = true
 	scene.draw_advisor_detail_panel(advisor_panel_parent)
-	check(advisor_panel_parent.find_child("AdvisorDetailPanel", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailMapTexture", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRoute", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailRouteFill", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailReadOnlyBadge", true, false) != null, "advisor detail panel renders a wide in-panel rationale route and read-only badge")
+	check(advisor_panel_parent.find_child("AdvisorDetailPanel", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailPaper", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailText", true, false) is RichTextLabel and advisor_panel_parent.find_child("AdvisorDetailHint", true, false) != null and advisor_panel_parent.find_child("AdvisorDetailReadOnlyBadge", true, false) != null, "advisor detail renders authored paper, structured native content and a reading position hint")
 	scene.mode = advisor_detail_previous_mode
 	scene.ai_assist_enabled = advisor_detail_previous_assist
 	scene.advisor_detail_open = advisor_detail_previous_open
@@ -1733,27 +1689,9 @@ func run() -> void:
 	var advisor_card_parent = Control.new()
 	root.add_child(advisor_card_parent)
 	scene.draw_advisor_info_card(advisor_card_parent, scene.rect_full(0.0, 0.0, 0.32, 0.20), "防守", "安全优先", "看现物与筋", Color(0.84, 0.62, 0.54))
-	check(advisor_card_parent.find_child("AdvisorInfoCard_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardMapTexture_防守", true, false) != null, "advisor card renders reusable decision-map PNG texture")
-	check(advisor_card_parent.find_child("AdvisorSignalStrip_防守", true, false) != null and advisor_card_parent.find_child("AdvisorSignalPulse_防守", true, false) != null and advisor_card_parent.find_child("AdvisorSignalIcon_防守", true, false) != null, "advisor cards render compact signal strip")
-	check(advisor_card_parent.find_child("AdvisorCardSignalRoute_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardSignalFill_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardSignalSource_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardSignalGate_防守", true, false) != null, "advisor cards render signal-to-meter route")
-	check(count_nodes_with_name_prefix(advisor_card_parent, "AdvisorCardSignalTick_防守_") == 2, "advisor cards render signal route rhythm ticks")
-	check(advisor_card_parent.find_child("AdvisorCardMeter_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardMeterRail_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardMeterFill_防守", true, false) != null, "advisor cards render compact signal meter")
-	check(advisor_card_parent.find_child("AdvisorCardMeterFocus_防守", true, false) != null and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorCardMeterPip_防守_") == 3, "advisor card meter renders focus and three status pips")
-	check(advisor_card_parent.find_child("AdvisorCardDecisionRoute_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardDecisionFill_防守", true, false) != null and advisor_card_parent.find_child("AdvisorCardDecisionGate_防守", true, false) != null, "advisor cards render decision route and gate")
-	check(count_nodes_with_name_prefix(advisor_card_parent, "AdvisorCardDecisionTick_防守_") == 3, "advisor cards render decision rhythm ticks")
-	scene.draw_advisor_panel_context_route(advisor_card_parent)
-	check(advisor_card_parent.find_child("AdvisorPanelContextRoute", true, false) != null and advisor_card_parent.find_child("AdvisorPanelContextFill", true, false) != null and advisor_card_parent.find_child("AdvisorPanelContextGate", true, false) != null, "advisor panel renders context route")
-	check(count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelContextTick_") == 3 and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelContextNode_") == 3, "advisor panel context route renders ticks and card nodes")
-	scene.draw_advisor_panel_priority_sweep(advisor_card_parent)
-	check(advisor_card_parent.find_child("AdvisorPanelPrioritySweep", true, false) != null and advisor_card_parent.find_child("AdvisorPanelPriorityRail", true, false) != null and advisor_card_parent.find_child("AdvisorPanelPriorityFill", true, false) != null, "advisor panel renders priority sweep across cards")
-	check(advisor_card_parent.find_child("AdvisorPanelPrioritySource", true, false) != null and advisor_card_parent.find_child("AdvisorPanelPriorityGate", true, false) != null and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelPriorityNode_") == 3, "advisor panel priority sweep renders source gate and card nodes")
-	check(count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelPriorityTick_") == 4, "advisor panel priority sweep renders rhythm ticks")
-	scene.draw_advisor_panel_decision_bridge(advisor_card_parent)
-	check(advisor_card_parent.find_child("AdvisorPanelDecisionBridge", true, false) != null and advisor_card_parent.find_child("AdvisorPanelDecisionBridgeRail", true, false) != null and advisor_card_parent.find_child("AdvisorPanelDecisionBridgeFill", true, false) != null and advisor_card_parent.find_child("AdvisorPanelDecisionBridgeGate", true, false) != null, "advisor panel renders decision bridge route")
-	check(count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelDecisionNode_") == 3 and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelDecisionTick_") == 4, "advisor panel decision bridge renders nodes and rhythm ticks")
-	scene.draw_advisor_panel_analysis_scan(advisor_card_parent)
-	check(advisor_card_parent.find_child("AdvisorPanelAnalysisScan", true, false) != null and advisor_card_parent.find_child("AdvisorPanelAnalysisIntakeRoute", true, false) != null and advisor_card_parent.find_child("AdvisorPanelAnalysisIntakeFill", true, false) != null and advisor_card_parent.find_child("AdvisorPanelRiskRoute", true, false) != null and advisor_card_parent.find_child("AdvisorPanelRiskFill", true, false) != null and advisor_card_parent.find_child("AdvisorPanelOutputRoute", true, false) != null and advisor_card_parent.find_child("AdvisorPanelOutputFill", true, false) != null, "advisor panel analysis scan renders intake risk and output routes")
-	check(advisor_card_parent.find_child("AdvisorPanelAnalysisSeal", true, false) != null and advisor_card_parent.find_child("AdvisorPanelAnalysisGlyph", true, false) != null and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelAnalysisNode_") == 3 and count_nodes_with_name_prefix(advisor_card_parent, "AdvisorPanelAnalysisTick_") == 4, "advisor panel analysis scan renders seal glyph nodes and rhythm ticks")
+	var advisor_card := advisor_card_parent.find_child("AdvisorInfoCard_防守", true, false) as Control
+	check(advisor_card != null and advisor_card.find_child("AdvisorCardPrimary_防守", true, false) != null and advisor_card.find_child("AdvisorCardSecondary_防守", true, false) != null, "advisor card exposes native conclusion and evidence")
+	check(advisor_card != null and advisor_card.find_children("*", "TextureRect", true, false).is_empty(), "advisor card leaves visual ownership to its single parent paper instead of fake signal meters")
 	dispose_node(advisor_card_parent)
 	var action_intent_parent = Control.new()
 	root.add_child(action_intent_parent)
@@ -1764,7 +1702,7 @@ func run() -> void:
 	scene.mode = "offline"
 	scene.offline_phase = "playing"
 	scene.draw_action_dock(action_intent_parent)
-	check(action_intent_parent.find_child("ActionIntentDock", true, false) != null and action_intent_parent.find_child("ActionIntentRail", true, false) != null, "action dock renders contextual intent strip")
+	check(action_intent_parent.find_child("ActionIntentDock", true, false) != null and action_intent_parent.find_child("ActionIntentRail", true, false) == null, "action dock renders native contextual intent without another decorative rail")
 	check(action_intent_parent.find_child("ActionIntentText", true, false) != null and action_intent_parent.find_child("ActionIntentCount", true, false) != null and action_intent_parent.find_child("ActionIntentIcon", true, false) != null, "action intent strip renders text count badge and icon nodes")
 	var action_intent_fallback_parent = Control.new()
 	root.add_child(action_intent_fallback_parent)
@@ -1777,53 +1715,25 @@ func run() -> void:
 	dispose_node(action_intent_parent)
 	var voice_button_parent = Control.new()
 	root.add_child(voice_button_parent)
-	var voice_on_button = scene.make_action_button("闭麦", Color(0.74, 0.24, 0.24), Callable())
-	voice_button_parent.add_child(voice_on_button)
-	scene.draw_voice_button_art(voice_on_button, true, 0.70)
-	check(voice_on_button.find_child("VoiceChannelHaloTexture", true, false) != null and voice_on_button.find_child("VoiceWaveTexture", true, false) != null, "active voice button renders reusable voice-channel halo and voice-wave PNG textures")
-	check(scene.optional_gpt_illustration_texture("voice_gpt_channel") == null or voice_on_button.find_child("VoiceGPTChannelTexture", true, false) != null, "active voice button consumes optional GPT channel texture when generated")
-	check(voice_on_button.find_child("VoiceButtonArt", true, false) != null and voice_on_button.find_child("VoiceButtonStatusDot", true, false) != null and voice_on_button.find_child("VoiceButtonPulse", true, false) != null, "active voice button renders status dot and pulse")
-	check(count_nodes_with_name_prefix(voice_on_button, "VoiceButtonWave_") == 3, "active voice button renders three wave bars")
-	check(voice_on_button.find_child("VoiceButtonListenRing", true, false) != null and voice_on_button.find_child("VoiceButtonPeakMeter", true, false) != null and count_nodes_with_name_prefix(voice_on_button, "VoiceButtonPeakTick_") == 3, "active voice button renders listening ring and peak ticks")
-	check(voice_on_button.find_child("VoiceButtonMicChannel", true, false) != null and voice_on_button.find_child("VoiceButtonMicChannelFill", true, false) != null and voice_on_button.find_child("VoiceButtonInputNode", true, false) != null and count_nodes_with_name_prefix(voice_on_button, "VoiceButtonPacketTick_") == 3, "active voice button renders mic channel and packet ticks")
-	check(voice_on_button.find_child("VoiceButtonTransmitRoute", true, false) != null and voice_on_button.find_child("VoiceButtonTransmitFill", true, false) != null and voice_on_button.find_child("VoiceButtonTransmitGate", true, false) != null and count_nodes_with_name_prefix(voice_on_button, "VoiceButtonSyncTick_") == 3, "active voice button renders transmit route gate and sync ticks")
-	check(voice_on_button.find_child("VoiceButtonFeedbackLoop", true, false) != null and voice_on_button.find_child("VoiceButtonFeedbackRail", true, false) != null and voice_on_button.find_child("VoiceButtonFeedbackFill", true, false) != null, "active voice button renders input-to-transmit feedback loop")
-	check(voice_on_button.find_child("VoiceButtonFeedbackSource", true, false) != null and voice_on_button.find_child("VoiceButtonFeedbackReturnGate", true, false) != null and voice_on_button.find_child("VoiceButtonFeedbackConfirmRoute", true, false) != null and voice_on_button.find_child("VoiceButtonFeedbackConfirmFill", true, false) != null, "active voice button renders feedback source return gate and confirmation route")
-	check(count_nodes_with_name_prefix(voice_on_button, "VoiceButtonFeedbackTick_") == 3, "active voice button renders feedback rhythm ticks")
-	check(voice_on_button.find_child("VoiceButtonNetworkEcho", true, false) != null and voice_on_button.find_child("VoiceButtonNetworkRail", true, false) != null and voice_on_button.find_child("VoiceButtonNetworkFill", true, false) != null and voice_on_button.find_child("VoiceButtonRemoteNode", true, false) != null, "active voice button renders network echo route")
-	check(voice_on_button.find_child("VoiceButtonNetworkGate", true, false) != null and count_nodes_with_name_prefix(voice_on_button, "VoiceButtonNetworkEchoPulse_") == 2 and count_nodes_with_name_prefix(voice_on_button, "VoiceButtonNetworkTick_") == 2, "active voice button renders network echo pulses and ticks")
-	var voice_peak_fill = voice_on_button.find_child("VoiceButtonPeakFill", true, false) as Control
-	check(voice_peak_fill != null and voice_peak_fill.anchor_right > 0.65, "active voice button peak fill tracks microphone level")
-	var voice_off_button = scene.make_action_button("语音", Color(0.24, 0.52, 0.72), Callable())
-	voice_button_parent.add_child(voice_off_button)
-	scene.draw_voice_button_art(voice_off_button, false, 0.0)
-	check(voice_off_button.find_child("VoiceButtonMutedSlash", true, false) != null and count_nodes_with_name_prefix(voice_off_button, "VoiceButtonWave_") == 3, "inactive voice button renders muted slash and retained wave silhouette")
-	check(voice_off_button.find_child("VoiceButtonMutedLock", true, false) != null and voice_off_button.find_child("VoiceButtonPeakFill", true, false) != null and voice_off_button.find_child("VoiceButtonMicChannel", true, false) != null, "inactive voice button renders muted lock dim peak meter and channel")
-	check(voice_off_button.find_child("VoiceButtonTransmitRoute", true, false) != null and voice_off_button.find_child("VoiceButtonTransmitGate", true, false) != null and count_nodes_with_name_prefix(voice_off_button, "VoiceButtonSyncTick_") == 3, "inactive voice button keeps muted transmit route silhouette")
-	check(voice_off_button.find_child("VoiceButtonMuteRoute", true, false) != null and voice_off_button.find_child("VoiceButtonMuteFill", true, false) != null and voice_off_button.find_child("VoiceButtonMuteGate", true, false) != null and count_nodes_with_name_prefix(voice_off_button, "VoiceButtonMuteTick_") == 2, "inactive voice button renders mute confirmation route")
-	check(voice_off_button.find_child("VoiceButtonFeedbackLoop", true, false) != null and voice_off_button.find_child("VoiceButtonFeedbackRail", true, false) != null and voice_off_button.find_child("VoiceButtonFeedbackReturnGate", true, false) != null and count_nodes_with_name_prefix(voice_off_button, "VoiceButtonFeedbackTick_") == 3, "inactive voice button retains muted feedback loop silhouette")
-	check(voice_off_button.find_child("VoiceButtonNetworkEcho", true, false) != null and voice_off_button.find_child("VoiceButtonNetworkRail", true, false) != null and voice_off_button.find_child("VoiceButtonNetworkGate", true, false) != null and count_nodes_with_name_prefix(voice_off_button, "VoiceButtonNetworkEchoPulse_") == 2, "inactive voice button retains muted network echo silhouette")
+	for active in [false, true]:
+		var voice_button = scene.make_action_button("闭麦" if active else "麦克风", Color.WHITE, Callable())
+		voice_button_parent.add_child(voice_button)
+		scene.draw_voice_button_art(voice_button, active, 0.70)
+		check_required(voice_button.find_child("VoiceButtonArt", true, false) != null and voice_button.icon != null and voice_button.icon == scene.optional_gpt_illustration_texture("voice_gpt_channel") and voice_button.get_theme_constant("icon_max_width") == 18 and voice_button.get_theme_constant("h_separation") >= 8, "voice native layout reserves one bitmap and an eight-pixel text gap")
+		check_required(voice_button.text == ("闭麦" if active else "麦克风") and voice_button.tooltip_text.contains("已开启" if active else "已关闭"), "voice action exposes its complete command and current microphone state")
 	dispose_node(voice_button_parent)
 	var danger_art_parent = Control.new()
 	root.add_child(danger_art_parent)
 	scene.draw_danger_discard_confirmation_art(danger_art_parent, "5W", {"tile": "5W", "risk_label": "高", "risk": 42.0, "feed_risk": 36.0, "safety_label": "", "stance": "防守"}, [{"tile": "1W"}, {"tile": "E"}])
-	check(danger_art_parent.find_child("DangerDecisionSealTexture", true, false) != null and danger_art_parent.find_child("DangerWarningTexture", true, false) != null, "danger discard confirmation renders reusable decision-seal and warning PNG textures")
-	check(scene.optional_gpt_illustration_texture("danger_gpt_discard") == null or danger_art_parent.find_child("DangerGPTDiscardTexture", true, false) != null, "danger discard confirmation consumes optional GPT discard texture when generated")
-	check(danger_art_parent.find_child("DangerDiscardConfirmationArt", true, false) != null and danger_art_parent.find_child("DangerDiscardTile", true, false) != null and danger_art_parent.find_child("DangerDiscardRiskSeal", true, false) != null and danger_art_parent.find_child("DangerDiscardDetailText", true, false) != null, "danger discard confirmation renders tile risk seal and detail text illustration")
-	check(danger_art_parent.find_child("DangerDiscardRouteRail", true, false) != null and danger_art_parent.find_child("DangerDiscardRiskFill", true, false) != null and danger_art_parent.find_child("DangerDiscardConfirmSeal", true, false) != null, "danger discard confirmation renders risk route and confirm seal")
-	check(count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardRiskNode_") == 4 and danger_art_parent.find_child("DangerDiscardAlertHalo", true, false) != null and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardAlertRing_") == 3, "danger discard confirmation renders risk nodes and alert halo")
-	check(danger_art_parent.find_child("DangerDiscardSourceTrace", true, false) != null and danger_art_parent.find_child("DangerDiscardSourceFill", true, false) != null and danger_art_parent.find_child("DangerDiscardSourceGate", true, false) != null, "danger discard confirmation renders risk source trace")
-	check(count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardSourceNode_") == 3, "danger discard confirmation renders risk source nodes")
-	check(danger_art_parent.find_child("DangerDiscardSafeRail", true, false) != null and danger_art_parent.find_child("DangerChoiceLatticeTexture", true, false) != null and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardSafeTile_") == 2 and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardSafeGlyph_") == 2 and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardSafePulse_") == 3, "danger discard confirmation renders safe alternative rail with reusable lattice texture")
-	check(danger_art_parent.find_child("DangerDiscardConfirmRoute", true, false) != null and danger_art_parent.find_child("DangerDiscardConfirmFill", true, false) != null and danger_art_parent.find_child("DangerDiscardConfirmGate", true, false) != null, "danger discard confirmation renders confirm decision route")
-	check(danger_art_parent.find_child("DangerDiscardAlternativeRoute", true, false) != null and danger_art_parent.find_child("DangerDiscardAlternativeFill", true, false) != null and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardAlternativeTick_") == 2, "danger discard confirmation renders alternative decision route")
-	check(count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardConfirmTick_") == 2, "danger discard confirmation renders confirm rhythm ticks")
-	check(danger_art_parent.find_child("DangerDiscardDecisionBridge", true, false) != null and danger_art_parent.find_child("DangerDiscardDecisionBridgeRail", true, false) != null and danger_art_parent.find_child("DangerDiscardDecisionConfirmFill", true, false) != null and danger_art_parent.find_child("DangerDiscardDecisionAlternativeFill", true, false), "danger discard confirmation renders confirm-versus-alternative decision bridge")
-	check(danger_art_parent.find_child("DangerDiscardDecisionSplitNode", true, false) != null and danger_art_parent.find_child("DangerDiscardDecisionGate", true, false) != null and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardDecisionTick_") == 3, "danger discard decision bridge renders split node gate and rhythm ticks")
-	check(danger_art_parent.find_child("DangerDiscardFinalChoiceArt", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalChoiceRoute", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalChoiceFill", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalChoiceGate", true, false), "danger discard confirmation renders final choice convergence route")
-	check(danger_art_parent.find_child("DangerDiscardFinalChoiceSource", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalChoiceSeal", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalChoiceGlyph", true, false) != null, "danger discard final choice renders source seal and decision glyph")
-	check(danger_art_parent.find_child("DangerDiscardFinalAlternativeBridge", true, false) != null and danger_art_parent.find_child("DangerDiscardFinalAlternativeFill", true, false) != null, "danger discard final choice renders alternative convergence bridge")
-	check(count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardFinalChoiceNode_") == 3 and count_nodes_with_name_prefix(danger_art_parent, "DangerDiscardFinalChoiceTick_") == 3, "danger discard final choice renders convergence nodes and rhythm ticks")
+	var danger_preview = danger_art_parent.find_child("DangerDiscardTile", true, false) as Control
+	var danger_title = danger_art_parent.find_child("DangerDiscardTitleText", true, false) as Label
+	var danger_surface = danger_art_parent.find_child("DangerWarningTexture", true, false) as TextureRect
+	check_required(danger_art_parent.find_child("DangerDiscardConfirmationArt", true, false) != null and danger_art_parent.find_child("DangerDiscardRiskSeal", true, false) != null and danger_surface != null and danger_surface.texture == scene.optional_gpt_illustration_texture("danger_gpt_discard"), "danger warning retains its authored bitmap and readable risk summary")
+	check_required(danger_preview != null and danger_preview.mouse_filter == Control.MOUSE_FILTER_IGNORE and danger_preview.get_meta("preview_only", false), "danger preview remains read-only and cannot own a discard action")
+	check_required(danger_title != null and danger_title.text == "高危 · 5万", "danger warning names the actual target and high risk without redundant instruction text")
+	for node_name in ["DangerDiscardTitleText", "DangerDiscardRiskLevelText", "DangerDiscardDetailText"]:
+		var danger_label = danger_art_parent.find_child(node_name, true, false) as Label
+		check_required(danger_label != null and danger_label.get_theme_font_size("font_size") >= 12, "danger decision information uses readable type: " + node_name)
 	dispose_node(danger_art_parent)
 	var danger_action_parent = Control.new()
 	root.add_child(danger_action_parent)
@@ -1864,6 +1774,19 @@ func run() -> void:
 	check(scene.find_child("ChatPanelBrocadeTexture", true, false) != null and scene.find_child("ChatStreamTexture", true, false) != null, "chat panel renders reusable brocade and stream PNG textures")
 	check(scene.optional_gpt_illustration_texture("chat_gpt_panel") == null or scene.find_child("ChatGPTPanelTexture", true, false) != null, "chat panel consumes optional GPT panel texture when generated")
 	var chat_input_shield = scene.find_child("ChatPanelInputShield", true, false) as Control
+	var chat_body := scene.find_child("ChatPanelBodyScroll", true, false) as ScrollContainer
+	var chat_content := scene.find_child("ChatPanelBodyContent", true, false) as VBoxContainer
+	var chat_input_row := scene.find_child("ChatPanelInputRow", true, false) as HBoxContainer
+	var chat_input_field := scene.find_child("ChatPanelInputField", true, false) as Control
+	var scroll_chat_input := scene.find_child("ChatInput", true, false) as LineEdit
+	var scroll_chat_clear := scene.find_child("ChatInputClearButton", true, false) as Button
+	var scroll_chat_send := scene.find_child("ChatSendButton", true, false) as Button
+	var chat_latest_preview := scene.find_child("ChatPanelLatestPreview", true, false) as Label
+	check_required(chat_latest_preview != null and chat_latest_preview.text == "你: 收到" and chat_latest_preview.tooltip_text == chat_latest_preview.text, "chat preview shows the latest message and preserves its full text")
+	check(chat_body != null and chat_body.clip_contents and chat_body.follow_focus and chat_content != null and chat_content.get_parent() == chat_body, "chat reading and composing lanes have one native clipped focus-following scroll owner")
+	check(chat_input_row != null and chat_content != null and chat_input_row.get_parent() == chat_content and chat_input_row.get_theme_constant("separation") >= 8, "chat composing row belongs to the scroll content and reserves the actual send gutter")
+	check(chat_input_field != null and chat_input_row != null and chat_input_field.get_parent() == chat_input_row and scroll_chat_input != null and scroll_chat_input.get_parent() == chat_input_field and scroll_chat_clear != null and scroll_chat_clear.get_parent() == chat_input_field, "chat input and clear target share the same scrolling field owner")
+	check(scroll_chat_send != null and chat_input_row != null and scroll_chat_send.get_parent() == chat_input_row and scroll_chat_send.custom_minimum_size.y >= 44.0 and chat_input_field != null and chat_input_field.custom_minimum_size.y >= 44.0, "chat composing controls preserve full touch targets inside their native layout row")
 	check(scene.find_child("ChatPanel", true, false) != null and scene.find_child("ChatPanelArt", true, false) != null and scene.find_child("ChatPanelHeader", true, false) != null and scene.find_child("ChatPanelCountBadge", true, false) != null and chat_input_shield != null and chat_input_shield.mouse_filter == Control.MOUSE_FILTER_STOP and bool(chat_input_shield.get_meta("modal_input_shield", false)), "chat panel renders illustrated header and count badge with a modal background input shield")
 	check(scene.find_child("ChatPanelCloseButton", true, false) != null and scene.find_child("ChatPanelMessageText", true, false) != null and scene.find_child("ChatPanelMessageRangeLabel", true, false) != null and scene.find_child("ChatPanelQuickMessages", true, false) != null and scene.find_child("ChatPanelQuickMessagesLabel", true, false) != null and scene.find_child("ChatPanelCustomMessageLabel", true, false) != null, "chat panel exposes close message range quick-message and custom-message controls")
 	check(scene.find_child("ChatPanelHeaderBridge", true, false) != null and scene.find_child("ChatPanelHeaderBridgeFill", true, false) != null and scene.find_child("ChatPanelHeaderBridgeGate", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelHeaderBridgeTick_") == 2, "chat panel renders header-to-feed bridge route")
@@ -1884,6 +1807,8 @@ func run() -> void:
 	scene.clear_screen()
 	scene.chat_messages.clear()
 	scene.show_chat_panel()
+	chat_latest_preview = scene.find_child("ChatPanelLatestPreview", true, false) as Label
+	check_required(chat_latest_preview != null and chat_latest_preview.text == "等待房间消息", "empty chat preview shows the waiting state")
 	check(scene.find_child("ChatPanelEmptyStateArt", true, false) != null and scene.find_child("ChatPanelEmptyRail", true, false) != null and scene.find_child("ChatPanelEmptyFill", true, false) != null and scene.find_child("ChatPanelEmptyGate", true, false) != null, "empty chat panel renders waiting-state route art")
 	check(scene.find_child("ChatPanelEmptySource", true, false) != null and count_nodes_with_name_prefix(scene, "ChatPanelEmptyPulse_") == 3 and has_label_text(scene, "等待房间消息"), "empty chat panel renders source pulse art and waiting text")
 	check(scene.find_child("ChatPanelEmptyListenRoute", true, false) != null and scene.find_child("ChatPanelEmptyListenFill", true, false) != null and scene.find_child("ChatPanelEmptyListenGate", true, false) != null, "empty chat panel renders listen-ready route")
@@ -1926,12 +1851,19 @@ func run() -> void:
 	scene.high_contrast_enabled = false
 	scene.reduce_motion_enabled = false
 	var settings_parent = Control.new()
+	settings_parent.size = scene.safe_content_pixel_size()
 	root.add_child(settings_parent)
 	scene.settings_panel_open = true
 	scene.draw_settings_overlay(settings_parent)
+	await process_frame
 	var settings_panel = settings_parent.find_child("SettingsPanel", true, false) as Control
-	check(settings_panel != null and control_anchor_rect_matches(settings_panel, scene.SETTINGS_PANEL_RECT), "settings overlay uses named 960-safe modal geometry")
-	check(settings_parent.find_child("SettingsConsole3DCastShadow", true, false) != null and settings_parent.find_child("SettingsConsole3DRearShell", true, false) == null and settings_parent.find_child("SettingsConsole3DLowerEdge", true, false) == null and settings_parent.find_child("SettingsConsole3DTopGlint", true, false) == null, "settings overlay keeps one primary surface without a duplicate rear shell")
+	var settings_compact: bool = scene.effective_viewport_size().x <= 960.0 or scene.effective_viewport_size().y <= 560.0
+	if settings_compact:
+		check_required(settings_panel != null and control_anchor_rect_matches(settings_panel, scene.SETTINGS_PANEL_RECT), "compact settings preserve the safe modal reading area")
+	else:
+		check_required(settings_panel != null and settings_panel.size.x >= 600.0 and settings_panel.size.x <= 800.5 and settings_panel.size.y >= 440.0 and settings_panel.size.y <= 520.5 and settings_parent.get_global_rect().grow(0.5).encloses(settings_panel.get_global_rect()) and settings_panel.get_global_rect().get_center().distance_to(settings_parent.get_global_rect().get_center()) < 1.0, "ordinary settings use a bounded centered reading surface within the safe area")
+	var settings_paper := settings_panel as TextureRect
+	check(settings_paper != null and settings_paper.texture is AtlasTexture and (settings_paper.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt") and count_nodes_with_name_prefix(settings_parent, "SettingsConsole3D") == 0, "settings overlay keeps one authored paper surface without decorative console slabs")
 	check(settings_parent.find_child("SettingsConsole3DLeftRail", true, false) != null and settings_parent.find_child("SettingsConsole3DRightRail", true, false) != null and settings_parent.find_child("SettingsConsole3DInnerFloor", true, false) != null and count_nodes_with_name_prefix(settings_parent, "SettingsConsole3DCornerCap_") == 4, "settings console renders side rails inner floor and four corner fittings")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSection3DCastShadow_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DDepthEdge_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DTopRim_") == 3, "settings sections render three complete physical shadow depth and top-rim layers")
 	check(settings_parent.find_child("SettingsCompassTexture", true, false) != null, "settings overlay renders reusable compass PNG texture")
@@ -1963,7 +1895,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusArt_") == 10 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusRail_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowStatusFill_") == 0, "settings rows keep status art but omit obsolete row rails and fills")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingRowStatusDot_") == 0, "settings rows omit compact status dots that competed with text")
 	var settings_row_titles := ["背景音乐", "音效反馈", "语音报牌", "播放测试", "AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目", "画面质量", "本地进度", "隐私诊断"]
-	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == settings_row_titles.size(), "settings rows expose local text readability panels")
+	check(count_nodes_with_name_prefix(settings_parent, "SettingRowTextReadabilityPanel_") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingRowGptPlate_") == 0, "settings rows share the modal paper without nested text pads")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchArt") == 6 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchRail") == 6, "settings toggle buttons render compact switch art and rails")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchDirectionGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchStateGate") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmRoute") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmFill") == 0 and count_nodes_with_name_prefix(settings_parent, "SettingSwitchKnobConfirmGate") == 0, "settings toggle buttons omit obsolete route/state/knob confirmation clutter")
 	for section_name in ["声音", "体验", "系统"]:
@@ -1976,7 +1908,7 @@ func run() -> void:
 		var row_status_label = settings_parent.find_child("SettingRowStatus_%s" % title, true, false) as Label
 		check(row_title_label != null and row_title_label.clip_text and row_title_label.get_theme_font_size("font_size") >= 13, "settings row %s exposes clipped readable title" % title)
 		check(row_status_label != null and row_status_label.clip_text and row_status_label.get_theme_font_size("font_size") >= 12, "settings row %s exposes clipped readable status" % title)
-		check(settings_parent.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) != null, "settings row %s exposes a local text backplate" % title)
+		check(settings_parent.find_child("SettingRowTextReadabilityPanel_%s" % title, true, false) == null, "settings row %s does not stack a local text backplate" % title)
 	var audio_test_speaker_seal = settings_parent.find_child("AudioTestSpeakerSeal", true, false)
 	check(settings_parent.find_child("AudioTestTexture", true, false) != null and settings_parent.find_child("AudioTestButtonArt", true, false) != null and settings_parent.find_child("AudioTestWaveRail", true, false) != null and settings_parent.find_child("AudioTestWaveFill", true, false) != null and audio_test_speaker_seal != null and audio_test_speaker_seal.find_child("AudioTestSpeakerGlyph", true, false) != null and count_nodes_with_name_prefix(settings_parent, "AudioTestWaveBar_") == 4, "settings audio test button renders reusable PNG wave fill speaker illustration")
 	check(settings_parent.find_child("AudioTestCommandRoute", true, false) != null and settings_parent.find_child("AudioTestCommandFill", true, false) != null and settings_parent.find_child("AudioTestCommandGate", true, false) != null and count_nodes_with_name_prefix(settings_parent, "AudioTestCommandTick_") == 2, "settings audio test button renders command route art")
@@ -2003,7 +1935,9 @@ func run() -> void:
 	check(settings_parent.find_child("ResetProgressConfirmArt", true, false) == null, "settings reset progress button starts in safe unarmed state")
 	var reset_prepare_button = first_button_with_text(settings_parent, "重置")
 	check(reset_prepare_button != null, "settings exposes reset progress button for prepare press feedback")
-	check(setting_button_anchor_nodes_clear_text_lane(reset_prepare_button, ["ResetProgressDangerRail", "ResetProgressDangerFill", "ResetProgressHoldRoute", "ResetProgressHoldFill", "ResetProgressHoldGate", "ResetProgressHoldTick_", "ResetProgressLockSeal", "ResetProgressLockRoute", "ResetProgressLockFill", "ResetProgressLockGate", "ResetProgressLockTick_", "ResetProgressDangerNode_", "ResetProgressWarningSpark_"]), "settings reset progress art avoids the button text anchor lane")
+	var reset_face := reset_prepare_button.get_node_or_null("GptButtonFacePlate") as TextureRect if reset_prepare_button != null else null
+	var reset_edges := reset_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if reset_face != null else null
+	check(reset_face != null and reset_edges != null and reset_edges.visible and reset_edges.texture == scene.optional_gpt_illustration_texture("button_face_jiangnan_gpt") and reset_face.show_behind_parent and reset_prepare_button.find_child("ResetProgressButtonArt", true, false) == null and reset_prepare_button.text == "重置" and bool(reset_prepare_button.get_meta("confirmation_is_non_destructive_until_second_click", false)), "settings reset preserves its native action and second-click confirmation without text-lane ornaments")
 	scene.play_reset_progress_button_feedback(reset_prepare_button, false)
 	check(reset_prepare_button.find_child("ResetProgressPressFeedback_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressSource_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressRoute_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressFill_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressGate_prepare", true, false) != null, "settings reset prepare press feedback renders warning route")
 	check(reset_prepare_button.find_child("ResetProgressPressSeal_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressGlyph_prepare", true, false) != null and reset_prepare_button.find_child("ResetProgressPressWarningLock", true, false) != null and count_nodes_with_name_prefix(reset_prepare_button, "ResetProgressPressTick_prepare_") == 3, "settings reset prepare press feedback renders warning seal lock and ticks")
@@ -2043,48 +1977,40 @@ func run() -> void:
 	scene.inventory = {"swap_card": 2, "peek_card": 0, "lucky_charm": 1, "double_coins": 0}
 	scene._show_shop_screen_impl()
 	check(scene.mode == "shop" and scene.find_child("ShopItemRow_swap_card", true, false) != null and count_nodes_with_name_prefix(scene, "ShopItemRow_") == scene.ITEM_TYPES.size(), "shop screen renders named item rows")
-	check(count_named_nodes(scene, "ShopItemRowLowFrequencyPlate") == scene.ITEM_TYPES.size(), "shop item rows expose one low-frequency authored reading plate per item")
-	check(scene.find_child("ShopCabinetFrontPanel", true, false) != null and scene.find_child("ShopCabinet3DCastShadow", true, false) != null and scene.find_child("ShopCabinet3DRearShell", true, false) == null and scene.find_child("ShopCabinet3DLowerEdge", true, false) == null and scene.find_child("ShopCabinet3DTopGlint", true, false) == null, "shop screen keeps one front cabinet surface without a duplicate rear shell")
-	check(scene.find_child("ShopDisplayCabinet3DShell", true, false) != null and scene.find_child("ShopDisplayCabinet3DInset", true, false) != null and scene.find_child("ShopDisplayCabinet3DBottomShelf", true, false) != null and scene.find_child("ShopCabinetFooter3DDepthEdge", true, false) != null, "shop screen renders a recessed item display and physical footer shelf")
-	check(count_nodes_with_name_prefix(scene, "ShopItem3DDepthEdge_") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItem3DTopRim_") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItem3DCharmPlinth_") == scene.ITEM_TYPES.size(), "shop item rows render complete physical shelf and charm-plinth layers")
-	check(count_named_nodes(scene, "ShopBuyButton3DDepthEdge") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopBuyButton3DSideBevel") == scene.ITEM_TYPES.size(), "shop buy buttons render physical depth and side bevels")
-	check(scene.find_child("ShopVaultTexture", true, false) != null, "shop screen renders reusable vault PNG texture")
-	check(scene.optional_gpt_illustration_texture("shop_gpt_vault") == null or scene.find_child("ShopGPTVaultTexture", true, false) != null, "shop screen consumes optional GPT vault texture when generated")
-	check(scene.find_child("SecondaryBackTexture_shop", true, false) != null and scene.find_child("SecondaryBackButtonArt_shop", true, false) != null and scene.find_child("SecondaryBackButtonRail_shop", true, false) != null and scene.find_child("SecondaryBackButtonFill_shop", true, false) != null and count_nodes_with_name_prefix(scene, "SecondaryBackButtonTick_shop_") == 2, "shop back button renders reusable PNG return-route art")
+	check(count_named_nodes(scene, "ShopItemRowGptPlate") == scene.ITEM_TYPES.size(), "shop item rows expose one authored paper reading plate per item")
+	check(scene.find_child("ShopCabinetFrontPanel", true, false) != null and scene.find_child("ShopCabinet3DCastShadow", true, false) == null and scene.find_child("ShopCabinet3DRearShell", true, false) == null, "shop keeps one front paper surface without cabinet shadows or duplicate shells")
+	check(scene.find_child("ShopDisplayCabinet3DShell", true, false) == null and scene.find_child("ShopDisplayCabinet3DInset", true, false) == null and scene.find_child("ShopDisplayCabinet3DBottomShelf", true, false) == null and scene.find_child("ShopCabinetFooter3DDepthEdge", true, false) == null, "shop avoids recessed display and footer shelf layering")
+	check(count_nodes_with_name_prefix(scene, "ShopItem3DDepthEdge_") == 0 and count_nodes_with_name_prefix(scene, "ShopItem3DTopRim_") == 0 and count_nodes_with_name_prefix(scene, "ShopItem3DCharmPlinth_") == 0, "shop avoids obsolete row depth rims and charm plinths")
+	check(count_named_nodes(scene, "ShopBuyButton3DDepthEdge") == 0 and count_named_nodes(scene, "ShopBuyButton3DSideBevel") == 0, "shop avoids extra depth layers on native purchase actions")
+	var paper_shop_back := scene.find_child("ShopBackButton", true, false) as Button
+	check(paper_shop_back != null and paper_shop_back.text == "返回" and paper_shop_back.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and paper_shop_back.get_theme_color("font_color").get_luminance() <= 0.24, "shop keeps its real secondary return action on authored paper with dark ink")
+	check(count_named_nodes(scene, "ShopFocusMarker") == scene.ITEM_TYPES.size() + 1, "shop native return and purchase actions each own an explicit text focus marker")
+	scene.show_toast("购买成功！获得换牌卡", 2000)
+	check(scene.toast_current != null and scene.toast_current.find_child("ToastMessageLabel", true, false) != null, "shop feedback has a named native message owner")
+	scene.dismiss_active_toast()
 	check(scene.find_child("SecondaryBackSourceNode_shop", true, false) != null and scene.find_child("SecondaryBackDestinationNode_shop", true, false) != null and scene.find_child("SecondaryBackConfirmRoute_shop", true, false) != null and scene.find_child("SecondaryBackConfirmFill_shop", true, false) != null and scene.find_child("SecondaryBackConfirmGate_shop", true, false) != null, "shop back button renders source destination and confirmation route")
 	check(count_nodes_with_name_prefix(scene, "SecondaryBackNodeTick_shop_") == 2 and count_nodes_with_name_prefix(scene, "SecondaryBackConfirmTick_shop_") == 2, "shop back button renders node and confirmation rhythm ticks")
 	check(scene.find_child("SecondaryBackReturnFlow_shop", true, false) != null and scene.find_child("SecondaryBackReturnFill_shop", true, false) != null and scene.find_child("SecondaryBackReturnGate_shop", true, false) != null and count_nodes_with_name_prefix(scene, "SecondaryBackReturnTick_shop_") == 3, "shop back button renders return flow route")
 	check(scene.find_child("ShopCurrencyPanel_coins", true, false) != null and scene.find_child("ShopCurrencyPanel_gems", true, false) != null and scene.find_child("ShopCoinGoldFoil", true, false) != null, "shop screen renders named currency panels with coin foil highlight")
-	check(scene.find_child("ShopTransactionMapArt", true, false) != null and scene.find_child("ShopTransactionCurrencySource", true, false) != null and scene.find_child("ShopTransactionGemRoute", true, false) != null and scene.find_child("ShopTransactionGemFill", true, false) != null and scene.find_child("ShopTransactionGemGate", true, false) != null, "shop screen renders top-level currency-to-item transaction map")
-	check(count_nodes_with_name_prefix(scene, "ShopTransactionItemNode_") == scene.ITEM_TYPES.size() and scene.find_child("ShopTransactionSettlementRoute", true, false) != null and scene.find_child("ShopTransactionSettlementFill", true, false) != null and scene.find_child("ShopTransactionSettlementGate", true, false) != null, "shop transaction map renders item nodes and settlement route")
-	check(count_nodes_with_name_prefix(scene, "ShopTransactionGemTick_") == 4 and count_nodes_with_name_prefix(scene, "ShopTransactionSettlementTick_") == 3, "shop transaction map renders gem and settlement rhythm ticks")
-	check(scene.find_child("ShopTransactionAffordabilitySeal", true, false) != null and scene.find_child("ShopTransactionAffordabilityGlyph", true, false) != null and scene.find_child("ShopTransactionMinCostMarker", true, false) != null, "shop transaction map renders affordability seal and min-cost marker")
-	check(scene.find_child("ShopTransactionReserveRoute", true, false) != null and scene.find_child("ShopTransactionReserveFill", true, false) != null and scene.find_child("ShopTransactionReserveGate", true, false) != null and count_nodes_with_name_prefix(scene, "ShopTransactionReserveTick_") == 2, "shop transaction map renders balance reserve route")
-	check(scene.find_child("ShopCurrencyMeterArt_coins", true, false) != null and scene.find_child("ShopCurrencyRail_coins", true, false) != null and scene.find_child("ShopCurrencyFill_coins", true, false) != null and scene.find_child("ShopCurrencyVault_coins", true, false) == null, "shop coins balance keeps live rail/fill while dropping code-drawn vault")
-	check(scene.find_child("ShopCurrencyMeterArt_gems", true, false) != null and scene.find_child("ShopCurrencyRail_gems", true, false) != null and scene.find_child("ShopCurrencyFill_gems", true, false) != null and scene.find_child("ShopCurrencyThreshold_gems", true, false) == null, "shop gems balance keeps live rail/fill while dropping code-drawn threshold")
-	check(count_nodes_with_name_prefix(scene, "ShopCurrencyPulse_coins_") == 0 and count_nodes_with_name_prefix(scene, "ShopCurrencyPulse_gems_") == 0, "shop currency meters drop code-drawn resource pulse accents")
-	check(scene.find_child("ShopCurrencyFlowRail_coins", true, false) != null and scene.find_child("ShopCurrencyFlowFill_coins", true, false) != null and scene.find_child("ShopCurrencyFlowGate_coins", true, false) == null, "shop coins balance keeps live flow rail while dropping code-drawn flow gate")
-	check(scene.find_child("ShopCurrencyFlowRail_gems", true, false) != null and scene.find_child("ShopCurrencyFlowFill_gems", true, false) != null and scene.find_child("ShopCurrencyFlowGate_gems", true, false) == null and count_nodes_with_name_prefix(scene, "ShopCurrencyFlowNode_") == 0, "shop gems balance keeps live flow rail while dropping code-drawn flow gate and nodes")
-	check(count_nodes_with_name_prefix(scene, "ShopCurrencyFlowTick_") == 0 and ((scene.optional_gpt_illustration_texture("shop_currency_meter_panel") == null) or (count_nodes_with_name_prefix(scene, "ShopCurrencyMeterPanelTexture_") == 2)), "shop currency meters replace flow ticks with optional GPT currency-meter panel plate")
-	check(scene.find_child("ShopCabinetFooterPanel", true, false) != null and scene.find_child("ShopCabinetFooterTitle", true, false) != null and scene.find_child("ShopCabinetFooterBody", true, false) != null and scene.find_child("ShopCabinetFooterInventoryBadge", true, false) != null and scene.find_child("ShopCabinetFooterStateBadge", true, false) != null, "shop screen renders lower cabinet footer with inventory and purchase guidance")
-	check(count_named_nodes(scene, "ShopItemShelfRail") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemPriceAura") == scene.ITEM_TYPES.size(), "shop item rows render shelf rail and price aura art")
-	check(scene.find_child("ShopItemShelfTexture_swap_card", true, false) != null and count_nodes_with_name_prefix(scene, "ShopItemShelfTexture_") == scene.ITEM_TYPES.size(), "shop item rows render reusable shelf PNG textures")
+	var shop_paper := scene.find_child("ShopGuofengPaperSurface", true, false) as TextureRect
+	check(shop_paper != null and shop_paper.texture == scene.optional_gpt_illustration_texture("settings_readable_gpt"), "shop uses the same authored paper surface as settings")
+	check(scene.find_child("ShopTransactionMapArt", true, false) == null and scene.find_child("ShopCabinet3DCastShadow", true, false) == null and scene.find_child("ShopDisplayCabinet3DShell", true, false) == null, "shop avoids obsolete transaction diagrams and cabinet shell layering")
+	for currency_kind in ["coins", "gems"]:
+		var balance := scene.find_child("ShopCurrencyValue_%s" % currency_kind, true, false) as Label
+		check(balance != null and balance.text.ends_with(str(int(scene.currency.get(currency_kind, 0)))) and balance.get_theme_color("font_color").get_luminance() <= 0.24, "shop shows its actual %s balance in native dark ink" % currency_kind)
+		check(scene.find_child("ShopCurrencyMeterArt_%s" % currency_kind, true, false) == null, "shop avoids an arbitrary progress meter for the %s balance" % currency_kind)
+	check(scene.find_child("ShopCabinetFooterPanel", true, false) != null and scene.find_child("ShopCabinetFooterTitle", true, false) != null and scene.find_child("ShopCabinetFooterBody", true, false) != null and scene.find_child("ShopCabinetFooterInventoryBadge", true, false) != null and scene.find_child("ShopCabinetFooterStateBadge", true, false) != null, "shop keeps inventory and purchase guidance in its native footer")
 	check(scene.shop_charm_gpt_key("swap_card") == "shop_charm_huan" and scene.shop_charm_gpt_key("peek_card") == "shop_charm_kan" and scene.shop_charm_gpt_key("lucky_charm") == "shop_charm_yun" and scene.shop_charm_gpt_key("double_coins") == "shop_charm_bei", "shop item ids map to distinct GPT charm assets")
-	check(scene.find_child("ShopItemNativeCharm_swap_card", true, false) != null and scene.find_child("ShopItemNativeCharm_peek_card", true, false) != null and scene.find_child("ShopItemNativeCharm_lucky_charm", true, false) != null and scene.find_child("ShopItemNativeCharm_double_coins", true, false) != null, "shop item rows fall back to native charm art when GPT charm texture has no transparent edge")
-	check(scene.find_child("ShopItemIdentity_swap_card", true, false) != null and scene.find_child("ShopItemIdentity_peek_card", true, false) != null and scene.find_child("ShopItemIdentity_lucky_charm", true, false) != null and scene.find_child("ShopItemIdentity_double_coins", true, false) != null, "shop item rows render compact identity labels")
-	check(count_named_nodes(scene, "ShopItemStockPips") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItemStockPip_") >= scene.ITEM_TYPES.size(), "shop item rows render stock pip groups and illustrations")
-	check(count_named_nodes(scene, "ShopItemEnergyRail") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemEnergyFill") == scene.ITEM_TYPES.size(), "shop item rows render energy rails and inventory fill")
-	check(count_nodes_with_name_prefix(scene, "ShopItemCountBadge_") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemCountBadgeArt") == scene.ITEM_TYPES.size(), "shop item rows render named inventory count badges")
-	check(count_named_nodes(scene, "ShopItemCountRail") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemCountFill") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemCountGate") == scene.ITEM_TYPES.size(), "shop item count badges render inventory rails fills and gates")
-	check(count_nodes_with_name_prefix(scene, "ShopItemCountPip_") == scene.ITEM_TYPES.size() * 3, "shop item count badges render stock pips")
-	check(count_named_nodes(scene, "ShopItemRouteRail") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemRouteArrow") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopItemRouteNode_") == scene.ITEM_TYPES.size() * 3, "shop item rows render route rails arrows and comparison nodes")
-	check(count_named_nodes(scene, "ShopItemValueRoute") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemValueFill") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemValueGate") == scene.ITEM_TYPES.size(), "shop item rows render value bridge routes")
-	check(count_named_nodes(scene, "ShopItemValueTick_0") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemValueTick_1") == scene.ITEM_TYPES.size(), "shop item rows render value bridge rhythm ticks")
-	check(count_named_nodes(scene, "ShopItemSettlementRail") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemSettlementFill") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemSettlementGate") == scene.ITEM_TYPES.size(), "shop item rows render settlement rails fills and gates")
-	check(count_named_nodes(scene, "ShopItemSettlementTick_0") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemSettlementTick_1") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemSettlementTick_2") == scene.ITEM_TYPES.size(), "shop item rows render settlement rhythm ticks")
-	check(scene.find_child("ShopItemTypeMark_swap_card", true, false) != null and count_nodes_with_name_prefix(scene, "ShopItemTypeMark_") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemTypeGlyph") == scene.ITEM_TYPES.size(), "shop item rows render item type marks")
-	check(count_named_nodes(scene, "ShopItemPriceSpark_0") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopItemPriceSpark_1") == scene.ITEM_TYPES.size(), "shop item rows render price sparkle accents")
-	check(count_named_nodes(scene, "ShopBuyButtonArt") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopBuyButtonCleanPlate") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopBuyButtonStatus") == 0, "shop buy buttons render clean plates without extra status medallions")
+	for shop_item_id in scene.shop_item_ids_shared():
+		var shop_row := scene.find_child("ShopItemRow_%s" % shop_item_id, true, false) as Control
+		var shop_face := shop_row.find_child("ShopItemRowGptPlate", true, false) as TextureRect if shop_row != null else null
+		var shop_buy := scene.find_child("ShopItemBuyButton_%s" % shop_item_id, true, false) as Button
+		var shop_count := scene.find_child("ShopItemCountBadge_%s" % shop_item_id, true, false) as Control
+		check(shop_face != null and shop_face.texture == scene.optional_gpt_illustration_texture("menu_card_readable_gpt") and shop_face.modulate == Color.WHITE, "shop item %s uses one opaque authored paper face" % shop_item_id)
+		check(shop_buy != null and shop_buy.get_meta("guofeng_button_face_key", "") == "menu_ink_primary" and not shop_buy.disabled, "shop item %s exposes its available native ink purchase action" % shop_item_id)
+		check(shop_count != null and int(shop_count.get_meta("inventory_count", -1)) == scene.get_item_count(shop_item_id) and shop_count.find_child("ShopItemStockText", true, false) != null, "shop item %s shows actual owned inventory rather than a false stock meter" % shop_item_id)
+		check(scene.find_child("ShopItemIdentity_%s" % shop_item_id, true, false) != null and scene.find_child("ShopItemCharmTexture_%s" % shop_item_id, true, false) != null, "shop item %s keeps its native classification and authored charm" % shop_item_id)
+	check(count_named_nodes(scene, "ShopBuyButtonArt") == 0 and count_named_nodes(scene, "ShopItemValueRoute") == 0 and count_named_nodes(scene, "ShopItemEnergyRail") == 0, "shop avoids layered buy chrome and invented item progress")
 	check(count_nodes_with_name_prefix(scene, "ShopBuyButtonCommand_") == scene.ITEM_TYPES.size() and count_nodes_with_name_prefix(scene, "ShopBuyButtonPrice_") == scene.ITEM_TYPES.size(), "shop buy buttons expose command and gem price text")
 	var shop_swap_command = scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Label
 	var shop_swap_price = scene.find_child("ShopBuyButtonPrice_swap_card", true, false) as Label
@@ -2111,11 +2037,13 @@ func run() -> void:
 	scene._show_shop_screen_impl()
 	var low_gem_swap_command = scene.find_child("ShopBuyButtonCommand_swap_card", true, false) as Label
 	var low_gem_swap_price = scene.find_child("ShopBuyButtonPrice_swap_card", true, false) as Label
-	check(low_gem_swap_command != null and low_gem_swap_command.text == "不足 2玉符" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item exposes single-line shortage CTA and hidden gem price anchor")
-	check(scene.find_child("ShopCurrencyLowRoute_coins", true, false) != null and scene.find_child("ShopCurrencyLowFill_coins", true, false) != null and scene.find_child("ShopCurrencyLowGate_coins", true, false) != null and scene.find_child("ShopCurrencyEmptyWarning_coins", true, false) != null, "shop coins balance renders low-resource route and empty warning")
-	check(scene.find_child("ShopCurrencyLowRoute_gems", true, false) != null and scene.find_child("ShopCurrencyLowFill_gems", true, false) != null and scene.find_child("ShopCurrencyLowGate_gems", true, false), "shop gems balance renders low-resource route")
-	check(count_nodes_with_name_prefix(scene, "ShopCurrencyLowTick_") == 6, "shop low-resource meters render rhythm ticks")
-	check(count_named_nodes(scene, "ShopBuyButtonCleanPlate") == scene.ITEM_TYPES.size() and count_named_nodes(scene, "ShopBuyButtonStatus") == 0, "low-gem shop buy buttons keep compact plates without status medallions")
+	check(low_gem_swap_command != null and low_gem_swap_command.text == "5玉·差2玉" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item shows its total price and exact shortage in the CTA")
+	var low_coin_value := scene.find_child("ShopCurrencyValue_coins", true, false) as Label
+	var low_gem_value := scene.find_child("ShopCurrencyValue_gems", true, false) as Label
+	check(low_coin_value != null and low_coin_value.text == "铜钱 0" and low_gem_value != null and low_gem_value.text == "玉符 3", "low-balance shop shows exact currency values without arbitrary meter thresholds")
+	check(scene.find_child("ShopCurrencyLowRoute_coins", true, false) == null and scene.find_child("ShopCurrencyLowRoute_gems", true, false) == null and count_nodes_with_name_prefix(scene, "ShopCurrencyLowTick_") == 0, "low-balance shop avoids obsolete low-resource chrome")
+	var low_shop_buy := scene.find_child("ShopItemBuyButton_swap_card", true, false) as Button
+	check(low_shop_buy != null and low_shop_buy.disabled and low_shop_buy.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and int(low_shop_buy.get_meta("currency_gap_gems", 0)) == 2, "low-balance shop keeps its real disabled purchase and exact currency gap")
 	check(count_named_nodes(scene, "ShopBuyButtonInsufficientRoute") == 0 and count_named_nodes(scene, "ShopBuyButtonInsufficientPriceBridge") == 0 and count_nodes_with_name_prefix(scene, "ShopBuyButtonInsufficientTick_") == 0, "low-gem shop buy buttons omit blocked route clutter")
 	var blocked_purchase_row = scene.find_child("ShopItemRow_swap_card", true, false) as Control
 	var blocked_shop_buy_button = first_button(blocked_purchase_row)
@@ -2126,6 +2054,9 @@ func run() -> void:
 	scene.start_offline(false)
 	scene.game_stats = {"games_played": 12, "games_won": 7, "total_score": 18800, "best_score": 9600, "win_rate": 7.0 / 12.0, "total_fan": 36, "total_hands": 44}
 	scene._show_stats_screen_impl()
+	var stats_title_ink := scene.find_child("StatsTitle", true, false) as Label
+	check(stats_title_ink != null and relative_luma(stats_title_ink.get_theme_color("font_color")) <= 0.24, "statistics title uses dark ink on the real paper owner")
+
 	check(scene.mode == "stats" and scene.find_child("StatsDashboardArt", true, false) != null, "stats screen renders dashboard illustration")
 	check(scene.find_child("StatsConsoleFrontPanel", true, false) != null and scene.find_child("StatsConsole3DCastShadow", true, false) != null and scene.find_child("StatsConsole3DRearShell", true, false) != null and scene.find_child("StatsConsole3DLowerEdge", true, false) != null and scene.find_child("StatsConsole3DTopGlint", true, false) != null, "stats screen renders a complete physical console shell")
 	check(scene.find_child("StatsConsole3DDataInset", true, false) != null and scene.find_child("StatsConsole3DBottomShelf", true, false) != null and scene.find_child("StatsDashboard3DDepthEdge", true, false) != null and scene.find_child("StatsDashboard3DTopRim", true, false) != null, "stats screen renders recessed data lane and physical dashboard depth")
@@ -2147,7 +2078,7 @@ func run() -> void:
 	check(scene.find_child("StatsDashboardScanRoute", true, false) != null and scene.find_child("StatsDashboardScanFill", true, false) != null and scene.find_child("StatsDashboardScanGate", true, false) != null and count_nodes_with_name_prefix(scene, "StatsDashboardScanTick_") == 4, "stats dashboard renders scan route from summary to trend")
 	check(scene.find_child("StatsSummaryNarrativePanel", true, false) != null and scene.find_child("StatsSummaryNarrativeTitle", true, false) != null and scene.find_child("StatsSummaryNarrativeBody", true, false) != null and scene.find_child("StatsSummaryNarrativeMeta", true, false) != null and scene.find_child("StatsSummaryNarrativeRail", true, false) != null, "stats dashboard renders compact narrative summary panel")
 	var stats_narrative_meta = scene.find_child("StatsSummaryNarrativeMeta", true, false) as Label
-	check(has_label_text(scene, "顺风") and stats_narrative_meta != null and str(stats_narrative_meta.text).begins_with("7胜/12局") and str(stats_narrative_meta.text).contains("胜率"), "stats narrative summary labels the current record state and win rate")
+	check(has_label_text(scene, "顺风") and stats_narrative_meta == null and scene.find_child("StatsSummaryNarrativeBody", true, false) == null, "statistics shows one actual trend and omits duplicate narrative")
 	check(scene.find_child("StatsDataScanArt", true, false) != null and scene.find_child("StatsDataScanSource", true, false) != null and scene.find_child("StatsDataScanRoute", true, false) != null and scene.find_child("StatsDataScanFill", true, false) != null and scene.find_child("StatsDataScanGate", true, false) != null, "stats screen renders data scan route")
 	check(scene.find_child("StatsDataScanArchive", true, false) != null and scene.find_child("StatsDataScanGlyph", true, false) != null and count_nodes_with_name_prefix(scene, "StatsDataScanNode_") == 4 and count_nodes_with_name_prefix(scene, "StatsDataScanTick_") == 3, "stats data scan renders archive glyph metric nodes and rhythm ticks")
 	check(scene.find_child("StatsInsightConvergenceArt", true, false) != null and scene.find_child("StatsInsightSource", true, false) != null and scene.find_child("StatsInsightRoute", true, false) != null and scene.find_child("StatsInsightFill", true, false) != null and scene.find_child("StatsInsightGate", true, false) != null, "stats screen renders insight convergence route")
@@ -2169,7 +2100,7 @@ func run() -> void:
 	check(stats_winrate_value != null and stats_winrate_value.text == "顺风" and stats_winrate_unit != null and stats_winrate_unit.text == "状态" and stats_games_value != null and stats_games_value.text == "3" and stats_games_unit != null and stats_games_unit.text == "番/局" and stats_best_value != null and stats_best_value.text == scene.compact_score_text(1567) and stats_best_unit != null and stats_best_unit.text == "分/局", "stats dashboard keeps trend and per-round summary value/unit labels structurally separate")
 	check(count_nodes_with_name_prefix(scene, "StatsRowArt_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowRail_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowFill_") == 6, "stats rows render illustrated metric rails and fills")
 	check(scene.find_child("StatsRow_总场次", true, false) != null and scene.find_child("StatsRow_胜场", true, false) != null and scene.find_child("StatsRow_胜率", true, false) != null and scene.find_child("StatsRow_累计净分", true, false) != null and scene.find_child("StatsRow_单局最佳", true, false) != null and scene.find_child("StatsRow_总手牌数", true, false) != null, "stats rows render concrete named metric rows")
-	check(count_nodes_with_name_prefix(scene, "StatsRowValuePanel_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowValueSheen_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowValueDivider_") == 6, "stats rows expose high contrast native value readouts")
+	check(count_nodes_with_name_prefix(scene, "StatsRowValueLabel_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowLabel_") == 6, "statistics retains six native metric labels and value readouts")
 	check(label_is_clipped(scene.find_child("StatsRowLabel_总场次", true, false) as Label) and label_is_clipped(scene.find_child("StatsRowValueLabel_单局最佳", true, false) as Label), "stats rows keep readable clipped labels and values")
 	check(count_nodes_with_name_prefix(scene, "StatsRowIconPanel_") == 6 and count_nodes_with_name_prefix(scene, "StatsRowReadabilityGlow_") == 6, "stats rows expose readable icon panels and soft row glow")
 	check(scene.find_child("StatsRowMarker_总场次", true, false) != null and scene.find_child("StatsRowMarker_胜场", true, false) != null and scene.find_child("StatsRowMarker_胜率", true, false) != null and scene.find_child("StatsRowMarker_累计净分", true, false) != null and scene.find_child("StatsRowMarker_单局最佳", true, false) != null and scene.find_child("StatsRowMarker_总手牌数", true, false) != null, "stats rows render concrete named row markers")
@@ -2193,16 +2124,16 @@ func run() -> void:
 	scene.task_progress = {"win_3": 3, "peng_3": 1, "gang_1": 1, "play_5": 2, "score_plus": 0}
 	scene.tutorial_step = 0
 	scene.show_menu(true)
-	check(scene.find_child("MenuPrimary3DStage", true, false) != null and scene.find_child("MenuPrimary3DFloorShadow", true, false) != null and scene.find_child("MenuPrimary3DTableLip", true, false) != null, "3D menu primary stage exists")
+	check(scene.find_child("MenuGuofengBackdrop", true, false) != null and scene.find_child("MenuPrimary3DStage", true, false) == null and scene.find_child("MenuPrimary3DFloorShadow", true, false) == null and scene.find_child("MenuPrimary3DTableLip", true, false) == null, "the moonlit home keeps one background without decorative stage slabs")
 	check(scene.optional_gpt_illustration_texture("menu_primary_3d_stage_overlay") == null or scene.find_child("MenuPrimary3DStageGPTOverlay", true, false) != null, "main menu consumes optional GPT 3D stage overlay when generated")
-	check(count_nodes_with_name_prefix(scene, "MenuPrimary3DCardShadow_") == 3, "3D menu card shadows exist")
+	check(count_nodes_with_name_prefix(scene, "MenuPrimary3DCardShadow_") == 0 and count_named_nodes(scene, "MenuCardGptFace") == 3, "the home owns three complete authored faces without extra shadow rectangles")
 	check(scene.find_child("MenuTitleGoldFoil", true, false) != null, "main menu title renders gold foil overlay")
 	var menu_action_stage = scene.find_child("MenuPrimaryActionStage", true, false)
 	var menu_stage_glow = scene.find_child("MenuPrimaryActionStageGlow", true, false) as TextureRect
 	check(menu_action_stage != null and menu_stage_glow != null and menu_stage_glow.texture == scene.illustration_texture("menu_stage_glow"), "main menu renders framed primary action stage with registered glow texture")
 	check(count_named_nodes(scene, "MenuCardEntryArt") == 3 and count_named_nodes(scene, "MenuCardSurface") == 3 and count_named_nodes(scene, "MenuCardInner") == 3 and count_named_nodes(scene, "MenuCardAccent") == 3 and count_named_nodes(scene, "MenuCardIconEcho") == 3 and count_named_nodes(scene, "MenuCardEntryArrow") == 3, "main menu cards render clean commercial animated surface layers")
 	check(count_named_nodes(scene, "MenuCardTextBackplate") == 3 and count_named_nodes(scene, "MenuCardTitleLabel") == 3 and count_named_nodes(scene, "MenuCardSubtitleLabel") == 3, "main menu cards render native readable title and subtitle lanes")
-	check(count_named_nodes(scene, "MenuCardCastShadow") == 3 and count_named_nodes(scene, "MenuCardDepthEdge") == 3 and count_named_nodes(scene, "MenuCardTopSheen") == 3, "3D menu card depth exists")
+	check(count_named_nodes(scene, "MenuCardCastShadow") == 0 and count_named_nodes(scene, "MenuCardDepthEdge") == 0 and count_named_nodes(scene, "MenuCardTopSheen") == 0 and count_named_nodes(scene, "MenuCardTextBackplate") == 0, "the home keeps continuous authored card surfaces without stacked meter-like decorations")
 	check(count_named_nodes(scene, "MenuCardEntryRail") == 0 and count_named_nodes(scene, "MenuCardEntryFill") == 0 and count_nodes_with_name_prefix(scene, "MenuCardEntryNode_") == 0 and count_nodes_with_name_prefix(scene, "MenuCardEntrySpark_") == 0, "main menu cards omit legacy entry route nodes and sparks")
 	check(count_named_nodes(scene, "MenuCardEntryConfirmRoute") == 0 and count_named_nodes(scene, "MenuCardEntryConfirmFill") == 0 and count_named_nodes(scene, "MenuCardEntryConfirmGate") == 0 and count_nodes_with_name_prefix(scene, "MenuCardEntryConfirmTick_") == 0, "main menu cards omit legacy confirmation routes and ticks")
 	check(count_named_nodes(scene, "ButtonPressSheen") >= 3 and count_named_nodes(scene, "MenuCardDecisionBand") == 0 and count_named_nodes(scene, "MenuCardDecisionFill") == 0 and count_named_nodes(scene, "MenuCardActivationSeal") == 0 and count_named_nodes(scene, "MenuCardActivationCore") == 0, "main menu cards keep press sheen and omit legacy decision route art")
@@ -2251,6 +2182,10 @@ func run() -> void:
 	scene.achievements["seven_pairs"] = true
 	scene.achievements["thirteen_orphans"] = false
 	scene._show_achievements_screen_impl()
+	var achievement_focus_marker := scene.find_child("AchievementRowFocusMarker", true, false) as Label
+	var secondary_focus_marker := scene.find_child("GuofengActionFocusMarker", true, false) as Label
+	check(achievement_focus_marker != null and secondary_focus_marker != null and achievement_focus_marker.text == "▸" and secondary_focus_marker.text == "▸", "secondary page and achievement row expose actual native keyboard focus cues")
+
 	check(scene.find_child("AchievementGalleryFrontPanel", true, false) != null and scene.find_child("AchievementGallery3DCastShadow", true, false) != null and scene.find_child("AchievementGallery3DRearShell", true, false) != null and scene.find_child("AchievementGallery3DLowerEdge", true, false) != null and scene.find_child("AchievementGallery3DTopGlint", true, false) != null, "achievements screen renders a complete physical gallery cabinet shell")
 	check(scene.find_child("AchievementGallery3DListInset", true, false) != null and scene.find_child("AchievementGallery3DBottomShelf", true, false) != null and scene.find_child("AchievementsDashboard3DDepthEdge", true, false) != null and scene.find_child("AchievementsDashboard3DTopRim", true, false) != null and scene.find_child("AchievementsDashboard3DMedalPedestal", true, false) != null, "achievements screen renders recessed list and physical dashboard medal stage")
 	check(count_nodes_with_name_prefix(scene, "AchievementRow3DDepthEdge_") == scene.achievements.size() and count_nodes_with_name_prefix(scene, "AchievementRow3DTopRim_") == scene.achievements.size() and count_nodes_with_name_prefix(scene, "AchievementRow3DMedalPedestal_") == scene.achievements.size(), "achievement rows render complete physical depth and medal pedestal layers")
@@ -2271,7 +2206,7 @@ func run() -> void:
 	if achievements_medal_glyph != null:
 		check(relative_luma(achievements_medal_glyph.get_theme_color("font_color")) >= 0.86 and achievements_medal_glyph.get_theme_color("font_color").a >= 0.90, "achievements medal glyph stays bright")
 	if achievements_progress_detail != null:
-		check(relative_luma(achievements_progress_detail.get_theme_color("font_color")) >= 0.80 and achievements_progress_detail.clip_text, "achievements progress detail stays readable and clipped")
+		check(relative_luma(achievements_progress_detail.get_theme_color("font_color")) <= 0.24 and not achievements_progress_detail.text.contains("%"), "achievements native supporting copy uses dark ink and avoids a duplicate completion percentage")
 	check(scene.find_child("AchievementsProgressRail", true, false) != null and scene.find_child("AchievementsProgressFill", true, false) != null and scene.find_child("AchievementsProgressGate", true, false) != null and scene.find_child("AchievementsProgressLabel", true, false) != null, "achievements dashboard renders progress rail fill gate and label")
 	check(scene.find_child("AchievementsUnlockRoute", true, false) != null and scene.find_child("AchievementsUnlockFill", true, false) != null and scene.find_child("AchievementsUnlockSource", true, false) != null, "achievements dashboard renders unlock route")
 	check(count_nodes_with_name_prefix(scene, "AchievementsProgressNode_") == 5 and count_nodes_with_name_prefix(scene, "AchievementsProgressTick_") == 4, "achievements dashboard renders progress nodes and ticks")
@@ -2301,11 +2236,15 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(scene, "AchievementsRowCollectionTick_") == 4 and count_nodes_with_name_prefix(scene, "AchievementsRowCollectionArchivePip_") == 2, "achievements collection bus renders rhythm ticks and archive pips")
 	scene.start_offline(false)
 	scene._show_rules_screen_impl()
+	var rules_title_ink := scene.find_child("RulesTitle", true, false) as Label
+	check(rules_title_ink != null and relative_luma(rules_title_ink.get_theme_color("font_color")) <= 0.24, "rules title is actual dark ink on authored paper")
+	check(scene.find_child("RulesGuideStepFocusMarker_0", true, false) != null, "rules chapters provide actual native focus cues")
+
 	await process_frame
 	await process_frame
 	var rules_section_count := int(scene.RULES_SECTION_COUNT)
 	check(rules_section_count == 6, "rules implementation declares the six-section local rules contract")
-	check(scene.find_child("RulesCodexFrontPanel", true, false) != null and scene.find_child("RulesCodexFrontPlate", true, false) != null and scene.find_child("RulesCodex3DCastShadow", true, false) != null and scene.find_child("RulesCodex3DRearShell", true, false) == null and scene.find_child("RulesCodex3DLowerEdge", true, false) == null and scene.find_child("RulesCodex3DTopGlint", true, false) == null, "rules screen keeps one front surface without a duplicate rear shell")
+	check(scene.find_child("RulesGuofengPaperSurface", true, false) != null and scene.find_child("RulesCodex3DCastShadow", true, false) == null and scene.find_child("RulesCodex3DRearShell", true, false) == null and scene.find_child("RulesCodex3DLowerEdge", true, false) == null and scene.find_child("RulesCodex3DTopGlint", true, false) == null, "rules screen keeps one authored paper surface without duplicate shell layers")
 	check(scene.find_child("RulesCodex3DReadingInset", true, false) != null and scene.find_child("RulesCodex3DBottomShelf", true, false) != null, "rules screen renders a recessed reading viewport and bottom shelf")
 	check(count_nodes_with_name_prefix(scene, "RuleSection3DDepthEdge_") == rules_section_count and count_nodes_with_name_prefix(scene, "RuleSection3DTopRim_") == rules_section_count and count_nodes_with_name_prefix(scene, "RuleSection3DExamplePlinth_") == rules_section_count, "every rules section renders physical card and example-plinth layers")
 	check(scene.mode == "rules" and scene.find_child("RulesGuideArt", true, false) != null and ((scene.optional_gpt_illustration_texture("rules_guide_panel") == null) or (scene.find_child("RulesGuidePanelPlate", true, false) != null)), "rules screen renders guide illustration using optional GPT guide plate instead of code-drawn rail lines")
@@ -2343,7 +2282,9 @@ func run() -> void:
 	check(scene.find_child("RuleActionChip_吃", true, false) == null and scene.find_child("RuleActionChip_胡", true, false) == null and scene.find_child("RuleActionWinPulse", true, false) == null and scene.find_child("RuleActionFlowRail", true, false) == null and scene.find_child("RuleActionFlowFill", true, false) == null and count_nodes_with_name_prefix(scene, "RuleActionFlowNode_") == 0 and count_nodes_with_name_prefix(scene, "RuleActionFlowTick_") == 0 and scene.find_child("RuleActionPriorityRoute", true, false) == null and scene.find_child("RuleActionPriorityFill", true, false) == null and scene.find_child("RuleActionPrioritySource", true, false) == null and scene.find_child("RuleActionWinGate", true, false) == null and count_nodes_with_name_prefix(scene, "RuleActionPriorityTick_") == 0, "rules semantic GPT lanes replace legacy action-route widgets")
 	for section_index in range(rules_section_count):
 		var section = scene.find_child("RuleSection_%d" % section_index, true, false) as Control
-		check(section != null and section.find_child("RuleSectionTitle_%d" % section_index, true, false) != null and section.find_child("RuleSectionTextBackplate_%d" % section_index, true, false) != null and section.find_child("RuleSectionArtStrip_%d" % section_index, true, false) != null, "rules section %d exposes titled readable text and semantic side lanes" % section_index)
+		var section_title := section.find_child("RuleSectionTitle_%d" % section_index, true, false) as Label if section != null else null
+		var first_clause := section.find_child("RuleSectionLine_%d_0" % section_index, true, false) as Label if section != null else null
+		check(section_title != null and first_clause != null and not first_clause.text.is_empty() and relative_luma(section_title.get_theme_color("font_color")) <= 0.24 and relative_luma(first_clause.get_theme_color("font_color")) <= 0.24 and section.find_child("RuleSectionArtStrip_%d" % section_index, true, false) == null, "rules section %d exposes native dark title and complete clauses on the shared paper" % section_index)
 	if rules_scroll != null and rules_scrollbar != null and rules_gutter != null and rules_thumb != null:
 		var scroll_range = maxf(0.0, rules_scrollbar.max_value - rules_scrollbar.page)
 		check(scroll_range > 0.0, "six-section rules contract requires a scrollable reading viewport")
@@ -2362,6 +2303,10 @@ func run() -> void:
 	scene.online_feedback = "已发送加入房间，等待服务器确认。"
 	scene.online_waiting_for_server = true
 	scene._show_online_lobby_impl()
+	var lobby_paper_field := scene.find_child("LobbyFieldPaperFace", true, false) as TextureRect
+	var lobby_editing_indicator := scene.find_child("LobbyFieldEditingIndicator", true, false) as Label
+	check(lobby_paper_field != null and lobby_paper_field.texture == scene.optional_gpt_illustration_texture("menu_card_readable_gpt") and lobby_paper_field.show_behind_parent and lobby_editing_indicator != null and lobby_editing_indicator.text == "编辑中", "lobby preserves native field reading and a single authored paper face")
+
 	check(scene.mode == "online_lobby" and scene.find_child("OnlineLobbyRoomArt", true, false) != null and scene.find_child("OnlineLobbyRoomFanOverlay", true, false) != null and scene.find_child("OnlineLobbyRoomNode", true, false) != null, "online lobby renders room status illustration with reusable fan overlay")
 	check(scene.find_child("OnlineLobbyLowFrequencyPagePlate", true, false) != null, "online lobby exposes its low-frequency authored page substrate")
 	check(scene.find_child("OnlineLobbyRoomBadge", true, false) != null and scene.find_child("OnlineLobbyRoomBadgeLabel", true, false) != null and scene.find_child("OnlineLobbyRoomBadgeViewIcon", true, false) != null, "online lobby exposes a named room badge, label, and visible view icon for connection-state refresh")
@@ -2381,10 +2326,10 @@ func run() -> void:
 	check(online_lobby_status_label != null and scene.find_child("OnlineLobbyStartGateReason", true, false) != null and has_label_text(scene, "下一步 · 先连接，再建房或入房"), "online lobby lower status and start condition expose concise connection guidance")
 	check(online_lobby_status_label != null and not str(online_lobby_status_label.text).contains(str(scene.DEFAULT_HOST)) and not str(online_lobby_status_label.text).contains(":"), "online lobby lower status does not repeat raw endpoint details")
 	check(online_lobby_start_button != null and online_lobby_start_button.disabled and online_lobby_start_button.text == "连接后开始", "online lobby start button shows disabled waiting state until server connection succeeds")
-	check(scene.find_child("OnlineLobbyFormPanel", true, false) != null and scene.find_child("OnlineLobbyLogPanel", true, false) != null and scene.find_child("OnlineLobbyInputGroupBackplate", true, false) != null and scene.find_child("OnlineLobbyActionClusterBackplate", true, false) != null and scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) != null and scene.find_child("OnlineLobbyLogReadabilityBackplate", true, false) != null, "online lobby keeps named readability backplates for form action status and log areas")
+	check(scene.find_child("OnlineLobbyFormPanel", true, false) != null and scene.find_child("OnlineLobbyLogPanel", true, false) != null and scene.find_child("LobbyGuofengPaperSurface", true, false) != null and scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) == null and scene.find_child("OnlineLobbyLogReadabilityBackplate", true, false) == null, "lobby uses its single authored paper without overlapping status substrates")
 
 	check(scene.find_child("OnlineLobby3DCastShadow", true, false) != null and scene.find_child("OnlineLobby3DRearShell", true, false) != null and scene.find_child("OnlineLobby3DTopGlint", true, false) != null and scene.find_child("OnlineLobby3DLowerEdge", true, false) != null, "online lobby renders commercial 3D lacquer shell")
-	check(scene.find_child("OnlineLobbyForm3DRearShell", true, false) != null and scene.find_child("OnlineLobbyForm3DTopRim", true, false) != null, "online lobby form panel exposes commercial rear shell and top rim")
+	check(scene.find_child("LobbyGuofengPaperSurface", true, false) != null and scene.find_child("OnlineLobbyForm3DRearShell", true, false) == null and scene.find_child("OnlineLobbyForm3DTopRim", true, false) == null, "online lobby form exposes one shared authored paper surface")
 	check(scene.find_child("LineEditInputArt_name", true, false) != null and scene.find_child("LineEditInputArt_server", true, false) != null and scene.find_child("LineEditInputArt_room", true, false) != null and count_nodes_with_name_prefix(scene, "LineEditInputSurface_") == 3 and count_nodes_with_name_prefix(scene, "LineEditInputInner_") == 3 and count_nodes_with_name_prefix(scene, "LineEditInputFocusGlow_") == 3, "online lobby line edits render clean surfaces and focus glows")
 	check(count_nodes_with_name_prefix(scene, "LineEditInputAccentWash_") == 3 and count_nodes_with_name_prefix(scene, "LineEditInputCornerSeal_") == 3 and count_nodes_with_name_prefix(scene, "LineEditInputCornerGlyph_") == 3, "online lobby line edits render wash and seal accents")
 	check(count_nodes_with_name_prefix(scene, "LineEditInputRail_") == 0 and count_nodes_with_name_prefix(scene, "LineEditInputFill_") == 0 and count_nodes_with_name_prefix(scene, "LineEditInputFocusNode_") == 0 and count_nodes_with_name_prefix(scene, "LineEditInputPulse_") == 0, "online lobby line edits remove legacy rails fills focus nodes and pulses")
@@ -2483,21 +2428,20 @@ func run() -> void:
 	check(ended_status_label != null and ended_status_label.text == "本局结算 · 你自摸 8番 16分" and not ended_status_label.text.contains("..."), "top HUD ended status uses a complete short settlement summary")
 	check(label_is_clipped(first_label_containing_text(hud_parent, "余")), "top HUD wall summary clips inside its slot")
 	var offline_title_rect := Rect2(Vector2(0.106, 0.090), Vector2(0.260, 0.535))
-	var offline_status_rect := Rect2(Vector2(0.270, 0.090), Vector2(0.610, 0.515))
-	var offline_wall_rect := Rect2(Vector2(0.632, 0.140), Vector2(0.766, 0.860))
+	var offline_status_rect := Rect2(Vector2(0.274, 0.090), Vector2(0.584, 0.515))
+	var offline_wall_rect := Rect2(Vector2(0.596, 0.120), Vector2(0.766, 0.875))
 	var hud_title = hud_parent.find_child("TopHudTitle", true, false) as Control
 	var hud_status = hud_parent.find_child("TopHudStatus", true, false) as Control
 	var hud_wall_text = hud_parent.find_child("TopHudWallText", true, false) as Control
-	var hud_wall_meter = hud_parent.find_child("TopHudWallMeter", true, false) as Control
 	check(control_anchor_rect_matches(hud_title, offline_title_rect), "top HUD title uses offline wide geometry for compact battle title")
 	check(control_anchor_rect_matches(hud_status, offline_status_rect), "top HUD status uses offline wide geometry next to battle title")
 	check(hud_title != null and hud_status != null and hud_title.anchor_right <= hud_status.anchor_left, "top HUD title clears status label")
-	check(hud_parent.find_child("TopHudTitleBack", true, false) != null and hud_parent.find_child("TopHudStatusBack", true, false) != null and hud_parent.find_child("TopHudWallBack", true, false) != null, "top HUD exposes readability backplates for title status and wall")
-	check(control_anchor_rect_matches(hud_wall_meter, offline_wall_rect), "offline top HUD wall meter uses widened compact geometry")
+	check(hud_parent.find_child("TopHudTitleBack", true, false) == null and hud_parent.find_child("TopHudStatusBack", true, false) == null and hud_parent.find_child("TopHudWallBack", true, false) == null and hud_title != null and hud_status != null and hud_wall_text != null, "top HUD exposes native title status and wall owners without duplicate backplates")
+	check(hud_parent.find_child("TopHudWallMeter", true, false) == null, "offline top HUD does not build a second wall meter")
 	check(hud_wall_text != null and hud_wall_text.anchor_left > offline_wall_rect.position.x and hud_wall_text.anchor_right < offline_wall_rect.size.x, "offline top HUD wall text stays inside widened wall slot")
-	check(hud_parent.find_child("TopHudWallMeter", true, false) != null and hud_parent.find_child("TopHudWallInkBar", true, false) != null and hud_parent.find_child("TopHudWallInkFill", true, false) != null and hud_parent.find_child("TopHudWallCount", true, false) != null, "top HUD renders compact wall count and progress rail")
-	check(hud_parent.find_child("TopHudWallStack", true, false) == null and count_nodes_with_name_prefix(hud_parent, "TopHudWallRhythmTick_") == 0 and hud_parent.find_child("TopHudWallStatusRoute", true, false) == null, "top HUD wall meter omits old stack route and rhythm clutter")
-	check(hud_parent.find_child("TopHudWallLowPulseSimple", true, false) == null, "top HUD wall meter omits low-wall pulse while wall is healthy")
+	check(hud_parent.find_child("TopHudWallMeter", true, false) == null and hud_parent.find_child("TopHudWallCount", true, false) == null, "top HUD does not construct duplicate wall counters or pseudo meters")
+	var healthy_wall_state := hud_parent.find_child("TopHudWallState", true, false) as Label
+	check(healthy_wall_state != null and healthy_wall_state.text.contains(scene.wall_state_text(scene.get_wall_count()).replace("牌墙", "")), "top HUD exposes the healthy wall state as real native text")
 	var low_wall_hud_parent = Control.new()
 	root.add_child(low_wall_hud_parent)
 	var saved_wall_for_hud = scene.wall.duplicate()
@@ -2505,14 +2449,13 @@ func run() -> void:
 	for i in range(18):
 		scene.wall.append("1W")
 	scene.draw_game_top_hud(low_wall_hud_parent)
-	check(low_wall_hud_parent.find_child("TopHudWallLowPulseSimple", true, false) != null and low_wall_hud_parent.find_child("TopHudWallCount", true, false) != null, "top HUD wall meter renders simple low-wall pulse and count")
-	check(low_wall_hud_parent.find_child("TopHudWallLowDangerRoute", true, false) == null and count_nodes_with_name_prefix(low_wall_hud_parent, "TopHudWallLowTick_") == 0, "top HUD low-wall warning omits old danger route and rhythm ticks")
+	var low_wall_state := low_wall_hud_parent.find_child("TopHudWallState", true, false) as Label
+	var low_wall_count := low_wall_hud_parent.find_child("TopHudWallText", true, false) as Label
+	check(low_wall_state != null and low_wall_count != null and low_wall_count.text == "余牌 18/%d" % scene.display_wall_total(), "low-wall HUD exposes the actual remaining count")
+	check(low_wall_state != null and low_wall_state.text.contains(scene.wall_state_text(18).replace("牌墙", "")) and low_wall_state.get_theme_color("font_color").r > low_wall_state.get_theme_color("font_color").g, "low-wall HUD keeps its warning text in contrasting cinnabar ink")
 	scene.wall = saved_wall_for_hud
 	dispose_node(low_wall_hud_parent)
-	check(hud_parent.find_child("TopHudBannerTexture", true, false) != null and hud_parent.find_child("TopHudPhaseRingTexture", true, false) != null and hud_parent.find_child("TopHudWallRingTexture", true, false) == null, "top HUD renders banner and phase ring while omitting old wall ring texture")
-	check(hud_parent.find_child("TopHudModeBadge", true, false) != null and hud_parent.find_child("TopHudStatusArt", true, false) != null and hud_parent.find_child("TopHudStatusPulse", true, false) != null, "top HUD renders mode badge and animated status art")
-	check(hud_parent.find_child("TopHudStatusIconBack", true, false) != null and hud_parent.find_child("TopHudStatusRail", true, false) != null and count_nodes_with_name_prefix(hud_parent, "TopHudStatusPip_") == 3, "top HUD renders status icon rail and rhythm pips")
-	check(hud_parent.find_child("TopHudStatusRoute", true, false) != null and hud_parent.find_child("TopHudStatusRouteFill", true, false) != null and hud_parent.find_child("TopHudStatusRouteGate", true, false) != null and count_nodes_with_name_prefix(hud_parent, "TopHudStatusRouteTick_") == 3, "top HUD renders status route to the phase text")
+	check(hud_parent.find_child("TopHudModeBadge", true, false) is Label and hud_parent.find_child("TopHudStatusArt", true, false) == null and hud_parent.find_child("TopHudStatusRoute", true, false) == null, "top HUD exposes native mode text without extra status-art routes")
 	check(hud_parent.find_child("ScoreStrip", true, false) == null, "offline top HUD omits duplicate score strip")
 	var saved_mode_for_score_strip = scene.mode
 	var saved_online_game_for_score_strip = scene.online_game.duplicate(true)
@@ -2559,14 +2502,8 @@ func run() -> void:
 	var hud_settings_button = first_button_with_text(hud_parent, "设置")
 	check(hud_settings_button != null and hud_settings_button.custom_minimum_size == scene.TOP_HUD_BUTTON_SIZE, "rendered top HUD buttons use enlarged touch targets")
 	check(hud_settings_button != null and count_texture_rects(hud_settings_button) >= 1, "top HUD settings button renders a lucide icon")
-	check(count_nodes_with_name_prefix(hud_parent, "TopHudButtonArt_") == 3 and hud_settings_button.find_child("TopHudButtonIconBack_设置", true, false) != null and hud_settings_button.find_child("TopHudButtonRail_设置", true, false) != null, "top HUD buttons render illustrated icon backs and rails")
-	check(hud_settings_button.find_child("TopHudButtonRailFill_设置", true, false) != null and hud_settings_button.find_child("TopHudButtonSeal_设置", true, false) != null, "top HUD settings button renders compact rail fill and seal accents")
-	check(count_nodes_with_name_prefix(hud_parent, "TopHudButtonCommandRoute_") == 0 and count_nodes_with_name_prefix(hud_parent, "TopHudButtonCommandFill_") == 0 and count_nodes_with_name_prefix(hud_parent, "TopHudButtonCommandGate_") == 0, "top HUD buttons omit command routes")
-	check(count_nodes_with_name_prefix(hud_parent, "TopHudButtonCommandTick_") == 0 and count_nodes_with_name_prefix(hud_parent, "TopHudButtonPulse_") == 0, "top HUD buttons omit rhythm ticks and extra pulses")
-	scene.play_top_hud_button_press_feedback(hud_settings_button, "设置", Color(0.22, 0.44, 0.56))
-	check(hud_settings_button.find_child("TopHudButtonPressFeedback_设置", true, false) != null and hud_settings_button.find_child("TopHudButtonPressWash_设置", true, false) != null and hud_settings_button.find_child("TopHudButtonPressGlow_设置", true, false) != null, "rendered top HUD settings button press feedback renders wash and glow")
-	check(hud_settings_button.find_child("TopHudButtonPressSeal_设置", true, false) != null and hud_settings_button.find_child("TopHudButtonPressGlyph_设置", true, false) != null and count_nodes_with_name_prefix(hud_settings_button, "TopHudButtonPressTick_设置_") == 0, "rendered top HUD settings button press feedback renders seal glyph without ticks")
-	check(hud_settings_button.find_child("TopHudButtonPressSource_设置", true, false) == null and hud_settings_button.find_child("TopHudButtonPressRoute_设置", true, false) == null and hud_settings_button.find_child("TopHudButtonPressFill_设置", true, false) == null and hud_settings_button.find_child("TopHudButtonPressGate_设置", true, false) == null, "rendered top HUD settings button press feedback omits route clutter")
+	check(count_nodes_with_name_prefix(hud_parent, "TopHudButtonFocusMarker") == 3 and hud_settings_button.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt", "top HUD buttons expose three real focus markers on authored paper faces")
+	check(hud_settings_button.find_child("TopHudButtonRail_设置", true, false) == null and hud_settings_button.find_child("TopHudButtonPressFeedback_设置", true, false) == null, "top HUD settings action does not rebuild retired rails or press maps")
 	check(control_anchor_rect_matches(hud_settings_button, scene.TOP_HUD_SETTINGS_BUTTON_RECT), "top HUD settings button uses fixed geometry constants")
 	check(control_anchor_rect_matches(first_button_with_text(hud_parent, "返回"), scene.TOP_HUD_BACK_BUTTON_RECT), "top HUD back button uses fixed geometry constants")
 	check(control_anchor_rect_matches(first_button_with_text(hud_parent, "更新"), scene.TOP_HUD_UPDATE_BUTTON_RECT), "top HUD update button uses fixed geometry constants")
@@ -2577,11 +2514,9 @@ func run() -> void:
 	scene.last_win_score = previous_last_win_score
 	scene.last_discard = previous_last_discard
 	scene.last_discard_seat = previous_last_discard_seat
-	var avatar = scene.make_avatar_view(1, true)
-	check(has_label_text(avatar, "南") and has_label_text(avatar, "行牌"), "seat avatar renders active 2D identity")
-	check(avatar.find_child("SeatAvatarHead", true, false) != null and avatar.find_child("SeatAvatarShoulders", true, false) != null and avatar.find_child("SeatAvatarWindSeal", true, false) != null and avatar.find_child("SeatAvatarActiveHalo", true, false) != null, "seat avatar renders layered 2D character illustration")
-	check(not contains_subviewport(avatar), "seat avatar avoids expensive SubViewport rendering")
-	dispose_node(avatar)
+	var seat_name := scene.find_child("SeatCompactName_0", true, false) as Label
+	check(seat_name != null and seat_name.text.begins_with("东") and seat_name.get_meta("name_only_truncation", false), "seat identity uses native wind and player text rather than a pseudo-avatar")
+	check(scene.find_child("SeatAvatarHead", true, false) == null and scene.find_child("SeatAvatarShoulders", true, false) == null and scene.find_child("SeatAvatarActiveHalo", true, false) == null, "seat identity does not rebuild an illustrated person from tinted panel shapes")
 	check(scene.tile_textures.get("E", null) != scene.tile_back and scene.tile_textures.get("H1", null) != scene.tile_back, "wind and flower textures do not fall back to tile back")
 	var east_tile_view = scene.make_tile_view("E", Vector2(62, 84), false, Callable())
 	check(east_tile_view.custom_minimum_size == Vector2(62, 84), "wind tile view keeps requested size")
@@ -2627,7 +2562,8 @@ func run() -> void:
 	check(int(tile_press_count.get("value", 0)) == 1, "tile callbacks run on native activation")
 	check(clickable_tile_view.find_child("ClickableTileCommitFeedback", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitSource", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitRoute", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitFill", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitGate", true, false) != null, "clickable tile press renders commit route feedback")
 	check(clickable_tile_view.find_child("ClickableTileCommitSeal", true, false) != null and clickable_tile_view.find_child("ClickableTileCommitGlyph", true, false) != null and count_nodes_with_name_prefix(clickable_tile_view, "ClickableTileCommitTick_") == 3, "clickable tile commit feedback renders seal glyph and rhythm ticks")
-	await create_timer(0.40).timeout
+	await create_timer(0.50).timeout
+	await process_frame
 	check(clickable_tile_view.find_child("ClickableTileCommitFeedback", true, false) == null, "clickable tile commit feedback releases after its animation")
 	clickable_tile_button.emit_signal("mouse_entered")
 	check(clickable_tile_view.find_child("TileHoverGlow", true, false) != null, "clickable tiles render hover glow on pointer entry")
@@ -2667,8 +2603,9 @@ func run() -> void:
 	scene.pending_danger_discard_tile = "6B"
 	scene.pending_danger_discard_report = {"tile": "6B", "risk_label": "高", "risk": 42.0, "feed_risk": 36.0}
 	scene.draw_hand(hand_tray_parent)
-	check(hand_tray_parent.find_child("HandTray", true, false) != null and hand_tray_parent.find_child("HandTrayStateBadge", true, false) != null and hand_tray_parent.find_child("HandTrayStateArt", true, false) != null and hand_tray_parent.find_child("HandTrayStateRail", true, false) != null and hand_tray_parent.find_child("HandTrayStatePulse", true, false) != null, "hand tray renders named state badge rail and pulse art")
-	check(hand_tray_parent.find_child("HandTrayTileStage", true, false) != null and hand_tray_parent.find_child("HandTrayTileGroundShadow", true, false) != null and hand_tray_parent.find_child("HandTrayTileBackRail", true, false) != null and hand_tray_parent.find_child("HandTrayTileBaseline", true, false) != null, "hand tray renders grounded tile stage instead of placing tiles on the screen edge")
+	var native_hand_state := hand_tray_parent.find_child("HandTrayStateBadge", true, false) as Label
+	check(native_hand_state != null and native_hand_state.text == scene.hand_tray_state_text() and native_hand_state.get_theme_constant("outline_size") == 0, "hand tray exposes its actual state as native paper ink")
+	check(hand_tray_parent.find_child("HandTrayTileStage", true, false) != null and hand_tray_parent.find_child("HandTrayTileGroundShadow", true, false) == null and hand_tray_parent.find_child("HandTrayTileBackRail", true, false) == null and hand_tray_parent.find_child("HandTrayTileBaseline", true, false) == null, "hand tray keeps the tile geometry host without decorative shadows and rails")
 	check(count_nodes_with_name_prefix(hand_tray_parent, "HandTile_") == scene.get_self_hand().size(), "hand tray names one rendered 2D tile per self hand tile")
 	var first_hand_tile = null
 	for node in hand_tray_parent.find_children("*", "Control", true, false):
@@ -2682,55 +2619,26 @@ func run() -> void:
 	var risk_hand_view = scene.make_tile_view("6B", Vector2(60, 82), true, Callable(), false, "高", "确认")
 	check(risk_hand_view != null, "2D hand tile view builds with risk/hint inputs")
 	dispose_node(risk_hand_view)
-	check(scene.optional_gpt_illustration_texture("hand_gpt_tray") == null or hand_tray_parent.find_child("HandGPTTrayTexture", true, false) != null, "hand tray consumes optional GPT tray texture when generated")
-	check(hand_tray_parent.find_child("HandTrayTutorialHint", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialHintArt", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialHintText", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialScrollTexture", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialSeal", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialSealGlyph", true, false) != null, "hand tutorial hint renders text reusable scroll texture and illustrated seal glyph")
-	check(scene.optional_gpt_illustration_texture("hand_tutorial_gpt_hint") == null or hand_tray_parent.find_child("HandTutorialGPTTexture", true, false) != null, "hand tutorial hint consumes optional GPT hint texture when generated")
-	check(hand_tray_parent.find_child("HandTrayTutorialStepRail", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialStepFill", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayTutorialStepNode_") == 3, "hand tutorial hint renders step rail and nodes")
-	check(hand_tray_parent.find_child("HandTrayTutorialTargetTile", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialTargetGlyph", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialArrow", true, false) != null and hand_tray_parent.find_child("HandTutorialPointingFingerTexture", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayTutorialClickRipple_") == 3, "hand tutorial hint renders target tile glyph, GPT pointing finger, and click ripples")
-	check(hand_tray_parent.find_child("HandTrayTutorialDiscardFlow", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialDiscardRoute", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialDiscardFill", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialDiscardGate", true, false) != null, "hand tutorial hint renders discard route from hand to river")
-	check(hand_tray_parent.find_child("HandTrayTutorialDiscardSource", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialRiverNode", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialRiverGlyph", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayTutorialDiscardTick_") == 3 and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayTutorialRiverBead_") == 2, "hand tutorial discard route renders source river glyph ticks and beads")
-	check(hand_tray_parent.find_child("HandTrayTutorialCommitRoute", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialCommitFill", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialCommitGate", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialCommitSeal", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialCommitGlyph", true, false) != null, "hand tutorial hint renders final discard commit route")
-	check(count_nodes_with_name_prefix(hand_tray_parent, "HandTrayTutorialCommitTick_") == 2, "hand tutorial commit route renders rhythm ticks")
-	check(hand_tray_parent.find_child("HandTraySuitFlow", true, false) != null and hand_tray_parent.find_child("HandTraySuitRail", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTraySuitNode_") == 5, "hand tray renders five-part suit flow illustration")
-	check(hand_tray_parent.find_child("HandTraySuitRailFill", true, false) != null and hand_tray_parent.find_child("HandTraySuitDominantGate", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTraySuitLabel_") == 5 and count_nodes_with_name_prefix(hand_tray_parent, "HandTraySuitFlowTick_") == 4, "hand tray suit flow renders coverage fill dominant gate labels and rhythm ticks")
-	var hand_suit_fill = hand_tray_parent.find_child("HandTraySuitRailFill", true, false) as Control
-	var hand_suit_gate = hand_tray_parent.find_child("HandTraySuitDominantGate", true, false) as Control
-	check(hand_suit_fill != null and hand_suit_fill.anchor_right > 0.95, "hand tray suit flow fill tracks occupied suit coverage")
-	check(hand_suit_gate != null and hand_suit_gate.anchor_left < 0.05, "hand tray suit flow dominant gate follows the strongest suit")
-	check(hand_tray_parent.find_child("HandTrayFlowTexture", true, false) != null, "hand tray renders reusable flow PNG texture")
-	check(hand_tray_parent.find_child("HandTrayMomentumArt", true, false) != null and hand_tray_parent.find_child("HandTrayMomentumRail", true, false) != null and hand_tray_parent.find_child("HandTrayMomentumTrack", true, false) != null and hand_tray_parent.find_child("HandTrayMomentumFocus", true, false) != null, "hand tray renders momentum rail track and focus art")
-	check(count_nodes_with_name_prefix(hand_tray_parent, "HandTrayMomentumPip_") >= 3 and hand_tray_parent.find_child("HandTrayLastDrawBadge", true, false) != null and hand_tray_parent.find_child("HandTrayLastDrawLabel", true, false) != null, "hand tray momentum art renders hand pips and last draw badge")
-	check(hand_tray_parent.find_child("HandTrayDecisionBridge", true, false) != null and hand_tray_parent.find_child("HandTrayDecisionBridgeFill", true, false) != null and hand_tray_parent.find_child("HandTrayDecisionBridgeGate", true, false) != null and hand_tray_parent.find_child("HandTrayDecisionSourceNode", true, false) != null, "hand tray momentum art renders readiness bridge to discard focus")
-	check(count_nodes_with_name_prefix(hand_tray_parent, "HandTrayDecisionBridgeTick_") == 3, "hand tray readiness bridge renders rhythm ticks")
-	check(hand_tray_parent.find_child("HandTrayDrawDecisionRoute", true, false) != null and hand_tray_parent.find_child("HandTrayDrawDecisionFill", true, false) != null and hand_tray_parent.find_child("HandTrayDrawDecisionGate", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayDrawDecisionTick_") == 2, "hand tray renders draw-to-decision route")
-	check(hand_tray_parent.find_child("HandTrayDrawSourceNode", true, false) != null and hand_tray_parent.find_child("HandTrayReplacementGate", true, false) != null, "hand tray draw decision renders source node and replacement gate")
-	check(hand_tray_parent.find_child("HandTrayCompletionBusArt", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionSpine", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionFill", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionSource", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionGate", true, false) != null, "hand tray renders completion bus source spine fill and gate")
-	check(hand_tray_parent.find_child("HandTrayCompletionGlyph", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionArchive", true, false) != null and hand_tray_parent.find_child("HandTrayCompletionArchiveGlyph", true, false) != null and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayCompletionBranch_") == 4 and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayCompletionBranchFill_") == 4, "hand tray completion bus renders archive glyph and four branch fills")
-	check(count_nodes_with_name_prefix(hand_tray_parent, "HandTrayCompletionNode_") == 4 and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayCompletionTick_") == 3 and count_nodes_with_name_prefix(hand_tray_parent, "HandTrayCompletionArchivePip_") == 2, "hand tray completion bus renders nodes ticks and archive pips")
-	check(scene.optional_gpt_illustration_texture("hand_completion_gpt_bus") == null or hand_tray_parent.find_child("HandTrayCompletionGPTTexture", true, false) != null, "hand tray completion bus consumes optional GPT texture when generated")
-	var normal_replacement_gate = hand_tray_parent.find_child("HandTrayReplacementGate", true, false) as Control
-	check(normal_replacement_gate != null and normal_replacement_gate.modulate.a >= 0.99, "normal draw replacement gate remains visible as a low-intensity silhouette")
+	var native_hand_surface := hand_tray_parent.find_child("HandTrayPaper", true, false) as TextureRect
+	check_required(native_hand_surface != null and native_hand_surface.texture is AtlasTexture and (native_hand_surface.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("hand_tray_jiangnan_gpt") and native_hand_surface.self_modulate == Color.WHITE, "hand tray uses the untinted authored Jiangnan bitmap")
+	var native_tutorial_hint := hand_tray_parent.find_child("HandTrayTutorialHintText", true, false) as Label
+	var native_tutorial_button := hand_tray_parent.find_child("HandTutorialSkipButton", true, false) as Button
+	check(native_tutorial_hint != null and native_tutorial_hint.text == scene.tutorial_hand_hint_text() and native_tutorial_hint.get_theme_constant("outline_size") == 0, "hand tutorial exposes its current checkpoint as native ink")
+	check(native_tutorial_button != null and native_tutorial_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET and native_tutorial_button.get_meta("tutorial_action", "") == "skip", "hand tutorial retains its real skip action with a practical touch target")
+	check(hand_tray_parent.find_child("HandTrayTutorialHintArt", true, false) != null and hand_tray_parent.find_child("HandTrayTutorialHelpIcon", true, false) != null, "hand tutorial keeps one existing help icon beside the real text")
+	for retired_name in ["HandGPTTrayTexture", "HandTrayStateArt", "HandTrayStateRail", "HandTrayStatePulse", "HandTrayStateChip", "HandTraySuitFlow", "HandTrayMomentumArt", "HandTrayCompletionBusArt", "HandTrayTutorialStepRail", "HandTrayTutorialStepFill", "HandTrayTutorialTargetTile", "HandTrayTutorialDiscardFlow"]:
+		check(hand_tray_parent.find_child(retired_name, true, false) == null, "hand tray does not recreate retired ornament %s" % retired_name)
 	var draw_animation_tile = scene.make_tile_view("6B", Vector2(62, 84), false, Callable())
 	hand_tray_parent.add_child(draw_animation_tile)
 	scene.play_hand_draw_tile_animation(draw_animation_tile, "normal")
 	check(draw_animation_tile.find_child("DrawTileGlow", true, false) != null and count_nodes_with_name_prefix(draw_animation_tile, "DrawSparkle_") == 8, "hand draw animation renders glow and sparkle burst nodes")
 	dispose_node(hand_tray_parent)
-	var danger_flow_parent = Control.new()
-	root.add_child(danger_flow_parent)
-	scene.draw_hand_tray_suit_flow(danger_flow_parent, ["1W", "2W", "3W", "4T", "5B"], true)
-	check(danger_flow_parent.find_child("HandTraySuitDangerGlow", true, false) != null, "hand tray suit flow can render pending danger discard glow")
-	dispose_node(danger_flow_parent)
-	var danger_momentum_parent = Control.new()
-	root.add_child(danger_momentum_parent)
-	scene.draw_hand_tray_momentum_art(danger_momentum_parent, ["1W", "2W", "3W", "4T", "5B"], true)
-	check(danger_momentum_parent.find_child("HandTrayMomentumWarning", true, false) != null, "hand tray momentum art can render pending danger warning")
-	dispose_node(danger_momentum_parent)
 	var gang_draw_parent = Control.new()
 	root.add_child(gang_draw_parent)
 	scene.offline_last_draw = {"seat": 0, "tile": "6B", "source": "gang", "serial": 100, "announce": false}
 	scene.show_hand_hint = false
 	scene.draw_hand(gang_draw_parent)
-	check(gang_draw_parent.find_child("HandTrayDrawSourceNode", true, false) != null and gang_draw_parent.find_child("HandTrayReplacementGate", true, false) != null and has_label_text(gang_draw_parent, "杠"), "gang replacement draw renders source node replacement gate and gang badge")
+	check(gang_draw_parent.find_child("HandTray", true, false).get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt" and count_nodes_with_name_prefix(gang_draw_parent, "HandTile_") == scene.get_self_hand().size(), "gang replacement hand retains the real paper surface and every authored tile without decorative source routes")
 	dispose_node(gang_draw_parent)
 	scene.offline_last_draw = previous_last_draw
 	scene.show_hand_hint = previous_show_hand_hint
@@ -2757,6 +2665,7 @@ func run() -> void:
 	var wall_layout_parent = Control.new()
 	root.add_child(wall_layout_parent)
 	check(scene.WALL_LAYOUTS.size() == 4 and int(scene.WALL_LAYOUTS[0][2]) == 16 and int(scene.WALL_LAYOUTS[2][2]) == 12, "wall layout reuses fixed geometry constants")
+	scene.offline_last_draw["announce"] = false
 	scene.draw_walls(wall_layout_parent)
 	check(wall_layout_parent.get_child_count() == scene.WALL_LAYOUTS.size() + 1 and wall_layout_parent.find_child("WallRemainingBadge", true, false) != null and wall_layout_parent.find_child("WallRemainingBadgeText", true, false) != null and wall_layout_parent.find_child("WallRemainingBadgeTrack", true, false) != null and wall_layout_parent.find_child("WallRemainingBadgeFill", true, false) != null, "wall layout uses four self-drawing strips plus a live remaining badge with progress track")
 	var has_wall_live_feedback_kit := scene.optional_gpt_illustration_texture("wall_live_feedback_kit") != null
@@ -2851,6 +2760,11 @@ func run() -> void:
 	scene.offline_last_draw = saved_last_draw_for_wall_feedback
 	dispose_node(wall_feedback_parent)
 	check(scene.DISCARD_ZONES.size() == 4 and int(scene.DISCARD_ZONES[0][0]) == 0 and int(scene.DISCARD_ZONES[0][2]) == 8, "discard layout reuses fixed geometry constants")
+	var saved_mode_for_latest_source = scene.mode
+	var saved_name_for_latest_source = scene.players[0].get("name", "玩家")
+	scene.mode = "offline"
+	scene.players[0]["name"] = "来源校验玩家"
+	scene.player_info_cache.clear()
 	scene.last_discard = "5W"
 	scene.last_discard_seat = 0
 	scene.players[0]["discards"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "2T", "3T", "4T", "5T", "5W"]
@@ -2884,15 +2798,24 @@ func run() -> void:
 	check(last_discard_parent.find_child("DiscardRiverSummarySeatBranch_0", true, false) != null and last_discard_parent.find_child("DiscardRiverSummarySeatBranchFill_0", true, false) != null and last_discard_parent.find_child("DiscardRiverSummarySeatNode_0", true, false) != null and count_nodes_with_name_prefix(last_discard_parent, "DiscardRiverSummaryTick_") == 2, "discard river summary renders active seat branch and rhythm ticks")
 	var discard_window_fill = last_discard_parent.find_child("DiscardRiverWindowFill_0", true, false) as Control
 	check(discard_window_fill != null and discard_window_fill.anchor_right > 0.95, "discard river window fill tracks the visible range end for long rivers")
-	check(last_discard_parent.find_child("LastDiscardFocusMarker", true, false) != null and last_discard_parent.find_child("LastDiscardFocusBadge", true, false) != null, "discard river renders a focus marker for the latest discard")
-	check(last_discard_parent.find_child("DiscardRiverWash_0", true, false) != null and last_discard_parent.find_child("DiscardRiverWashTexture_0", true, false) != null and last_discard_parent.find_child("LastDiscardAuraTexture", true, false) != null, "discard river renders reusable wash and focus-aura PNG textures")
+	var latest_focus := last_discard_parent.find_child("LastDiscardFocusMarker", true, false) as Control
+	check_required(latest_focus != null and count_nodes_with_name_prefix(latest_focus, "LastDiscardStaticFrame_") == 4, "discard river locates its latest tile with authored outer edges")
+	var river_wash := last_discard_parent.find_child("DiscardRiverWarmWash_0", true, false) as TextureRect
+	var expected_river_wash := scene.optional_gpt_illustration_texture("ui_title_backplate") as Texture2D
+	if expected_river_wash == null:
+		expected_river_wash = scene.optional_gpt_illustration_texture("ui_river_soft_wash")
+	check_required(river_wash != null and river_wash.texture != null and river_wash.texture == expected_river_wash and river_wash.mouse_filter == Control.MOUSE_FILTER_IGNORE, "discard river uses the actual authored warm-wash bitmap without intercepting input")
+	check_required(last_discard_parent.find_child("LastDiscardAuraTexture", true, false) == null, "latest discard has no face-covering aura")
 	check(last_discard_parent.find_child("DiscardRiverSectorFloor_0", true, false) != null and last_discard_parent.find_child("DiscardRiverMat_0", true, false) != null and last_discard_parent.find_child("DiscardRiverMatTopRim_0", true, false) != null, "discard river renders commercial sector floor mat and top rim")
-	check(last_discard_parent.find_child("LastDiscardFocusGlow", true, false) != null and last_discard_parent.find_child("LastDiscardFocusRoute", true, false) != null and last_discard_parent.find_child("LastDiscardFocusRouteFill", true, false) != null and last_discard_parent.find_child("LastDiscardFocusSourceDot", true, false) != null and last_discard_parent.find_child("LastDiscardFocusBadgeIcon", true, false) != null, "last discard focus marker renders source route art and badge icon")
-	check(last_discard_parent.find_child("LastDiscardResponseBridge", true, false) != null and last_discard_parent.find_child("LastDiscardResponseFill", true, false) != null and last_discard_parent.find_child("LastDiscardResponseSource", true, false) != null and last_discard_parent.find_child("LastDiscardResponseGate", true, false) != null, "last discard focus marker renders response bridge")
-	check(count_nodes_with_name_prefix(last_discard_parent, "LastDiscardResponseTick_") == 3, "last discard response bridge renders rhythm ticks")
-	check(count_nodes_with_name_prefix(last_discard_parent, "LastDiscardFocusRipple_") == 3, "last discard focus marker renders ripple rings")
-	check(has_label_text(last_discard_parent, "东家 刚打 5万"), "discard focus marker names the source seat and tile")
+	for retired_marker in ["LastDiscardFocusGlow", "LastDiscardFocusRoute", "LastDiscardFocusBadge", "LastDiscardResponseBridge", "LastDiscardResponseGate", "LastDiscardFocusBadgeIcon"]:
+		check_required(last_discard_parent.find_child(retired_marker, true, false) == null, "latest tile retires its face-covering " + retired_marker)
+	check_required(latest_focus != null and latest_focus.tooltip_text.contains("5万") and latest_focus.tooltip_text.contains("来源校验玩家") and int(latest_focus.get_meta("discard_source_seat", -1)) == 0 and str(latest_focus.get_meta("discard_tile_code", "")) == "5W", "discard source name, seat and actual tile remain accurate without a badge over the face")
+	if latest_focus != null:
+		print("LatestDiscardSource: seat=", latest_focus.get_meta("discard_source_seat"), " tile=", latest_focus.get_meta("discard_tile_code"), " tooltip=", latest_focus.tooltip_text)
 	dispose_node(last_discard_parent)
+	scene.players[0]["name"] = saved_name_for_latest_source
+	scene.mode = saved_mode_for_latest_source
+	scene.player_info_cache.clear()
 	check(scene.TABLE_OUTER_RECT == scene.rect_full(0.135, 0.115, 0.865, 0.790) and scene.TABLE_INNER_RECT == scene.rect_full(0.035, 0.045, 0.965, 0.955), "main table panel layout reuses fixed geometry constants")
 	check(scene.TABLE_OUTER_TEXTURE_RECT == scene.rect_full(0.008, 0.012, 0.992, 0.988) and scene.TABLE_INNER_TEXTURE_RECT == scene.rect_full(0.012, 0.016, 0.988, 0.984), "main table texture layout reuses fixed geometry constants")
 	check(scene.SEAT_LAYOUTS.size() == 4 and int(scene.SEAT_LAYOUTS[0][0]) == 2 and str(scene.SEAT_LAYOUTS[3][2]) == "bottom", "seat layout reuses fixed geometry constants")
@@ -2942,7 +2865,7 @@ func run() -> void:
 	check(center_parent.find_child("CenterDicePhaseBridge", true, false) != null and center_parent.find_child("CenterDicePhaseBridgeFill", true, false) != null and center_parent.find_child("CenterDicePhaseSource", true, false) != null and center_parent.find_child("CenterDicePhaseGate", true, false) != null, "center dice plate renders phase-to-turn bridge")
 	check(count_nodes_with_name_prefix(center_parent, "CenterDicePhaseTick_") == 3, "center dice phase bridge renders rhythm ticks")
 	check(center_parent.find_child("CenterDiceOutcomeRoute", true, false) != null and center_parent.find_child("CenterDiceOutcomeFill", true, false) != null and center_parent.find_child("CenterDiceOutcomeGate", true, false) != null and count_nodes_with_name_prefix(center_parent, "CenterDiceOutcomeTick_") == 3, "center dice plate renders outcome confirmation route")
-	check(count_shadowless_visual_hosts(center_parent) >= 5, "center inner panel and dice dots skip shadows for cheaper redraws")
+	check_required(center_parent.find_child("CenterDiceSimpleGlyph", true, false) != null and count_nodes_with_name_prefix(center_parent, "CenterDiceDot") == 0 and center_parent.find_child("CenterDiceMandalaTexture", true, false) == null, "quiet center keeps its dealer fact without retired dice dots or mandala decoration")
 	dispose_node(center_parent)
 	scene.players[1]["name"] = "超长在线昵称十二字测试"
 	scene.players[1]["discards"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W"]
@@ -2986,23 +2909,12 @@ func run() -> void:
 	scene.table_logs.append("这是一条很长的补花和包赔牌谱记录四")
 	scene.draw_table_log(log_parent)
 	check(log_parent.find_child("TableLogLedgerPanel", true, false) != null, "table log renders named ledger panel")
-	check(log_parent.find_child("TableLogLedgerTexture", true, false) != null, "table log renders reusable scroll PNG texture")
-	check(scene.optional_gpt_illustration_texture("table_log_gpt_scroll") == null or log_parent.find_child("TableLogGPTScrollTexture", true, false) != null, "table log consumes optional GPT scroll texture when generated")
+	var ledger_surface := log_parent.find_child("TableLogLedgerPanel", true, false) as TextureRect
+	check(ledger_surface != null and ledger_surface.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "table log exposes one authored paper ledger surface")
 	check(label_is_clipped(first_label_containing_text(log_parent, "补花")), "table log clips long rows inside compact panel")
-	check(count_label_nodes(log_parent) == 10, "table log renders title, count, archive and commit glyphs, and three structured action rows")
-	check(count_labels_with_exact_text(log_parent, "摸") >= 2, "table log tags recent draw and flower events")
-	check(log_parent.find_child("TableLogTimelineRail", true, false) != null and count_nodes_with_name_prefix(log_parent, "TableLogRow_") == 3 and count_named_nodes(log_parent, "TableLogTimelineNode") == 3 and count_named_nodes(log_parent, "TableLogTimelineConnector") == 3, "table log renders structured rows with a non-text timeline rail and row nodes")
-	check(log_parent.find_child("TableLogTimelineFlow", true, false) != null and count_named_nodes(log_parent, "TableLogEventLane") == 3 and count_nodes_with_name_prefix(log_parent, "TableLogEventPulse_") == 6, "table log renders event flow lanes and pulses without extra text")
-	check(count_named_nodes(log_parent, "TableLogTagBadge") == 3 and count_named_nodes(log_parent, "TableLogTagRoute") == 3 and count_named_nodes(log_parent, "TableLogTagRouteFill") == 3 and count_named_nodes(log_parent, "TableLogTagRouteGate") == 3, "table log rows render tag badges and connection routes")
-	check(count_nodes_with_name_prefix(log_parent, "TableLogTagRouteTick_") == 6, "table log rows render tag route rhythm ticks")
-	check(log_parent.find_child("TableLogLatestGlow", true, false) != null and log_parent.find_child("TableLogLatestCursor", true, false) != null, "table log highlights the latest visible action with glow and cursor")
-	check(log_parent.find_child("TableLogLatestSyncRoute", true, false) != null and log_parent.find_child("TableLogLatestSyncRail", true, false) != null and log_parent.find_child("TableLogLatestSyncFill", true, false) != null, "table log renders latest-event sync route")
-	check(log_parent.find_child("TableLogLatestSyncSource", true, false) != null and log_parent.find_child("TableLogLatestSyncGate", true, false) != null and count_nodes_with_name_prefix(log_parent, "TableLogLatestSyncNode_") == 3, "table log latest sync renders source gate and row nodes")
-	check(count_nodes_with_name_prefix(log_parent, "TableLogLatestSyncTick_") == 3, "table log latest sync renders rhythm ticks")
-	check(log_parent.find_child("TableLogCountArchiveRoute", true, false) != null and log_parent.find_child("TableLogCountArchiveFill", true, false) != null and log_parent.find_child("TableLogCountArchiveSource", true, false) != null and log_parent.find_child("TableLogCountArchiveGate", true, false) != null and log_parent.find_child("TableLogCountArchiveGlyph", true, false) != null, "table log latest sync renders count archive route")
-	check(count_nodes_with_name_prefix(log_parent, "TableLogCountArchiveTick_") == 2, "table log count archive renders rhythm ticks")
-	check(log_parent.find_child("TableLogArchiveCommit", true, false) != null and log_parent.find_child("TableLogArchiveCommitSource", true, false) != null and log_parent.find_child("TableLogArchiveCommitRoute", true, false) != null and log_parent.find_child("TableLogArchiveCommitFill", true, false) != null and log_parent.find_child("TableLogArchiveCommitGate", true, false) != null, "table log renders archive commit route")
-	check(log_parent.find_child("TableLogArchiveCommitSeal", true, false) != null and log_parent.find_child("TableLogArchiveCommitGlyph", true, false) != null and count_nodes_with_name_prefix(log_parent, "TableLogArchiveCommitTick_") == 3, "table log archive commit renders seal glyph and rhythm ticks")
+	var latest_ledger_row := log_parent.find_child("TableLogLedgerBody_0", true, false) as Label
+	check_required(latest_ledger_row != null and latest_ledger_row.text == scene.table_log_display_text(scene.table_logs.back()) and count_nodes_with_name_prefix(log_parent, "TableLogLedgerBody_") == 1 and int(ledger_surface.get_meta("visible_recent_event_count", 0)) == 1, "table log exposes exactly one actual latest event before its archive route")
+	check_required(count_nodes_with_name_prefix(log_parent, "TableLogLedgerTag_") == 1 and count_nodes_with_name_prefix(log_parent, "TableLogLedgerBadge_") == 0 and log_parent.find_child("TableLogLedgerSpine", true, false) == null, "table log keeps one native event tag without stacked pads or a decorative spine")
 	check(has_label_text(log_parent, "4条"), "table log shows total event count")
 	var table_archive_previous_open: bool = bool(scene.table_log_archive_open)
 	scene.mode = "offline"
@@ -3071,6 +2983,9 @@ func run() -> void:
 	await process_frame
 	await process_frame
 
+	for seat in range(scene.players.size()):
+		scene.players[seat]["discards"].clear()
+		scene.players[seat]["melds"].clear()
 	scene.players[0]["hand"] = [
 		"1W", "1W", "1W",
 		"2W", "3W", "4W",
@@ -3095,6 +3010,9 @@ func run() -> void:
 	check(scene.calculate_min_shanten(thirteen_orphans_hand(), 0) == -1, "thirteen orphans shanten is complete")
 	var thirteen_score = scene.calculate_win_score(0, "", false)
 	check(thirteen_score.get("reasons", []).has("十三幺"), "thirteen orphans is scored")
+	for seat in range(scene.players.size()):
+		scene.players[seat]["discards"].clear()
+		scene.players[seat]["melds"].clear()
 	scene.players[0]["hand"] = thirteen_orphans_unique_tenpai()
 	check(scene.calculate_min_shanten(scene.players[0]["hand"], 0) == 0, "thirteen unique orphans are waiting for any pair")
 	check(scene.effective_tile_variety(scene.players[0]["hand"], 0, 0) == scene.THIRTEEN_ORPHANS_CODES.size(), "thirteen unique orphans wait on every orphan tile")
@@ -3115,6 +3033,7 @@ func run() -> void:
 	var shanten_hits_before = scene.shanten_cache_hits
 	check(scene.calculate_min_shanten(tenpai_hand(), 0) == cached_shanten and scene.shanten_cache_hits > shanten_hits_before, "shanten cache reuses repeated hand state")
 
+	scene.offline_phase = "await_claim"
 	scene.players[0]["hand"] = [
 		"1W", "1W", "2W", "2W", "3W", "3W", "4W",
 		"4W", "5T", "5T", "6T", "6T", "P",
@@ -3171,45 +3090,36 @@ func run() -> void:
 	var pending_claim_parent = Control.new()
 	root.add_child(pending_claim_parent)
 	scene.draw_pending_claim_illustration(pending_claim_parent)
-	check(scene.optional_gpt_illustration_texture("pending_claim_status_strip") == null or pending_claim_parent.find_child("PendingClaimStatusStripTexture", true, false) != null, "pending claim illustration consumes optional GPT status strip when generated")
-	check(pending_claim_parent.find_child("PendingClaimOrbitTexture", true, false) != null and pending_claim_parent.find_child("PendingClaimBannerTexture", true, false) != null and pending_claim_parent.find_child("PendingClaimSilkTexture", true, false) != null, "pending claim illustration renders reusable orbit response-banner and silk PNG textures")
-	check(pending_claim_parent.find_child("PendingClaimIllustration", true, false) != null and pending_claim_parent.find_child("PendingClaimMistCloud", true, false) != null and pending_claim_parent.find_child("PendingClaimSourceBadge", true, false) != null and pending_claim_parent.find_child("PendingClaimFocusText", true, false) != null, "pending claim illustration renders mist cloud source tile panel and focus text")
-	check(pending_claim_parent.find_child("PendingClaimOptionRail", true, false) != null and pending_claim_parent.find_child("PendingClaimOption_chi", true, false) != null and pending_claim_parent.find_child("PendingClaimPassChip", true, false) != null, "pending claim illustration renders action option rail")
-	check(pending_claim_parent.find_child("PendingClaimPriorityArt", true, false) != null and pending_claim_parent.find_child("PendingClaimPriorityRail", true, false) != null and pending_claim_parent.find_child("PendingClaimPriorityFill", true, false) != null, "pending claim illustration renders priority meter")
-	check(pending_claim_parent.find_child("PendingClaimPriorityNode_chi", true, false) != null and pending_claim_parent.find_child("PendingClaimPriorityPassNode", true, false) != null and count_nodes_with_name_prefix(pending_claim_parent, "PendingClaimPriorityTick_") == 3, "pending claim illustration renders priority nodes and rhythm ticks")
-	check(pending_claim_parent.find_child("PendingClaimActionExitArt", true, false) != null and pending_claim_parent.find_child("PendingClaimActionExitRail", true, false) != null and pending_claim_parent.find_child("PendingClaimActionExitFill", true, false) != null and pending_claim_parent.find_child("PendingClaimActionExitGate", true, false) != null, "pending claim illustration renders action exit route")
-	check(count_nodes_with_name_prefix(pending_claim_parent, "PendingClaimActionExitTick_") == 3, "pending claim illustration renders action exit rhythm ticks")
-	check(pending_claim_parent.find_child("PendingClaimTimerArt", true, false) != null and pending_claim_parent.find_child("PendingClaimTimerRail", true, false) != null and pending_claim_parent.find_child("PendingClaimTimerFill", true, false) != null and pending_claim_parent.find_child("PendingClaimTimerGate", true, false) != null, "pending claim illustration renders response timer route")
-	check(count_nodes_with_name_prefix(pending_claim_parent, "PendingClaimTimerTick_") == 4, "pending claim illustration renders response timer rhythm ticks")
-	check(pending_claim_parent.find_child("PendingClaimResponseAnimation", true, false) != null and pending_claim_parent.find_child("ClaimResponseOrbitGate", true, false) != null and pending_claim_parent.find_child("AnimationPreviewTimeline_claim_response_orbit", true, false) != null, "pending claim illustration consumes reusable claim response animation asset preview")
-	check(scene.optional_gpt_illustration_texture("claim_response_trail") == null or pending_claim_parent.find_child("PendingClaimGPTTrailTexture", true, false) != null, "pending claim illustration consumes optional GPT trail texture when generated")
-	check(pending_claim_parent.find_child("PendingClaimResponsePulse", true, false) != null and pending_claim_parent.find_child("PendingClaimResponsePulseRail", true, false) != null and pending_claim_parent.find_child("PendingClaimResponsePulseFill", true, false) != null and pending_claim_parent.find_child("PendingClaimResponseGate", true, false) != null, "pending claim illustration renders response pulse route")
-	check(pending_claim_parent.find_child("PendingClaimResponseSource", true, false) != null and count_nodes_with_name_prefix(pending_claim_parent, "PendingClaimResponseTick_") == 3, "pending claim response pulse renders source and rhythm ticks")
-	check(pending_claim_parent.find_child("PendingClaimFlowArt", true, false) != null and pending_claim_parent.find_child("PendingClaimFlowArrow", true, false) != null and pending_claim_parent.find_child("PendingClaimTile", true, false) != null and pending_claim_parent.find_child("PendingClaimTileGlow", true, false) != null and count_nodes_with_name_prefix(pending_claim_parent, "PendingClaimFlowDash_") == 3, "pending claim illustration renders source-to-tile flow dash tile and glow")
-	check(pending_claim_parent.find_child("PendingClaimOptionSpark_0", true, false) != null, "pending claim illustration renders option spark accents")
-	check(has_label_text(pending_claim_parent, "吃牌机会 · 选择顺子组合"), "pending claim illustration renders contextual focus copy")
+	var pending_context := pending_claim_parent.find_child("PendingClaimIllustration", true, false) as Control
+	check(pending_context != null and pending_context.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "pending claim context uses one existing paper bitmap")
+	for reading_owner in ["PendingClaimSourceText", "PendingClaimTileName", "PendingClaimUrgencyText", "PendingClaimFocusText"]:
+		var reading_label := pending_claim_parent.find_child(reading_owner, true, false) as Label
+		check(reading_label != null and reading_label.get_theme_constant("outline_size") == 0 and reading_label.text != "", "pending claim keeps a native reading owner for %s" % reading_owner)
+	for retired in ["PendingClaimMistCloud", "PendingClaimSourceBadge", "PendingClaimPriorityArt", "PendingClaimActionExitArt", "PendingClaimResponsePulse", "PendingClaimFlowArt", "PendingClaimOptionSpark_0"]:
+		check(pending_claim_parent.find_child(retired, true, false) == null, "pending claim retires overlapping ornament %s" % retired)
+	var pending_focus := pending_claim_parent.find_child("PendingClaimFocusText", true, false) as Label
+	check(pending_focus != null and pending_focus.text == "C首组 · X过" and pending_focus.tooltip_text.contains("吃牌机会"), "pending context distinguishes the C first-choice shortcut from full response detail")
+	check(pending_claim_parent.find_child("PendingClaimTile", true, false) != null and pending_claim_parent.find_child("PendingClaimTimerText", true, false) != null and pending_claim_parent.find_child("PendingClaimAutoPassWarning", true, false) != null, "pending context preserves the real tile and live response countdown")
+	var pending_timer := pending_claim_parent.find_child("PendingClaimTimerArt", true, false) as Control
+	var pending_timer_text := pending_claim_parent.find_child("PendingClaimTimerText", true, false) as Label
+	check(pending_timer != null and pending_timer.get_meta("stable_screen_slot", "") == "left_seat_above_identity" and pending_timer.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "pending timer has one authored paper countdown surface above the left identity")
+	check(pending_timer_text != null and pending_timer_text.text == scene.pending_claim_timer_text() and pending_timer_text.get_theme_constant("outline_size") == 0, "pending timer exposes real remaining seconds as native ink")
+	var pending_warning := pending_claim_parent.find_child("PendingClaimAutoPassWarning", true, false) as Label
+	check(pending_warning != null and pending_warning.visible and pending_warning.text == "到0自动过", "pending timer always states the default consequence before the final three seconds")
+	for retired in ["PendingClaimTimerFill", "PendingClaimTimerRail", "PendingClaimTimerGate", "PendingClaimTimerTick_0"]:
+		check(pending_claim_parent.find_child(retired, true, false) == null, "pending timer retires decorative countdown primitive %s" % retired)
 	scene.draw_actions(pending_claim_parent)
-	check(scene.optional_gpt_illustration_texture("pending_claim_action_dock") == null or pending_claim_parent.find_child("PendingClaimActionGPTDockTexture", true, false) != null, "pending claim action dock consumes dedicated GPT dock texture when generated")
-	var pending_claim_gpt_dock = pending_claim_parent.find_child("PendingClaimActionGPTDockTexture", true, false) as TextureRect
-	check(pending_claim_gpt_dock == null or pending_claim_gpt_dock.modulate.a <= 0.42, "pending claim GPT dock texture stays below the compact alpha cap")
-	check(pending_claim_parent.find_child("ActionDockPlateTexture", true, false) == null and pending_claim_parent.find_child("ActionDockRibbonTexture", true, false) == null and pending_claim_parent.find_child("ActionGPTDockTexture", true, false) == null, "pending claim action dock avoids legacy plate ribbon and generic dock texture layers")
-	check(pending_claim_parent.find_child("ActionButtonDock", true, false) != null and pending_claim_parent.find_child("ActionIntentDock", true, false) == null, "pending claim actions render one compact dock without an overlapping intent rail")
-	check(pending_claim_parent.find_child("ActionButtonDockPulseDriver", true, false) != null, "action dock always exposes one pulse driver owner")
-	var action_pulse_art = pending_claim_parent.find_child("ActionButtonDockPulseArt", true, false)
-	check(action_pulse_art == null or action_pulse_art.get_parent().name == "ActionButtonDockPulseDriver", "action dock pulse art stays owned by the single pulse driver")
+	var pending_dock := pending_claim_parent.find_child("ActionButtonDock", true, false) as Control
+	check(pending_dock != null and pending_dock.get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt" and pending_claim_parent.find_child("ActionIntentDock", true, false) == null, "pending response has one paper dock without an overlapping intent strip")
+	for retired in ["ActionButtonDockPulseDriver", "ActionButtonDockPulseArt", "PendingClaimActionGPTDockTexture", "ActionDock3DCastShadow", "ActionDock3DRearShell"]:
+		check(pending_claim_parent.find_child(retired, true, false) == null, "pending response retires dock decoration %s" % retired)
 	check(pending_claim_parent.find_child("ActionDockLeftTail", true, false) == null and pending_claim_parent.find_child("ActionDockRightTail", true, false) == null and count_nodes_with_name_prefix(pending_claim_parent, "ActionDockRhythmDot_") == 0, "pending claim action dock drops code-drawn scroll tails and rhythm dots")
 	check(pending_claim_parent.find_child("ActionDockButtonTrack", true, false) == null and pending_claim_parent.find_child("ActionDockButtonTrackFill", true, false) == null and pending_claim_parent.find_child("ActionDockSafeLeft", true, false) == null and pending_claim_parent.find_child("ActionDockSafeRight", true, false) == null, "pending claim action dock drops code-drawn button track and safe edge rails")
 	check(count_nodes_with_name_prefix(pending_claim_parent, "ActionDockButtonSlot_") == 0 and pending_claim_parent.find_child("ActionDockFocusLabel", true, false) == null, "pending claim action dock drops per-button slots and duplicate focus label")
-	check((scene.optional_gpt_illustration_texture("action_dock_track_panel") == null) or (pending_claim_parent.find_child("ActionDockTrackPanelTexture", true, false) != null), "pending claim action dock uses optional GPT track panel plate instead of code-drawn lines")
-	check(pending_claim_parent.find_child("ActionButtonArt", true, false) != null and pending_claim_parent.find_child("ActionButtonIconBack", true, false) == null and pending_claim_parent.find_child("ActionButtonSheen", true, false) != null, "live action buttons render icon art and sheen accents without code-drawn icon backplate")
-	check(pending_claim_parent.find_child("ActionButtonRoleRail", true, false) != null and pending_claim_parent.find_child("ActionButtonEnergyDot_0", true, false) != null and pending_claim_parent.find_child("ActionButtonPrioritySeal", true, false) != null, "action buttons render role rail, energy dots, and priority seals")
-	check(pending_claim_parent.find_child("ActionButtonCommandRoute", true, false) == null and pending_claim_parent.find_child("ActionButtonExecutionGate", true, false) == null and pending_claim_parent.find_child("ActionButtonDecisionBridge", true, false) == null and pending_claim_parent.find_child("ActionButtonPassRoute", true, false) == null, "live action buttons drop old code-drawn command/execution/decision/pass decorative lines")
-	check((scene.optional_gpt_illustration_texture("action_button_panel") == null) or (pending_claim_parent.find_child("ActionButtonPanelPlate", true, false) != null), "live action buttons use optional GPT panel plate instead of code-drawn lines")
-	var live_action_button = pending_claim_parent.find_child("ActionButtonDock", true, false)
-	var live_button := first_button(pending_claim_parent)
-	if live_button != null:
-		scene.play_action_button_press_feedback(live_button, "action", Color(0.25, 0.58, 0.48))
-	check(live_action_button != null and pending_claim_parent.find_child("ActionButtonPressFeedback", true, false) != null and pending_claim_parent.find_child("ActionButtonPressRail", true, false) != null and pending_claim_parent.find_child("ActionButtonPressGate", true, false) != null and count_nodes_with_name_prefix(pending_claim_parent, "ActionButtonPressTick_") >= 3, "live action button press renders execution feedback")
+	check(pending_claim_parent.find_child("ActionDockTrackPanelTexture", true, false) == null, "pending dock does not rebuild a second track-panel surface")
+	check(pending_claim_parent.find_child("ActionButtonArt", true, false) != null and pending_claim_parent.find_child("ActionButtonFocusMarker", true, false) != null, "live response buttons expose real native focus ownership")
+	for retired in ["ActionButtonSheen", "ActionButtonRoleRail", "ActionButtonEnergyDot_0", "ActionButtonPrioritySeal", "ActionButtonPanelPlate", "ActionButtonPressFeedback"]:
+		check(pending_claim_parent.find_child(retired, true, false) == null, "live response buttons do not rebuild retired art %s" % retired)
 	scene.fx_enabled = true
 	scene.ensure_fx_layer()
 	scene.play_pending_claim_choice_confirmation_fx("peng", 3, "3W")
@@ -3438,7 +3348,9 @@ func run() -> void:
 	check(scene.players[1]["melds"][0].size() == 4, "passed rob gang upgrades pung")
 	check(scene.players[1]["hand"].has("7B"), "passed rob gang draws replacement tile")
 
-	scene.start_offline(false)
+	scene.reset_offline_progress()
+	scene.transition_active = false
+	scene.start_offline(true)
 	var discard = scene.choose_ai_discard_for_seat(0)
 	check(scene.players[0]["hand"].has(discard), "AI discard exists in hand")
 	scene.players[0]["hand"] = ai_shape_hand()
@@ -3804,8 +3716,9 @@ func run() -> void:
 	root.add_child(threat_seat_parent)
 	scene.draw_seat(threat_seat_parent, 1, scene.rect_full(0.0, 0.0, 1.0, 1.0), "right", render_threat_reports)
 	check(has_label_text(threat_seat_parent, scene.opponent_seat_threat_badge_text(1, 0)), "seat panel renders opponent threat badge")
-	check(threat_seat_parent.find_child("SeatThreatBadgeArt_1", true, false) != null and threat_seat_parent.find_child("SeatThreatRadarTexture_1", true, false) != null and threat_seat_parent.find_child("SeatThreatSourceNode_1", true, false) != null and threat_seat_parent.find_child("SeatThreatPressureNode_1", true, false) != null, "seat panel renders opponent threat radar source and pressure nodes")
-	check(threat_seat_parent.find_child("SeatThreatRoute_1", true, false) != null and threat_seat_parent.find_child("SeatThreatFill_1", true, false) != null and threat_seat_parent.find_child("SeatThreatGlow_1", true, false) != null and threat_seat_parent.find_child("SeatThreatGate_1", true, false) != null and count_nodes_with_name_prefix(threat_seat_parent, "SeatThreatSafeTick_1_") == 3, "seat panel renders opponent threat route glow and safe-tile rhythm ticks")
+	var native_threat := threat_seat_parent.find_child("SeatThreatBadge_1", true, false) as Label
+	check(native_threat != null and native_threat.text != "" and native_threat.get_theme_constant("outline_size") == 0, "seat pressure uses a native factual threat label")
+	check(threat_seat_parent.find_child("SeatThreatBadgeArt_1", true, false) == null and threat_seat_parent.find_child("SeatThreatRadarTexture_1", true, false) == null and threat_seat_parent.find_child("SeatThreatRoute_1", true, false) == null, "seat pressure retires pseudo-radar and decorative threat routes")
 	dispose_node(threat_seat_parent)
 	scene.players[1]["discards"].append("2W")
 	check(scene.main_threat_opponent(0) == 1, "main threat opponent is identified without using safe tile recursion")
@@ -3875,7 +3788,8 @@ func run() -> void:
 	var readiness_seat_parent = Control.new()
 	root.add_child(readiness_seat_parent)
 	scene.draw_seat(readiness_seat_parent, 1, scene.rect_full(0.0, 0.0, 1.0, 1.0), "right", {1: readiness_threat})
-	check(readiness_seat_parent.find_child("SeatThreatReadinessSeal_1", true, false) != null, "seat threat badge renders near-tenpai readiness seal")
+	var readiness_label := readiness_seat_parent.find_child("SeatThreatBadge_1", true, false) as Label
+	check(readiness_label != null and readiness_label.text.contains("听"), "seat threat label preserves near-tenpai readiness in native text")
 	dispose_node(readiness_seat_parent)
 	var ready_mid_risk = scene.deal_in_risk_score("5W", 0)
 	var ready_defense = scene.ai_defense_weight(0, 3)
@@ -4472,7 +4386,8 @@ func run() -> void:
 	check(int(scene.players[2]["score"]) == other_before, "discarder does not pay after package liability")
 	check(scene.round_summary.find("包三搭") >= 0, "discard win summary mentions package payout")
 
-	scene.start_offline(false)
+	scene.transition_active = false
+	scene.start_offline(true)
 	scene.offline_hand_number = 1
 	scene.dealer_seat = 0
 	scene.offline_dealer_repeat = false
@@ -4594,6 +4509,12 @@ func check(condition: bool, message: String) -> void:
 	if condition:
 		return
 	if gpt_only_superseded_visual_assertion(message):
+		return
+	check_required(false, message)
+
+# New commercial contracts must fail even if their wording names retired visuals.
+func check_required(condition: bool, message: String) -> void:
+	if condition:
 		return
 	failed = true
 	push_error("offline smoke test failed: " + message)
@@ -4975,7 +4896,18 @@ func all_illustration_png_files_are_declared_or_optional_gpt(scene) -> bool:
 	for key in scene.ILLUSTRATION_ASSET_PATHS.keys():
 		known_paths.append(String(scene.ILLUSTRATION_ASSET_PATHS[key]))
 	for key in scene.GPT_ILLUSTRATION_ASSET_PATHS.keys():
-		known_paths.append(String(scene.GPT_ILLUSTRATION_ASSET_PATHS[key]))
+		var declared_path := String(scene.GPT_ILLUSTRATION_ASSET_PATHS[key])
+		known_paths.append(declared_path)
+		if declared_path.to_lower().ends_with(".tres"):
+			var bitmap_source := illustration_atlas_bitmap_source(declared_path)
+			if bitmap_source != "":
+				known_paths.append(bitmap_source)
+	for file_name in REPLACED_GPT_ILLUSTRATION_PNG_SHA256:
+		var replaced_path := "res://assets/illustrations/" + String(file_name)
+		if FileAccess.get_sha256(replaced_path) != String(REPLACED_GPT_ILLUSTRATION_PNG_SHA256[file_name]):
+			push_error("replaced GPT illustration hash mismatch: " + String(file_name))
+			return false
+		known_paths.append(replaced_path)
 	var dir = DirAccess.open("res://assets/illustrations")
 	if dir == null:
 		return false
@@ -5032,12 +4964,31 @@ func all_declared_illustration_paths_are_png_files(scene) -> bool:
 			return false
 	return true
 
-func all_optional_gpt_illustration_paths_are_png_targets(scene) -> bool:
+func illustration_atlas_bitmap_source(path: String) -> String:
+	if not path.to_lower().ends_with(".tres") or not FileAccess.file_exists(path):
+		return ""
+	var texture := load(path) as Texture2D
+	if not texture is AtlasTexture:
+		return ""
+	var visited: Array[Texture2D] = []
+	while texture is AtlasTexture:
+		if visited.has(texture):
+			return ""
+		visited.append(texture)
+		texture = (texture as AtlasTexture).atlas
+	if texture == null:
+		return ""
+	var bitmap_path := texture.resource_path
+	if not bitmap_path.begins_with("res://assets/illustrations/") or not bitmap_path.to_lower().ends_with(".png") or not FileAccess.file_exists(bitmap_path):
+		return ""
+	return bitmap_path
+
+func all_optional_gpt_illustration_paths_are_bitmap_targets(scene) -> bool:
 	for key in scene.GPT_ILLUSTRATION_ASSET_PATHS.keys():
 		var path = String(scene.GPT_ILLUSTRATION_ASSET_PATHS[key])
-		if not path.begins_with("res://assets/illustrations/"):
+		if not path.begins_with("res://assets/illustrations/") and not path.begins_with("res://assets/table/"):
 			return false
-		if not path.to_lower().ends_with(".png"):
+		if not path.to_lower().ends_with(".png") and illustration_atlas_bitmap_source(path) == "":
 			return false
 	return true
 

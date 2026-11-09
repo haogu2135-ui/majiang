@@ -19,13 +19,13 @@ developer_instructions = """
 - 改 part 文件后必须 `python3 tools/assemble_main.py --verify`（仅在被授权改代码时）。
 
 # 仓库与入口
-- 根目录：`/root/yunzhuo-mahjong-godot`
+- 根目录：`/home/guhao/majiang`
 - 渲染：`scripts/main_src/render.gd.part`
 - 对战组装：`scripts/main_src/gameplay.gd.part`
 - 常量：`scripts/main_base.gd`（`MELD_LAYOUTS` / `HAND_LAYOUT_CANDIDATES` / `SEAT_LAYOUTS` / `DISCARD_*`）
 - 布局：`scripts/main_src/core.gd.part`（`hand_layout_metrics` / `seat_meld_rect` / `tile_texture_bleed`）
-- 对战截图：`build/qa/current_commercial_3d_1280/*.png`
-- 截图脚本：`/tmp/capture_battle_only_v180.gd`
+- 截图证据：主 agent 显式提供的当前批次；先核对路径、源码指纹与逐帧身份，不默认历史截图目录
+- 截图与回归由主 agent 按 AGENTS.md 串行执行；只读审计不启动重型任务
 - smoke：`scripts/ui_layout_smoke_test.gd`、`scripts/offline_smoke_test.gd`
 
 # 每轮必查
@@ -39,12 +39,13 @@ developer_instructions = """
 8. HUD/操作栏：可点、不挡关键信息
 
 # 证据方法
-- 目视 QA 截图 + crop
-- 读 layout 常量与 `draw_*` / `make_tile_view`
-- 可跑：
-  - `python3 tools/assemble_main.py --verify`
-  - `GODOT_SILENCE_ROOT_WARNING=1 LP_NUM_THREADS=2 godot --headless --path . -s scripts/ui_layout_smoke_test.gd`
-  - `timeout 180 xvfb-run -a -s "-screen 0 1280x720x24" godot --path . --rendering-driver opengl3 -s /tmp/capture_battle_only_v180.gd`
+- 先读当前仓库 AGENTS.md 和 .codex/skills/yunzhuo-ui-engineer/SKILL.md，根目录以主 agent 当前任务为准。
+- 路径先确认，再读主 agent 指定截图的收据与 metadata；历史审计/日志只读相关小节或摘要。
+- 使用 tools/prepare_ui_review_image.py 生成的 QA JPEG，每次只回传1张，每个任务最多3张；需要更多图时使用新的独立任务，不继承完整图片历史。
+- 原 PNG/JSON 保留作验收证据；只读审阅不得运行 Godot、Xvfb、生图、批量导入或修改产品/测试/资源。
+- 只读核对 layout 常量、draw_* / make_tile_view。发现413停止重发同一大请求，改用精简上下文和压缩审阅图。
+- 主 agent 的生成/验证命令、单线程低资源与180秒超时要求以 AGENTS.md 为准；生成/校验失败必须停止，不能测试旧main.gd。
+- UI视觉只用GPT/GROK生成及既有illustrations位图；禁止用ColorRect、make_color_rect、代码Panel叠层或程序纹理充当视觉方案。
 
 # 输出格式（强制）
 每个问题一条：

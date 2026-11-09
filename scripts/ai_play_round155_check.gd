@@ -69,12 +69,10 @@ func run() -> void:
 	scene.hand_keyboard_selection = -1
 	scene.draw_hand(hand_root)
 	var tray := hand_root.get_node_or_null("HandTray") as Control
-	var badge := hand_root.get_node_or_null("HandTray/HandTrayStateBadge") as Control
-	var badge_fill = badge.get_meta("state_fill_snapshot", Color.TRANSPARENT) if badge != null else Color.TRANSPARENT
-	var badge_border = badge.get_meta("state_border_snapshot", Color.TRANSPARENT) if badge != null else Color.TRANSPARENT
-	check(tray != null and str(tray.get_meta("hand_tray_state_snapshot_policy", "")) == "one_state_text_and_color_snapshot_per_draw", "托盘声明一次状态文本和颜色快照")
+	var badge := hand_root.get_node_or_null("HandTray/HandTrayStateBadge") as Label
+	check(tray != null and str(tray.get_meta("hand_tray_state_snapshot_policy", "")) == "one_state_text_snapshot_per_draw", "托盘声明一次原生状态文本快照")
 	check(tray != null and str(tray.get_meta("hand_tray_state_text_snapshot", "")) == state_snapshot, "托盘保留本次状态文本快照")
-	check(badge != null and str(badge.get_meta("state_text_snapshot", "")) == state_snapshot and colors_match(badge_fill, snapshot_fill) and colors_match(badge_border, snapshot_border), "状态徽章复用同一文本、填充色和边框色")
+	check(badge != null and badge.text == state_snapshot and str(badge.get_meta("state_text_snapshot", "")) == state_snapshot and badge.get_theme_constant("outline_size") == 0, "状态文字复用同一文本快照且不再生成装饰底色")
 
 	scene.offline_phase = "ended"
 	check(scene.hand_tray_state_text() == "结算", "状态变化后的实时查询仍然更新")

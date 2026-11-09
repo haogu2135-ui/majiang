@@ -16,6 +16,7 @@ const AUDIO_HEALTH_CHECK_INTERVAL_MSEC := 5000
 const GPT_PLATE_ATLAS_CACHE_LIMIT := 64
 const GPT_CENTER_CROP_CACHE_LIMIT := 64
 const ONLINE_CHAT_COOLDOWN_MSEC := 650
+const ONLINE_CHAT_PENDING_REQUEST_LIMIT := 16
 const ONLINE_VOICE_PACKET_MAX_BYTES := 16384
 const ONLINE_VOICE_MIN_SAMPLE_RATE := 8000
 const ONLINE_VOICE_MAX_SAMPLE_RATE := 48000
@@ -99,6 +100,7 @@ const TELEMETRY_ALLOWED_EVENT_NAMES := [
 const AUDIO_DEFAULTS_VERSION := "1.0.159-godot"
 const BGM_STREAM_PATH := "res://assets/audio/mobile/bgm_guofeng2.mp3"
 const UI_CJK_FONT_PATH := "res://assets/fonts/DroidSansFallbackFull.ttf"
+const UI_HEADING_FONT_PATH := "res://assets/fonts/NotoSerifSC-Display.ttf"
 const ANIMATION_ASSET_PATHS := {
 	"coin_spin": "res://assets/animations/coin_spin.json",
 	"victory_sparkle": "res://assets/animations/victory_sparkle.json",
@@ -110,6 +112,12 @@ const ANIMATION_ASSET_PATHS := {
 }
 const ILLUSTRATION_ASSET_PATHS := {}
 const GPT_ILLUSTRATION_ASSET_PATHS := {
+	"quiet_gold_accent": "res://assets/illustrations/gold_paper_gpt_20261109.png",
+	"menu_guofeng_moonlit": "res://assets/illustrations/menu_jiangnan_ink_gpt_20261023.png",
+	"menu_entry_offline_gpt": "res://assets/illustrations/menu_offline_jiangnan_20261023.png",
+	"menu_ink_primary": "res://assets/illustrations/reading_ink_quiet_gpt_20261109.png",
+	"menu_entry_online_gpt": "res://assets/illustrations/menu_entry_online_gpt_20261021.png",
+	"menu_entry_shop_gpt": "res://assets/illustrations/menu_entry_shop_gpt_20261021.png",
 	"menu_hero_gpt_backdrop": "res://assets/illustrations/menu_hero_gpt_backdrop.png",
 	"menu_hero_gpt_backdrop_warm": "res://assets/illustrations/menu_hero_gpt_backdrop_warm_v390.png",
 	"menu_lobby_gpt_scene": "res://assets/illustrations/menu_lobby_gpt_scene.png",
@@ -117,6 +125,13 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"menu_primary_3d_stage_overlay": "res://assets/illustrations/menu_primary_3d_stage_overlay.png",
 	"menu_primary_3d_stage_overlay_warm": "res://assets/illustrations/menu_primary_3d_stage_overlay_warm_v390.png",
 	"menu_primary_3d_stage_overlay_bright": "res://assets/illustrations/menu_primary_3d_stage_overlay_bright_gpt_r185.png",
+	"menu_card_readable_gpt": "res://assets/illustrations/menu_card_readable_gpt_20261006.png",
+	"menu_nav_rules_jiangnan_gpt": "res://assets/illustrations/menu_nav_rules_jiangnan_20261025.tres",
+	"menu_nav_stats_jiangnan_gpt": "res://assets/illustrations/menu_nav_stats_jiangnan_20261025.tres",
+	"menu_nav_achievements_jiangnan_gpt": "res://assets/illustrations/menu_nav_achievements_jiangnan_20261025.tres",
+	"menu_nav_daily_login_jiangnan_gpt": "res://assets/illustrations/menu_nav_daily_login_jiangnan_20261025.tres",
+	"menu_nav_replay_jiangnan_gpt": "res://assets/illustrations/menu_nav_replay_jiangnan_20261025.tres",
+	"button_face_jiangnan_gpt": "res://assets/illustrations/menu_nav_button_face_jiangnan_20261025.tres",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -138,8 +153,12 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"settings_gpt_panel": "res://assets/illustrations/settings_gpt_panel.png",
 	"settings_gpt_panel_v2": "res://assets/illustrations/settings_gpt_panel_v2_sub2api_gpt2_20260814.png",
 	"settings_gpt_panel_warm": "res://assets/illustrations/settings_gpt_panel_warm_v391.png",
+	"settings_readable_gpt": "res://assets/illustrations/settings_readable_gpt_20261006.png",
+	"battle_hud_jiangnan_gpt": "res://assets/illustrations/battle_hud_jiangnan_crop_20261023.tres",
+	"battle_actions_jiangnan_gpt": "res://assets/illustrations/battle_actions_jiangnan_20261023.png",
+	"hand_tray_jiangnan_gpt": "res://assets/illustrations/hand_tray_jiangnan_20261023.png",
 	"table_gpt_backdrop": "res://assets/illustrations/table_gpt_backdrop_v4.png",
-	"table_gpt_backdrop_bright": "res://assets/illustrations/table_gpt_backdrop_bright_gpt_r185.png",
+	"table_gpt_backdrop_bright": "res://assets/illustrations/table_jade_quiet_gpt_20261109.png",
 	"gpt_jade_felt": "res://assets/table/table_felt_3d_gpt.png",
 	"table_gpt_backdrop_warm": "res://assets/illustrations/table_gpt_backdrop_warm_v391.png",
 	"offline_table_3d_overlay": "res://assets/illustrations/offline_table_3d_overlay.png",
@@ -236,14 +255,15 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"petals_autumn": "res://assets/illustrations/petals_autumn.png",
 	"petals_winter": "res://assets/illustrations/petals_winter.png",
 	"dealer_seal": "res://assets/illustrations/dealer_seal.png",
+	"dealer_seal_carved_gpt": "res://assets/illustrations/dealer_seal_carved_gpt.png",
 	"dealer_repeat_ring": "res://assets/illustrations/dealer_repeat_ring.png",
 	"center_active_bloom": "res://assets/illustrations/center_active_bloom.png",
 	"guide_pointing_finger": "res://assets/illustrations/guide_pointing_finger.png",
 	"fly_transition_flip": "res://assets/illustrations/fly_transition_flip.png",
-	"shop_charm_huan": "res://assets/illustrations/shop_charm_huan.png",
-	"shop_charm_kan": "res://assets/illustrations/shop_charm_kan.png",
-	"shop_charm_yun": "res://assets/illustrations/shop_charm_yun.png",
-	"shop_charm_bei": "res://assets/illustrations/shop_charm_bei.png",
+	"shop_charm_huan": "res://assets/illustrations/shop_item_swap_gpt_20261015.png",
+	"shop_charm_kan": "res://assets/illustrations/shop_item_peek_gpt_20261015.png",
+	"shop_charm_yun": "res://assets/illustrations/shop_item_lucky_gpt_20261015.png",
+	"shop_charm_bei": "res://assets/illustrations/shop_item_double_gpt_20261015.png",
 	"achievement_medal_bronze": "res://assets/illustrations/achievement_medal_bronze.png",
 	"achievement_medal_jade": "res://assets/illustrations/achievement_medal_jade.png",
 	"achievement_medal_gold": "res://assets/illustrations/achievement_medal_gold.png",
@@ -633,6 +653,7 @@ var current_bgm_index = 0  # v1.0.157: 当前BGM索引
 var settings_panel_open = false
 var settings_local_row_controls: Dictionary = {}
 var settings_focus_restore_name := ""
+var settings_active_section := "声音"
 var settings_overlay_generation := 0
 var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
@@ -804,6 +825,7 @@ var offline_progress_snapshot_key := ""
 var offline_progress_snapshot: Dictionary = {}
 var offline_progress_snapshot_validation_key := ""
 var offline_progress_snapshot_validation_error := ""
+var offline_progress_snapshot_validation_state: Dictionary = {}
 # 道具系统
 var inventory = {}  # 道具库存 {"swap_card": 2, "peek_card": 1, ...}
 # 虚拟货币
@@ -867,6 +889,12 @@ var offline_last_draw: Dictionary = {}
 var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态
 var offline_ai_active = false
 var offline_ai_run_queued = false
+var offline_ai_run_generation := 0
+var offline_ai_queued_callback := Callable()
+var offline_human_discard_sequence := 0
+var offline_human_discard_callback := Callable()
+var offline_claim_sequence := 0
+var offline_danger_confirmation_sequence := 0
 var offline_ai_assistance_queued = false
 var offline_all_bot_mode := false
 var offline_sim_quiet := false
@@ -917,6 +945,7 @@ var table_log_archive_open := false
 var table_log_chat_restore_pending := false
 var table_log_chat_draft := ""
 var diagnostic_copy_feedback := ""
+var diagnostic_copy_feedback_short := "未复制"
 var pending_claim_auto_pass_feedback := ""
 var pending_claim_auto_pass_feedback_until_msec := 0
 var tile_order: Dictionary = {}
@@ -1082,6 +1111,7 @@ var online_seen_message_id_order_head := 0
 var online_seen_voice_sequences: Dictionary = {}
 var remote_voice_players: Array[AudioStreamPlayer] = []
 var online_last_chat_sent_msec := 0
+var online_pending_chat_requests: Dictionary = {}
 var online_last_receive_msec := 0
 var online_last_heartbeat_msec := 0
 var online_reconnect_attempts := 0
@@ -1159,6 +1189,7 @@ var online_pending_local_discard_index := -1
 var online_pending_local_discard_serial := ""
 var online_pending_local_discard_count := -1
 var meld_window_start_by_seat: Dictionary = {}
+var meld_pager_focus_restore_seat := -1
 var sent_hello = false
 var voice_capture_effect: AudioEffectCapture
 var voice_mic_player: AudioStreamPlayer
@@ -1256,7 +1287,6 @@ var retained_battle_advisor_panel_signature := ""
 var retained_battle_top_hud: Control = null
 var retained_battle_top_hud_signature := ""
 var retained_battle_action_dock: Control = null
-var retained_battle_action_dock_shadow: Control = null
 var retained_battle_action_dock_signature := ""
 var retained_battle_action_intent: Control = null
 var retained_battle_action_intent_signature := ""
@@ -1283,11 +1313,8 @@ var ai_advisor_root_generation := -1
 var pending_claim_live_root_id := 0
 var pending_claim_timer_label: Label = null
 var pending_claim_warning_labels: Array[Label] = []
-var pending_claim_timer_fill: Control = null
-var pending_claim_priority_label: Label = null
 var pending_claim_last_timer_text := ""
 var pending_claim_last_warning_text := ""
-var pending_claim_last_priority_text := ""
 var pending_claim_display_cache_key := ""
 var pending_claim_display_cache: Dictionary = {}
 var hud_view_token := ""
@@ -1339,6 +1366,7 @@ var online_lobby_control_cache_root_id := 0
 var rules_layout_revision := 0
 var rules_layout_flush_generation := -1
 var _ui_cjk_font: Font = null
+var _ui_heading_font: Font = null
 var toast_container: Control
 var toast_tween: Tween
 var toast_current: Control
@@ -1349,6 +1377,8 @@ var toast_queue_text_index: Dictionary = {}
 var toast_queue_pending_count := 0
 var toast_queue_pending_bytes := 0
 var toast_active_minimum_dwell_msec := 0
+var toast_detail_panel: Control = null
+var toast_detail_focus_restore_id := 0
 var game_render_delay_timer: Timer = null
 var game_render_delay_mode := ""
 var game_render_delay_page_generation := -1
@@ -1398,6 +1428,7 @@ const TILE_BASE_VALUES := [
 	5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0,
 ]
 const EMPTY_WAIT_VALUE_METRICS_TEMPLATE := {
+	"discard_furiten": false,
 	"score": 0.0,
 	"best_tile": "",
 	"best_fan": 0,
@@ -1410,7 +1441,7 @@ const EMPTY_WAIT_VALUE_METRICS_TEMPLATE := {
 	"quality_text": "",
 }
 const SHAPE_NEIGHBOR_DELTAS := [-2, -1, 1, 2]
-const WALL_BACK_TILE_SIZE := Vector2(22, 30)
+const WALL_BACK_TILE_SIZE := Vector2(14, 19)
 const WALL_VISUAL_FULL_COUNT := 92
 const DISCARD_TILE_MAX_SIZE := Vector2(88, 116)  # r452 denser bottom/side porcelain cap
 const DISCARD_TILE_MIN_SIZE := Vector2(34, 46)  # r451 denser floor
@@ -1427,7 +1458,7 @@ const DISCARD_ZONES := [
 		# between seat, meld, and river so visual z-order can never hide a nameplate
 		# or turn an adjacent lane into a surprising click target.
 	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
-	[2, Rect2(Vector2(0.285, 0.205), Vector2(0.715, 0.290)), 8],
+	[2, Rect2(Vector2(0.285, 0.210), Vector2(0.715, 0.300)), 8],
 		# Side rivers stop before the dedicated bottom action channel. The gap is
 		# intentional: response controls must never sit on the last discard row.
 	[3, Rect2(Vector2(0.235, 0.300), Vector2(0.380, 0.530)), 3],
@@ -1436,14 +1467,14 @@ const DISCARD_ZONES := [
 const MELD_LAYOUTS := [
 	# Bottom melds use a short horizontal lane above the bottom river. Keeping
 	# the lane left of the center console leaves a real gap from both surfaces.
-	[0, Rect2(Vector2(0.185, 0.545), Vector2(0.335, 0.615))],
+	[0, Rect2(Vector2(0.230, 0.545), Vector2(0.345, 0.615))],
 	# Keep the vertical lanes beside the seat plaques. Their lower edge leaves a
 	# separate bottom action channel while pagination preserves full meld access.
-	[1, Rect2(Vector2(0.795, 0.240), Vector2(0.865, 0.510))],
-	# Top seat melds stay centered below the top plaque and above the center
-	# console, preserving a continuous seat-facing ownership lane.
-	[2, Rect2(Vector2(0.395, 0.145), Vector2(0.605, 0.245))],
-	[3, Rect2(Vector2(0.135, 0.240), Vector2(0.205, 0.510))],
+	[1, Rect2(Vector2(0.815, 0.240), Vector2(0.875, 0.600))],
+	# Top melds occupy the clear upper-right lane beside the centered dark hand,
+	# beyond the physical upper wall; all faces still point toward table center.
+	[2, Rect2(Vector2(0.684, 0.128), Vector2(0.980, 0.195))],
+	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.185, 0.600))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
 const CENTER_PANEL_RECT := Rect2(Vector2(0.405, 0.300), Vector2(0.595, 0.635))
@@ -1456,9 +1487,9 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.075), Vector2(0.57, 0.195)),
+	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.805), Vector2(0.57, 0.925)),
+	Rect2(Vector2(0.43, 0.805), Vector2(0.57, 1.000)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
 ]
 const CENTER_DICE_DOT_POINTS := [
@@ -1481,22 +1512,16 @@ const CENTER_IDLE_WIND_COLOR := Color(0.68, 0.64, 0.46, 0.68)
 const CENTER_DICE_DOT_RADIUS := 0.018
 const CENTER_DICE_DOT_FILL := Color(0.60, 0.56, 0.42, 0.62)
 const CENTER_DICE_DOT_BORDER := Color(0.76, 0.72, 0.58, 0.26)
-const ROUND_SUMMARY_PANEL_RECT := Rect2(Vector2(0.245, 0.155), Vector2(0.755, 0.675))
-const ROUND_SUMMARY_HEADER_RECT := Rect2(Vector2(0.0, 0.0), Vector2(1.0, 0.14))
-const ROUND_SUMMARY_TITLE_RECT := Rect2(Vector2(0.06, 0.025), Vector2(0.94, 0.125))
-const ROUND_SUMMARY_TEXT_RECT := Rect2(Vector2(0.06, 0.385), Vector2(0.94, 0.520))
-const ROUND_SUMMARY_TEXT_STATUS_RECT := Rect2(Vector2(0.06, 0.525), Vector2(0.94, 0.555))
-const ROUND_SUMMARY_RANK_HEADER_RECT := Rect2(Vector2(0.08, 0.570), Vector2(0.92, 0.610))
-const ROUND_SUMMARY_RANK_START_Y := 0.620
-const ROUND_SUMMARY_RANK_ROW_HEIGHT := 0.055
-const ROUND_SUMMARY_RANK_ROW_GAP := 0.005
-const ROUND_SUMMARY_NEXT_DEALER_RECT := Rect2(Vector2(0.08, 0.885), Vector2(0.92, 0.955))
+# Latest-discard locators use z=50; the settlement must cover the whole table.
+const ROUND_SUMMARY_SHIELD_Z_INDEX := 51
+const ROUND_SUMMARY_PANEL_Z_INDEX := 52
+const ROUND_SUMMARY_ACTION_Z_INDEX := 53
 const TABLE_OUTER_RECT := Rect2(Vector2(0.135, 0.115), Vector2(0.865, 0.790))
 const TABLE_OUTER_TEXTURE_RECT := Rect2(Vector2(0.008, 0.012), Vector2(0.992, 0.988))
 const TABLE_INNER_RECT := Rect2(Vector2(0.035, 0.045), Vector2(0.965, 0.955))
 const TABLE_INNER_TEXTURE_RECT := Rect2(Vector2(0.012, 0.016), Vector2(0.988, 0.984))
 const SEAT_LAYOUTS := [
-	[2, Rect2(Vector2(0.720, 0.120), Vector2(0.930, 0.195)), "top"],
+	[2, Rect2(Vector2(0.720, 0.134), Vector2(0.930, 0.209)), "top"],
 	[3, Rect2(Vector2(0.020, 0.335), Vector2(0.115, 0.505)), "left"],
 	[1, Rect2(Vector2(0.885, 0.335), Vector2(0.980, 0.505)), "right"],
 	[0, Rect2(Vector2(0.020, 0.745), Vector2(0.174, 0.950)), "bottom"],
@@ -1566,7 +1591,7 @@ const SAFE_CONTENT_MAX_BOTTOM_FRACTION := 0.18
 const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
 const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
-const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.212, 0.565), Vector2(0.432, 0.890))
+const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.274, 0.600), Vector2(0.584, 0.975))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.686, 0.85))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.696, 0.14), Vector2(0.778, 0.86))
 const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.790, 0.05), Vector2(0.850, 0.95))
@@ -1639,9 +1664,9 @@ const SCORE_STRIP_NAME_FILL := Color(0.92, 0.84, 0.62, 0.90)
 const SETTINGS_PANEL_FILL := Color(0.082, 0.190, 0.132, 0.940)
 const SETTINGS_PANEL_BORDER := Color(0.68, 0.56, 0.34, 0.32)
 const SETTINGS_PANEL_RECT := Rect2(Vector2(0.145, 0.055), Vector2(0.855, 0.955))
-const SETTINGS_TITLE_RECT := Rect2(Vector2(0.06, 0.045), Vector2(0.34, 0.155))
+const SETTINGS_TITLE_RECT := Rect2(Vector2(0.040, 0.045), Vector2(0.375, 0.155))
 const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.830, 0.055), Vector2(0.965, 0.165))
-const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.040, 0.255), Vector2(0.488, 0.785))
+const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.040, 0.240), Vector2(0.488, 0.805))
 const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.512, 0.240), Vector2(0.960, 0.805))
 const SETTINGS_MAINT_SECTION_RECT := Rect2(Vector2(0.040, 0.805), Vector2(0.960, 0.955))
 const SETTINGS_SECTION_TITLE_RECT := Rect2(Vector2(0.035, 0.018), Vector2(0.300, 0.100))
@@ -1901,6 +1926,18 @@ func ui_cjk_font() -> Font:
 	_ui_cjk_font = font_file
 	return _ui_cjk_font
 
+func ui_heading_font() -> Font:
+	if _ui_heading_font != null:
+		return _ui_heading_font
+	var font_file := FontFile.new()
+	if font_file.load_dynamic_font(UI_HEADING_FONT_PATH) != OK:
+		return ui_cjk_font()
+	# A licensed serif face gives display text its Chinese book typography.
+	# Dynamic names and future characters retain complete CJK coverage.
+	font_file.fallbacks = [ui_cjk_font()]
+	_ui_heading_font = font_file
+	return _ui_heading_font
+
 func add_background(parent: Control) -> void:
 	# Utility pages own their reading surface. Keep this shared authored wash quiet
 	# so a page panel does not become a second opaque full-screen scrim.
@@ -1911,6 +1948,12 @@ func add_background(parent: Control) -> void:
 	base.name = "UtilityPageLowFrequencyBackdrop"
 
 func add_menu_background(parent: Control) -> void:
+	var moonlit = add_optional_gpt_illustration_texture(parent, "menu_guofeng_moonlit", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if moonlit != null:
+		moonlit.name = "MenuGuofengBackdrop"
+		moonlit.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		moonlit.set_meta("visual_contract", "one_authored_moonlit_garden_without_decorative_overlays")
+		return
 	# The bright GPT stage already contains the Chinese frame, lanterns and paper
 	# center. Keep it as the sole full-screen menu scene so the reading area stays
 	# light instead of being buried under a second dark felt layer.
@@ -1941,15 +1984,13 @@ func add_rules_background(parent: Control) -> void:
 	codex.name = "RulesBackgroundLowFrequencyBackdrop"
 
 func add_battle_background(parent: Control) -> void:
-	# Use the GPT-rendered table as the room and tabletop together. Its built-in
-	# wood, jade and daylight keep the battle screen lively without a dark wash.
+	# A flat authored jade-felt table keeps the tile geometry visually aligned.
+	# The narrow wood rim stays peripheral, leaving every seat a quiet playing area.
 	var bright = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if bright != null:
 		bright.name = "OfflineBattleBrightGPTTable"
 		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		# Lift the authored daylight scene slightly so the wood and jade frame
-		# remain readable instead of collapsing into a dark brown edge.
-		bright.self_modulate = Color(1.12, 1.08, 0.98, 1.0)
+		bright.self_modulate = Color.WHITE
 		return
 	var battle_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
 	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.62, 0.82, 0.62, 0.84), battle_key, 0.82)
@@ -2186,7 +2227,7 @@ func make_gpt_plate_rect(rect: Rect2, color: Color, plate_key: String = "") -> C
 func gpt_center_crop_texture(source: Texture2D, plate_key: String, crop_fraction: float) -> Texture2D:
 	if source == null:
 		return null
-	var fraction := clampf(crop_fraction, 0.10, 0.80)
+	var fraction := clampf(crop_fraction, 0.10, 1.0)
 	var source_size := source.get_size()
 	if source_size.x <= 1.0 or source_size.y <= 1.0:
 		return source
@@ -2195,6 +2236,45 @@ func gpt_center_crop_texture(source: Texture2D, plate_key: String, crop_fraction
 		touch_cache_key(gpt_center_crop_lru, cache_key)
 		return gpt_center_crop_cache[cache_key] as Texture2D
 	var crop_size := source_size * fraction
+	var atlas := AtlasTexture.new()
+	atlas.atlas = source
+	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
+	gpt_center_crop_cache[cache_key] = atlas
+	touch_cache_key(gpt_center_crop_lru, cache_key)
+	while gpt_center_crop_cache.size() > GPT_CENTER_CROP_CACHE_LIMIT:
+		evict_cache_key(gpt_center_crop_lru, gpt_center_crop_cache)
+	return atlas
+
+
+func gpt_aspect_crop_texture(source: Texture2D, plate_key: String, target_aspect: float, crop_fraction: float = 1.0) -> Texture2D:
+	if source == null:
+		return null
+	var fraction := clampf(crop_fraction, 0.10, 1.0)
+	var source_size := source.get_size()
+	if source_size.x <= 1.0 or source_size.y <= 1.0:
+		return source
+	if target_aspect <= 0.05:
+		return gpt_center_crop_texture(source, plate_key, fraction)
+	var cache_key := "%s|%s|aspect_%.3f|%.3f" % [str(source.get_instance_id()), plate_key, target_aspect, fraction]
+	if gpt_center_crop_cache.has(cache_key):
+		touch_cache_key(gpt_center_crop_lru, cache_key)
+		return gpt_center_crop_cache[cache_key] as Texture2D
+	var source_aspect := source_size.x / source_size.y
+	var crop_size := Vector2.ZERO
+	if target_aspect >= source_aspect:
+		var w := source_size.x * fraction
+		var h := w / target_aspect
+		if h > source_size.y:
+			h = source_size.y
+			w = h * target_aspect
+		crop_size = Vector2(w, h)
+	else:
+		var h := source_size.y * fraction
+		var w := h * target_aspect
+		if w > source_size.x:
+			w = source_size.x
+			h = w / target_aspect
+		crop_size = Vector2(w, h)
 	var atlas := AtlasTexture.new()
 	atlas.atlas = source
 	atlas.region = Rect2((source_size - crop_size) * 0.5, crop_size)
@@ -2603,6 +2683,12 @@ func make_label(parent: Control, text: String, font_size: int, color: Color, bol
 	configure_clipped_label(label)
 	return label
 
+func make_heading(parent: Control, text: String, font_size: int, color: Color, bold: bool = true) -> Label:
+	var label := make_label(parent, text, font_size, color, bold)
+	label.add_theme_font_override("font", ui_heading_font())
+	label.set_meta("typography_role", "display_heading")
+	return label
+
 func make_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
 	# plate_key 留空时按 rect/color 自动推断；窄徽章会被判成竖导轨纹理，读数场景应显式传安静底板。
 	var badge = make_panel(parent, rect, fill, 9, border, 0, plate_key)
@@ -2617,7 +2703,10 @@ func configure_clipped_label(label: Label) -> void:
 	if label == null or not is_instance_valid(label):
 		return
 	label.clip_text = true
-	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var wrapped_line_limit := int(label.get_meta("native_wrapped_line_limit", 0))
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrapped_line_limit > 0 else TextServer.AUTOWRAP_OFF
+	if wrapped_line_limit > 0:
+		label.max_lines_visible = wrapped_line_limit
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	if label.tooltip_text == "" and label.text.strip_edges() != "":
 		label.tooltip_text = label.text
@@ -2766,6 +2855,8 @@ func configure_wrapped_label(label: Label, available_width: float = 0.0, minimum
 func refresh_wrapped_label_height(label: Label, minimum_height: float = 0.0, line_gap: float = 4.0) -> void:
 	if label == null or not is_instance_valid(label) or not bool(label.get_meta("dynamic_wrapped_label", false)):
 		return
+	if bool(label.get_meta("native_wrapped_height", false)):
+		return
 	var width := label.size.x
 	if width <= 1.0 and label.get_parent() is Control:
 		width = (label.get_parent() as Control).size.x
@@ -2823,7 +2914,7 @@ func configure_line_edit_input(edit: LineEdit, field_label: String = "", max_len
 		return
 	edit.focus_mode = Control.FOCUS_ALL
 	edit.virtual_keyboard_type = keyboard_type
-	edit.clear_button_enabled = true
+	edit.clear_button_enabled = not bool(edit.get_meta("native_clear_proxy", false))
 	edit.select_all_on_focus = false
 	edit.context_menu_enabled = true
 	if max_length > 0:
@@ -2855,6 +2946,7 @@ func add_line_edit_clear_proxy(parent: Control, edit: LineEdit, proxy_name: Stri
 	# Native clear glyphs do not provide a stable touch rect across themes. The
 	# proxy owns the full target while the LineEdit keeps text selection/focus.
 	edit.clear_button_enabled = false
+	edit.set_meta("native_clear_proxy", true)
 	var proxy := make_icon_button("x", Color(0.78, 0.72, 0.58), 14)
 	proxy.name = proxy_name
 	proxy.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
@@ -2917,6 +3009,55 @@ func find_ui_contract_control(root: Control, node_name: String) -> Control:
 		root.set_meta("ui_contract_name_index", name_index)
 	return found
 
+func style_guofeng_scrollbar(scroll_bar: ScrollBar) -> void:
+	if scroll_bar == null or not is_instance_valid(scroll_bar):
+		return
+	var is_vertical := scroll_bar is VScrollBar
+	var width := maxf(scroll_bar.custom_minimum_size.x if is_vertical else scroll_bar.custom_minimum_size.y, 44.0 if scroll_bar.has_meta("ui_min_touch_target") else 0.0)
+	var inset := maxf(0.0, (width - 10.0) * 0.5)
+	var track_inset := maxf(0.0, (width - 4.0) * 0.5)
+	var grabber_style := StyleBoxFlat.new()
+	grabber_style.bg_color = Color(0.24, 0.36, 0.30, 0.65)
+	grabber_style.set_corner_radius_all(3)
+	if is_vertical:
+		grabber_style.expand_margin_left = -inset
+		grabber_style.expand_margin_right = -inset
+		grabber_style.content_margin_top = 16
+		grabber_style.content_margin_bottom = 16
+	else:
+		grabber_style.expand_margin_top = -inset
+		grabber_style.expand_margin_bottom = -inset
+		grabber_style.content_margin_left = 16
+		grabber_style.content_margin_right = 16
+	scroll_bar.add_theme_stylebox_override("grabber", grabber_style)
+	var grabber_hl := StyleBoxFlat.new()
+	grabber_hl.bg_color = Color(0.18, 0.44, 0.34, 0.85)
+	grabber_hl.set_corner_radius_all(3)
+	if is_vertical:
+		grabber_hl.expand_margin_left = -inset
+		grabber_hl.expand_margin_right = -inset
+		grabber_hl.content_margin_top = 16
+		grabber_hl.content_margin_bottom = 16
+	else:
+		grabber_hl.expand_margin_top = -inset
+		grabber_hl.expand_margin_bottom = -inset
+		grabber_hl.content_margin_left = 16
+		grabber_hl.content_margin_right = 16
+	scroll_bar.add_theme_stylebox_override("grabber_highlight", grabber_hl)
+	scroll_bar.add_theme_stylebox_override("grabber_pressed", grabber_hl)
+	var track_style := StyleBoxFlat.new()
+	track_style.bg_color = Color(0.85, 0.82, 0.74, 0.20)
+	track_style.set_corner_radius_all(2)
+	if is_vertical:
+		track_style.expand_margin_left = -track_inset
+		track_style.expand_margin_right = -track_inset
+	else:
+		track_style.expand_margin_top = -track_inset
+		track_style.expand_margin_bottom = -track_inset
+	scroll_bar.add_theme_stylebox_override("scroll", track_style)
+	scroll_bar.add_theme_stylebox_override("scroll_focus", track_style)
+
+
 func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = "") -> void:
 	if scroll == null or not is_instance_valid(scroll):
 		return
@@ -2941,6 +3082,8 @@ func configure_scroll_container(scroll: ScrollContainer, scroll_label: String = 
 		)
 		scroll.set_meta("ui_scroll_keyboard_route_connected", true)
 	var scroll_bar := scroll.get_v_scroll_bar()
+	if scroll_bar != null:
+		style_guofeng_scrollbar(scroll_bar)
 	if scroll_bar != null and not bool(scroll.get_meta("ui_scroll_metrics_connected", false)):
 		scroll_bar.value_changed.connect(func(value: float) -> void:
 			if not is_instance_valid(scroll):
@@ -3021,6 +3164,99 @@ func top_hud_button_tooltip(text: String) -> String:
 			return "检查并下载可用更新"
 	return text.strip_edges()
 
+func style_guofeng_label(label: Label, ink_face: bool = false) -> void:
+	label.add_theme_color_override("font_color", Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18))
+	label.add_theme_constant_override("outline_size", 0)
+	label.add_theme_constant_override("shadow_offset_x", 0)
+	label.add_theme_constant_override("shadow_offset_y", 0)
+	label.set_meta("guofeng_text_surface", "ink" if ink_face else "paper")
+
+
+func sync_guofeng_button_slice(plate_id: int) -> void:
+	var plate := node_from_instance_id(plate_id) as TextureRect
+	if plate == null:
+		return
+	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+	if edges != null:
+		edges.size = plate.size / 0.125
+
+
+func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool) -> void:
+	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+	if not preserve_edges:
+		if edges != null:
+			edges.visible = false
+		return
+	var source := plate.texture
+	if source == null:
+		return
+	if edges == null:
+		edges = NinePatchRect.new()
+		edges.name = "AuthoredBitmapEdges"
+		edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		edges.scale = Vector2(0.125, 0.125)
+		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			edges.set_patch_margin(side, 96)
+		plate.add_child(edges)
+		plate.resized.connect(Callable(self, "sync_guofeng_button_slice").bind(plate.get_instance_id()))
+	edges.texture = source
+	edges.region_rect = Rect2(Vector2.ZERO, source.get_size())
+	edges.visible = true
+	# The existing atlas supplies every pixel. Uniform scaling keeps its frame
+	# near 1px; native nine-slice stretches only the quiet center and straight edges.
+	plate.texture = null
+	sync_guofeng_button_slice(plate.get_instance_id())
+
+
+func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
+	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
+	var text_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
+	var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	if face == null:
+		face = add_optional_gpt_illustration_texture(button, face_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+		if face != null:
+			face.name = "GptButtonFacePlate"
+			face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			face.show_behind_parent = true
+	if face != null:
+		var raw_texture := optional_gpt_illustration_texture(face_key)
+		if raw_texture != null:
+			if not ink_face or (button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")):
+				face.texture = raw_texture
+			else:
+				face.texture = gpt_center_crop_texture(raw_texture, face_key, 0.65)
+		else:
+			face.texture = null
+		face.modulate = Color.WHITE
+		face.self_modulate = Color.WHITE
+		configure_guofeng_button_slice(face, not ink_face and button.name.begins_with("SettingRowButton_"))
+	button.set_meta("guofeng_button_font_color", text_color)
+	button.set_meta("guofeng_button_face_key", face_key)
+	var empty_style := StyleBoxEmpty.new()
+	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		button.add_theme_stylebox_override(state, empty_style)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
+		button.add_theme_color_override(state, text_color)
+	button.add_theme_constant_override("outline_size", 0)
+	button.add_theme_constant_override("shadow_offset_x", 0)
+	button.add_theme_constant_override("shadow_offset_y", 0)
+	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
+	if focus_plate != null:
+		var raw_focus := optional_gpt_illustration_texture(face_key)
+		if raw_focus != null:
+			if not ink_face or (button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")):
+				focus_plate.texture = raw_focus
+			else:
+				focus_plate.texture = gpt_center_crop_texture(raw_focus, face_key, 0.65)
+		else:
+			focus_plate.texture = null
+		configure_guofeng_button_slice(focus_plate, not ink_face and button.name.begins_with("SettingRowButton_"))
+	var press_sheen := button.get_node_or_null("ButtonPressSheen") as Control
+	if press_sheen != null:
+		button.remove_child(press_sheen)
+		press_sheen.queue_free()
+
+
 func make_top_hud_button(text: String, color: Color, callback: Callable) -> Button:
 	var button = make_base_button(text, callback)
 	button.tooltip_text = top_hud_button_tooltip(text)
@@ -3035,78 +3271,62 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.add_theme_font_size_override("font_size", 1)
 	apply_button_style(button, color, 10, 1, 1)
-	ensure_button_gpt_face_plate(button, Color(0.96, 0.90, 0.72, 0.92), "action_gpt_dock_banner_bright")
+	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_card_readable_gpt")
+	apply_guofeng_button_face(button)
+	var hud_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	if hud_face != null:
+		hud_face.texture = optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+		hud_face.self_modulate = Color.WHITE
 	draw_top_hud_button_art(button, text, color)
-	button.button_down.connect(Callable(self, "play_top_hud_button_press_feedback_by_id").bind(button.get_instance_id(), text, color))
-	var icon_name = icon_name_for_button_text(text)
-	if icon_name != "":
-		add_lucide_icon(button, icon_name, rect_full(0.245, 0.220, 0.755, 0.780), Color(0.12, 0.28, 0.20, 0.94))
 	return button
 
-func draw_top_hud_button_art(button: Button, text: String, color: Color) -> Control:
-	var art = Control.new()
+func draw_top_hud_button_art(button: Button, text: String, _color: Color) -> Control:
+	var art := make_layout_host(rect_full(0.0, 0.0, 1.0, 1.0))
 	art.name = "TopHudButtonArt_%s" % text
-	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	art.z_index = 7
 	button.add_child(art)
-	# r180: GPT accents with smoke-stable names/geometry (IconBack/Rail/Seal).
-	var icon_back = add_optional_gpt_illustration_texture(art, "action_gpt_dock_banner_bright", rect_full(0.180, 0.170, 0.820, 0.830), 0.16, false)
-	if icon_back == null:
-		icon_back = make_gpt_plate_rect(rect_full(0.180, 0.170, 0.820, 0.830), Color(0.18, 0.13, 0.08, 0.20), "action_gpt_dock_banner_bright")
-		art.add_child(icon_back)
-	icon_back.name = "TopHudButtonIconBack_%s" % text
-	var rail = add_optional_gpt_illustration_texture(art, "ui_meter_rail_plate", rect_full(0.285, 0.815, 0.715, 0.845), 0.36, false)
-	if rail == null:
-		rail = make_gpt_plate_rect(rect_full(0.285, 0.815, 0.715, 0.845), Color(0.72, 0.50, 0.22, 0.18), "ui_meter_rail_plate")
-		art.add_child(rail)
-	rail.name = "TopHudButtonRail_%s" % text
-	var seal = add_optional_gpt_illustration_texture(art, "ui_hand_tray_state_chip", rect_full(0.735, 0.305, 0.790, 0.695), 0.40, false)
-	if seal == null:
-		seal = make_gpt_plate_rect(rect_full(0.735, 0.305, 0.790, 0.695), Color(0.62, 0.18, 0.12, 0.20), "ui_hand_tray_state_chip")
-		art.add_child(seal)
-	seal.name = "TopHudButtonSeal_%s" % text
+	var char_label := make_label(art, text.strip_edges(), 18, Color(0.11, 0.23, 0.18), true)
+	char_label.name = "TopHudButtonCharLabel"
+	char_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	char_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	char_label.add_theme_font_override("font", ui_heading_font())
+	char_label.add_theme_font_size_override("font_size", accessibility_font_size(18))
+	apply_rect(char_label, rect_full(0.040, 0.140, 0.960, 0.960))
+	style_guofeng_label(char_label, false)
+	var icon_name := icon_name_for_button_text(text)
+	var icon: TextureRect = null
+	if icon_name != "":
+		icon = add_lucide_icon(art, icon_name, rect_full(0.280, 0.220, 0.790, 0.780), Color(0.11, 0.23, 0.18))
+		if icon != null:
+			icon.visible = false
+	# HUD actions deliberately use an ink focus face with paired ivory artwork.
+	var hud_focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
+	if hud_focus_plate != null:
+		var ink_source := optional_gpt_illustration_texture("menu_ink_primary")
+		if ink_source != null:
+			hud_focus_plate.texture = gpt_center_crop_texture(ink_source, "menu_ink_primary", 0.65)
+		else:
+			hud_focus_plate.texture = null
+	var marker := make_label(art, "•", 8, Color(0.82, 0.24, 0.18), false)
+	marker.name = "TopHudButtonFocusMarker"
+	style_guofeng_label(marker, true)
+	apply_rect(marker, rect_full(0.400, 0.0, 0.600, 0.200))
+	var sync_focus := func(focused: bool) -> void:
+		marker.visible = focused
+		var tint := Color(0.97, 0.93, 0.78) if focused else Color(0.11, 0.23, 0.18)
+		if icon != null:
+			if icon.material is ShaderMaterial:
+				(icon.material as ShaderMaterial).set_shader_parameter("icon_color", tint)
+			else:
+				icon.modulate = tint
+		if hud_focus_plate != null:
+			hud_focus_plate.modulate = Color(1.0, 1.0, 1.0, 1.0 if focused else 0.0)
+		style_guofeng_label(char_label, focused)
+	button.focus_entered.connect(sync_focus.bind(true))
+	button.focus_exited.connect(sync_focus.bind(false))
+	sync_focus.call(button.has_focus())
 	return art
 
-func play_top_hud_button_press_feedback(button: Button, text: String, color: Color) -> void:
-	if button == null or not is_instance_valid(button):
-		return
-	var feedback = Control.new()
-	feedback.name = "TopHudButtonPressFeedback_%s" % text
-	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	feedback.set_anchors_preset(Control.PRESET_FULL_RECT)
-	button.add_child(feedback)
-	var wash = make_panel(feedback, rect_full(0.105, 0.125, 0.895, 0.875), Color(color.r, color.g, color.b, 0.10), 10, Color(1.0, 0.88, 0.52, 0.10), 0)
-	wash.name = "TopHudButtonPressWash_%s" % text
-	var glow = make_panel(feedback, rect_full(0.210, 0.205, 0.790, 0.795), Color(1.0, 0.84, 0.42, 0.050), 999, Color(color.r, color.g, color.b, 0.050), 0)
-	glow.name = "TopHudButtonPressGlow_%s" % text
-	var seal = make_panel(feedback, rect_full(0.700, 0.185, 0.820, 0.485), Color(color.r, color.g, color.b, 0.11), 999, Color(1.0, 0.88, 0.52, 0.070), 0)
-	seal.name = "TopHudButtonPressSeal_%s" % text
-	var glyph = make_label(seal, text.substr(0, 1) if text != "" else "行", 8, Color(0.98, 0.92, 0.66, 0.72), true)
-	glyph.name = "TopHudButtonPressGlyph_%s" % text
-	apply_rect(glyph, rect_full(0.0, 0.0, 1.0, 1.0))
-	if fx_enabled_effective():
-		feedback.modulate.a = 0.0
-		wash.scale = Vector2(0.92, 0.90)
-		glow.scale = Vector2(0.74, 0.74)
-		seal.scale = Vector2(0.88, 0.88)
-		var tw := create_tween()
-		tw.bind_node(feedback)
-		tw.set_parallel(true)
-		tw.tween_property(feedback, "modulate:a", 0.88, 0.06).from(0.0)
-		tw.tween_property(wash, "scale", Vector2.ONE, 0.16).from(Vector2(0.92, 0.90)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(glow, "scale", Vector2.ONE, 0.18).from(Vector2(0.74, 0.74)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		tw.tween_property(seal, "scale", Vector2(1.04, 1.04), 0.12).from(Vector2(0.88, 0.88)).set_ease(Tween.EASE_OUT)
-		tw.set_parallel(false)
-		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(0.88).set_delay(0.05)
-		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
-	else:
-		feedback.modulate.a = 0.24
-
-func play_top_hud_button_press_feedback_by_id(button_id: int, text: String, color: Color) -> void:
-	var button = node_from_instance_id(button_id) as Button
-	if button == null:
-		return
-	play_top_hud_button_press_feedback(button, text, color)
 
 func make_base_button(text: String, callback: Callable) -> Button:
 	var button = Button.new()
@@ -3213,7 +3433,12 @@ func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
 		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
 	# Text color remains a reliable focus signal even when the optional authored
 	# focus plate is unavailable or failed to import.
-	button.add_theme_color_override("font_color", Color(1.0, 0.94, 0.62) if focused else accessible_text_color(Color(0.95, 0.93, 0.82)))
+	if bool(button.get_meta("menu_native_label_hidden", false)):
+		button.add_theme_color_override("font_color", Color(0.0, 0.0, 0.0, 0.0))
+	elif button.has_meta("guofeng_button_font_color"):
+		button.add_theme_color_override("font_color", button.get_meta("guofeng_button_font_color"))
+	else:
+		button.add_theme_color_override("font_color", Color(1.0, 0.94, 0.62) if focused else accessible_text_color(Color(0.95, 0.93, 0.82)))
 
 func focus_button_neighbor(button: Button, focusable: Array[Button], direction: Vector2) -> Button:
 	if button == null or focusable.is_empty():
@@ -5087,12 +5312,15 @@ func offline_progress_state_payload() -> Dictionary:
 
 func offline_progress_state_validation_error(state: Dictionary) -> String:
 	var validation_key := str(state.get("state_revision", ""))
-	if validation_key != "" and offline_progress_snapshot_validation_key == validation_key:
+	if validation_key != "":
+		validation_key += "|" + rule_variant
+	if validation_key != "" and offline_progress_snapshot_validation_key == validation_key and offline_progress_snapshot_validation_state == state:
 		return offline_progress_snapshot_validation_error
 	var validation_error := _offline_progress_state_validation_error_uncached(state)
 	if validation_key != "":
 		offline_progress_snapshot_validation_key = validation_key
 		offline_progress_snapshot_validation_error = validation_error
+		offline_progress_snapshot_validation_state = state.duplicate(true)
 	return validation_error
 
 
@@ -5160,6 +5388,15 @@ func _offline_progress_state_validation_error_uncached(state: Dictionary) -> Str
 	for tile in expected_counts:
 		if int(actual_counts.get(tile, 0)) != int(expected_counts[tile]):
 			return "本地进度牌账异常。"
+	if phase == "resolving":
+		var source_seat := int(state.get("last_discard_seat", -1))
+		var source_tile := str(state.get("last_discard", ""))
+		if source_seat < 0 or source_seat >= 4 or source_tile == "":
+			return "本地进度待裁定舍张归属异常。"
+		var source_player: Dictionary = state["players"][source_seat]
+		var source_river: Array = source_player.get("discards", [])
+		if source_river.is_empty() or str(source_river.back()) != source_tile:
+			return "本地进度待裁定舍张来源不一致。"
 	return ""
 
 
@@ -5168,6 +5405,7 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	if validation_error != "":
 		set_status("本地进度无法恢复：%s" % validation_error)
 		return false
+	call("cancel_offline_ai_run")
 	offline_progress_state_revision = maxi(offline_progress_state_revision + 1, int(state.get("state_revision", 0)))
 	offline_progress_snapshot_key = ""
 	offline_progress_snapshot.clear()
@@ -5189,6 +5427,8 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	if offline_pending_claim.has("remaining_msec"):
 		offline_pending_claim["deadline_msec"] = Time.get_ticks_msec() + maxi(0, int(offline_pending_claim.get("remaining_msec", 0)))
 		offline_pending_claim.erase("remaining_msec")
+	if offline_phase == "pending_claim" and not offline_pending_claim.is_empty():
+		offline_claim_sequence += 1
 	offline_claim_counts = state.get("offline_claim_counts", {}).duplicate(true) if typeof(state.get("offline_claim_counts", {})) == TYPE_DICTIONARY else {}
 	offline_package_liability = state.get("offline_package_liability", {}).duplicate(true) if typeof(state.get("offline_package_liability", {})) == TYPE_DICTIONARY else {}
 	ai_package_liability_revision += 1
@@ -5225,6 +5465,8 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	offline_progress_loaded_state = true
 	offline_progress_dirty = false
 	offline_progress_last_save_msec = Time.get_ticks_msec()
+	if offline_phase == "resolving":
+		call("queue_offline_discard_resolution", last_discard_seat, last_discard)
 	return true
 
 
@@ -5284,10 +5526,6 @@ func save_offline_progress(announce: bool = true) -> void:
 	offline_progress_last_save_ok = false
 	if offline_sim_quiet or mode != "offline" or players.size() != 4:
 		offline_progress_last_save_ok = mode != "offline"
-		return
-	# Never persist the brief resolving phase. The last stable snapshot can be
-	# resumed safely; saving between discard and arbitration would be ambiguous.
-	if offline_phase == "resolving":
 		return
 	var state := offline_progress_state_payload()
 	var validation_error := offline_progress_state_validation_error(state)
@@ -5357,7 +5595,7 @@ func reset_offline_progress() -> void:
 	offline_progress_snapshot.clear()
 	offline_progress_snapshot_validation_key = ""
 	offline_progress_snapshot_validation_error = ""
-	set_status("进度已重置")
+	set_status("续局存档已清空，战绩已保留")
 
 # ===== Shared startup assets and tile metadata =====
 func setup_tile_order() -> void:
@@ -6343,7 +6581,7 @@ func get_last_discard_seat() -> int:
 func can_self_discard() -> bool:
 	if mode == "offline":
 		return offline_phase == "await_discard" and current_seat == 0 and not offline_turn_needs_draw
-	if online_resume_pending or online_feedback.find("连接已断开") >= 0 or online_feedback.find("重新连接") >= 0:
+	if online_waiting_for_server or online_resume_pending or online_feedback.find("连接已断开") >= 0 or online_feedback.find("重新连接") >= 0:
 		return false
 	return str(online_game.get("phase", "")) == "awaitDiscard" and int(online_game.get("currentSeat", -1)) == int(online_game.get("youSeat", -2))
 

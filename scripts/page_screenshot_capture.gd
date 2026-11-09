@@ -227,11 +227,11 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 		"interactive_state_contract": {
 			"11_exit_confirm": {"required_nodes": ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"], "default_focus": "ExitConfirmContinueButton", "state_text": "确认退出"},
 			"12_toast": {"required_nodes": ["ToastContainer", "Toast"], "default_focus": "", "state_text": "成就解锁：初入牌桌"},
-			"17_hand_tutorial": {"required_nodes": ["HandTrayTutorialHint", "HandTrayTutorialTargetTile"], "default_focus": "", "state_text": "点击一张手牌，将它打入牌河"},
+			"17_hand_tutorial": {"required_nodes": ["HandTrayTutorialHint", "HandTrayTutorialHintText", "HandTutorialSkipButton"], "default_focus": "", "state_text": "点击一张手牌，将它打入牌河"},
 		"18_update_dialog": {"required_nodes": ["UpdatePrimaryButton", "UpdateSecondaryButton"], "default_focus": "UpdateSecondaryButton", "state_text": "远端版本 v1.0.181 · 当前版本 v1.0.180"},
-			"19_reset_progress": {"required_nodes": ["SettingsPanel", "SettingsCloseButton", "ResetProgressConfirmArt"], "default_focus": "SettingsCloseButton", "state_text": "再次点击确认清空本地进度"},
+			"19_reset_progress": {"required_nodes": ["SettingsPanel", "SettingsCloseButton", "SettingRowButton_本地进度", "SettingRowStatus_本地进度"], "default_focus": "SettingsCloseButton", "state_text": "再次点击清空续局存档，保留战绩"},
 			"20_chat_panel": {"required_nodes": ["ChatPanel", "ChatPanelCloseButton", "ChatInput", "ChatSendButton"], "default_focus": "ChatInput", "state_text": "房间消息"},
-			"22_advisor": {"required_nodes": ["AdvisorPanel", "AdvisorDetailButton"], "default_focus": "AdvisorDetailButton", "state_text": "牌势"},
+			"22_advisor": {"fixture_seed": "seed_preview_midgame_battle:closed_hands", "wall_count": 64, "required_nodes": ["AdvisorPanel", "AdvisorPanelPaper", "AdvisorPanelTitle", "AdvisorPanelContext", "AdvisorDetailButton"], "default_focus": "AdvisorDetailButton", "state_text": "牌势", "summary_contract": "live conclusion and risk context; full analysis via native detail action"},
 			"23_online_lobby_connected": {"fixture_seed": "seed_preview_online_lobby_connected", "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbyStatusLabel"], "default_focus": "OnlineLobbyConnectButton", "state_text": "房间同步完成"},
 			"24_online_lobby_disconnect_recovery": {"fixture_seed": "seed_preview_online_lobby_disconnect_recovery", "required_nodes": ["OnlineLobbyLowFrequencyPagePlate", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit", "OnlineLobbyConnectButton", "OnlineLobbyStatusLabel"], "default_focus": "OnlineLobbyConnectButton", "state_text": "连接已断开"},
 			"25_replay_import_empty": {"fixture_seed": "show_replay_import_screen", "required_nodes": ["ReplayImportPanel", "ReplayImportCodeInput", "ReplayImportButton", "ReplayImportTimeline", "ReplayImportTimelineScroll"], "default_focus": "ReplayImportCodeInput", "state_text": "等待导入"},
@@ -291,20 +291,12 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		printerr("update dialog fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
-	if screen_name == "22_advisor" and not validate_advisor_fixture(scene):
-		printerr("advisor fixture contract failed for %s" % screen_name)
-		quit(1)
-		return
 	if screen_name == "17_hand_tutorial" and not validate_hand_tutorial_fixture(scene):
 		printerr("hand tutorial fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
 	if screen_name == "36_menu_tutorial_progress" and not validate_menu_tutorial_progress_fixture(scene):
 		printerr("menu tutorial progress fixture contract failed for %s" % screen_name)
-		quit(1)
-		return
-	if screen_name == "19_reset_progress" and not validate_reset_progress_fixture(scene):
-		printerr("reset progress fixture contract failed for %s" % screen_name)
 		quit(1)
 		return
 	if ["03_offline_battle", "13_round_summary", "14_danger_discard", "15_pending_claim_full", "16_win_detail", "35_offline_battle_capacity"].has(screen_name):
@@ -326,8 +318,20 @@ func capture_screen(scene: Node, screen_name: String, output_dir_res: String) ->
 		scene.clear_fx_overlays()
 	await settle()
 	_force_capture_visible_screens(scene)
+	# Native label geometry is final only after the container layout settles.
+	if screen_name == "22_advisor" and not validate_advisor_fixture(scene):
+		printerr("advisor fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
+	if screen_name == "19_reset_progress" and not validate_reset_progress_fixture(scene):
+		printerr("reset progress fixture contract failed for %s" % screen_name)
+		quit(1)
+		return
 	if screen_name == "13_round_summary" or screen_name == "16_win_detail":
-		stabilize_capture_round_summary(scene)
+		if not validate_settlement_capture(scene):
+			printerr("settlement capture layering contract failed for %s" % screen_name)
+			quit(1)
+			return
 
 	await RenderingServer.frame_post_draw
 	var viewport_texture = root.get_texture()
@@ -476,6 +480,15 @@ func canvas_z_chain(item: CanvasItem) -> String:
 	chain.reverse()
 	return " > ".join(chain)
 
+func effective_canvas_z(item: CanvasItem) -> int:
+	var result := item.z_index
+	var cursor: Node = item
+	while cursor is CanvasItem and (cursor as CanvasItem).z_as_relative:
+		cursor = cursor.get_parent()
+		if cursor is CanvasItem:
+			result += (cursor as CanvasItem).z_index
+	return result
+
 func reset_update_fixture_state(scene: Node, screen_name: String) -> void:
 	if scene == null or screen_name == "18_update_dialog":
 		return
@@ -533,6 +546,16 @@ func validate_preview_meld_fixture(scene: Node, screen_name: String) -> bool:
 		if not expected_flower_counts.is_empty() and int(player.get("flowers", 0)) != int(expected_flower_counts[seat]):
 			printerr("battle fixture flower count mismatch at seat %d: got=%d expected=%d" % [seat, player.get("flowers", 0), expected_flower_counts[seat]])
 			return false
+		var rendered_info: Dictionary = scene.get_player_info(seat)
+		var expected_hand: int = player.get("hand", []).size()
+		if rendered_info.get("flowers", -1) != player.get("flowers", 0) or rendered_info.get("score", -1) != player.get("score", 0) or rendered_info.get("hand_count", -1) != expected_hand:
+			printerr("battle fixture player-info cache mismatch at seat %d" % seat)
+			return false
+		var score := scene.find_child("SeatCompactScore_%d" % seat, true, false) as Label
+		var meta := scene.find_child("SeatCompactMeta_%d" % seat, true, false) as Label
+		if score == null or meta == null or score.text != scene.seat_score_text(rendered_info) or not meta.text.contains("花%d" % int(player.get("flowers", 0))) or not meta.text.contains("手%d" % expected_hand):
+			printerr("battle fixture rendered native seat facts mismatch at seat %d" % seat)
+			return false
 		var expected_vertical := seat == 1 or seat == 3
 		if bool(scene.seat_meld_is_vertical(seat)) != expected_vertical:
 			printerr("meld fixture orientation mismatch at seat %d: got=%s expected=%s" % [seat, scene.seat_meld_is_vertical(seat), expected_vertical])
@@ -558,18 +581,42 @@ func validate_advisor_fixture(scene: Node) -> bool:
 	if panels.size() != 1:
 		printerr("advisor panel count mismatch: got=%d expected=1" % panels.size())
 		return false
-	for heading in ["荐", "势", "守"]:
-		var cards := scene.find_children("AdvisorInfoCard_%s" % heading, "Control", true, false)
-		if cards.size() != 1:
-			printerr("advisor card count mismatch for %s: got=%d expected=1" % [heading, cards.size()])
+	var panel := panels[0] as Control
+	var layout_mode := str(panel.get_meta("advisor_layout_mode", ""))
+	if scene.wall.size() != 64 or layout_mode not in ["compact_summary", "detail_only"] or not panel.is_visible_in_tree():
+		printerr("advisor reading fixture must expose a compact live midgame summary")
+		return false
+	var paper := panel.find_child("AdvisorPanelPaper", true, false) as TextureRect
+	var title := panel.find_child("AdvisorPanelTitle", true, false) as Label
+	var context := panel.find_child("AdvisorPanelContext", true, false) as Label
+	var detail := panel.find_child("AdvisorDetailButton", true, false) as Button
+	if paper == null or paper.texture == null or paper.self_modulate != Color.WHITE or title == null or context == null or detail == null:
+		printerr("advisor summary is missing authored paper, native copy or detail action")
+		return false
+	var detail_only := layout_mode == "detail_only"
+	if title.text != ("牌势" if detail_only else scene.advisor_compact_conclusion_text()) or str(title.get_meta("ui_full_text", "")) != scene.advisor_compact_conclusion_text() or context.text != scene.advisor_compact_context_text() or context.visible == detail_only or str(context.get_meta("ui_full_text", "")) != scene.advisor_detail_text():
+		printerr("advisor summary does not preserve its live conclusion, risk context and full analysis")
+		return false
+	var bounds := panel.get_global_rect().grow(1.0)
+	for control in [paper, title, detail] + ([] if detail_only else [context]):
+		if not control.is_visible_in_tree() or not bounds.encloses(control.get_global_rect()):
+			printerr("advisor reading control is hidden or outside its paper: %s" % control.name)
 			return false
+	if detail.disabled or detail.focus_mode != Control.FOCUS_ALL or detail.size.x < 44.0 or detail.size.y < 44.0 or not detail.pressed.is_connected(Callable(scene, "toggle_advisor_detail_panel")):
+		printerr("advisor detail must retain a native keyboard and touch action of at least 44px")
+		return false
 	return true
 
 func validate_hand_tutorial_fixture(scene: Node) -> bool:
 	var hint := scene.find_child("HandTrayTutorialHint", true, false) as Control
-	var target := scene.find_child("HandTrayTutorialTargetTile", true, false) as Control
+	var hint_text := scene.find_child("HandTrayTutorialHintText", true, false) as Label
+	var skip_button := scene.find_child("HandTutorialSkipButton", true, false) as Button
 	var hand := scene.find_child("HandTrayTiles", true, false) as Control
-	return hint != null and target != null and hand != null and scene.show_hand_hint and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD and scene.can_self_discard() and scene.players.size() > 0 and scene.players[0].get("hand", []).size() == 14
+	var actual_target_count := 0
+	for tile in scene.find_children("HandTile_*", "Control", true, false):
+		if bool(tile.get_meta("guide_target", false)):
+			actual_target_count += 1
+	return hint != null and hint_text != null and hint_text.text == scene.tutorial_hand_hint_text() and skip_button != null and hand != null and actual_target_count == 1 and scene.show_hand_hint and scene.tutorial_step == scene.TUTORIAL_STEP_DISCARD and scene.can_self_discard() and scene.players.size() > 0 and scene.players[0].get("hand", []).size() == 14
 
 func validate_menu_tutorial_progress_fixture(scene: Node) -> bool:
 	var banner := scene.find_child("MenuTutorialEntryBanner", true, false) as Control
@@ -585,10 +632,19 @@ func validate_menu_tutorial_progress_fixture(scene: Node) -> bool:
 func validate_reset_progress_fixture(scene: Node) -> bool:
 	var row_status := scene.find_child("SettingRowStatus_本地进度", true, false) as Label
 	var reset_button := scene.find_child("SettingRowButton_本地进度", true, false) as Button
-	var confirm_art := scene.find_child("ResetProgressConfirmArt", true, false)
-	var compact_status_valid := row_status != null and (row_status.text == "再次确认" or row_status.text.contains("再次点击确认") or row_status.text.contains("点击确认清空") or row_status.text.contains("确认清空：统计+离线记录") or row_status.text.contains("确认清空\n统计 + 离线记录"))
-	var full_status_valid := row_status != null and row_status.tooltip_text.contains("再次点击确认") and str(row_status.get_meta("ui_full_text", "")).contains("再次点击确认")
-	var valid: bool = scene.reset_progress_confirming and compact_status_valid and full_status_valid and reset_button != null and reset_button.text == "确认清空" and reset_button.tooltip_text.contains("确认清空") and confirm_art != null
+	var compact: bool = scene.effective_viewport_size().x <= 960.0 or scene.effective_viewport_size().y <= 560.0
+	var expected_status: String = "清空续局·保留战绩" if compact and not scene.large_text_enabled else ("清空续局\n保留战绩" if compact else "清空续局存档\n保留战绩")
+	var compact_status_valid := row_status != null and row_status.text == expected_status
+	if row_status != null:
+		var font := row_status.get_theme_font("font")
+		var font_size := row_status.get_theme_font_size("font_size")
+		for line in row_status.text.split("\n"):
+			compact_status_valid = compact_status_valid and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x <= row_status.size.x + 0.5
+		compact_status_valid = compact_status_valid and row_status.size.y + 0.5 >= font.get_height(font_size) * row_status.text.split("\n").size()
+	var full_status_valid := row_status != null and row_status.tooltip_text.contains("再次点击清空续局存档，保留战绩") and str(row_status.get_meta("ui_full_text", "")).contains("再次点击清空续局存档，保留战绩")
+	var valid: bool = scene.reset_progress_confirming and compact_status_valid and full_status_valid and reset_button != null and reset_button.text == "确认清空" and reset_button.tooltip_text.contains("确认仅清空续局存档") and reset_button.tooltip_text.contains("保留战绩") and reset_button.get_meta("destructive_scope", "") == "离线续局存档" and reset_button.get_meta("confirmation_state", "") == "armed" and bool(reset_button.get_meta("confirmation_is_non_destructive_until_second_click", false))
+	if not valid:
+		printerr("reset progress fixture details: %s" % JSON.stringify({"armed": scene.reset_progress_confirming, "text": row_status.text if row_status != null else "missing", "tooltip": row_status.tooltip_text if row_status != null else "missing", "full_text": row_status.get_meta("ui_full_text", "") if row_status != null else "missing", "button": reset_button.text if reset_button != null else "missing", "button_tooltip": reset_button.tooltip_text if reset_button != null else "missing", "scope": reset_button.get_meta("destructive_scope", "") if reset_button != null else "missing", "confirmation": reset_button.get_meta("confirmation_state", "") if reset_button != null else "missing"}))
 	return valid
 
 func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
@@ -602,7 +658,7 @@ func validate_telemetry_fixture(scene: Node, screen_name: String) -> bool:
 		return status.text == "未同意 · 默认不记录" and consent.text == "同意记录"
 	if screen_name == "33_telemetry_revoked":
 		return status.text == "已关闭 · 不记录" and consent.text == "同意记录"
-	return status.text.begins_with("已同意 · 本地队列") and consent.text == "关闭记录"
+	return status.text.begins_with("已同意 · 本地队列") and consent.text == "关闭并清空"
 
 
 func apply_static_capture_mode(scene: Node) -> void:
@@ -612,6 +668,14 @@ func apply_static_capture_mode(scene: Node) -> void:
 	scene.set("tts_enabled", false)
 	scene.set("voice_enabled", false)
 
+func render_preview_battle(scene: Node) -> void:
+	if scene.mode == "offline":
+		scene.ai_state_revision += 1
+	elif scene.mode == "online_game":
+		scene.online_game_revision += 1
+	scene.render_game()
+
+
 func build_screen(scene: Node, screen_name: String) -> void:
 	match screen_name:
 		"01_menu":
@@ -619,18 +683,19 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"02_menu_settings":
 			scene.show_menu(true)
 			scene.settings_panel_open = true
+			scene.settings_active_section = "声音"
 			scene.refresh_current_screen()
 		"03_offline_battle":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_midgame_battle(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"35_offline_battle_capacity":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_capacity_battle(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"36_menu_tutorial_progress":
 			scene.settings_panel_open = false
@@ -660,7 +725,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_discards(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 			scene.show_exit_confirm()
 			# Capture mode: force fully-visible static dialog (skip entrance fade).
@@ -681,9 +746,13 @@ func build_screen(scene: Node, screen_name: String) -> void:
 				scene.toast_tween.kill()
 				scene.toast_tween = null
 			if scene.toast_current != null and is_instance_valid(scene.toast_current):
+				var reflow_rect := Rect2(scene.toast_current.position, scene.toast_current.size)
 				scene.toast_current.modulate = Color(1, 1, 1, 1)
-				scene.toast_current.offset_top = 0.0
 				scene.toast_current.scale = Vector2(1, 1)
+				if Rect2(scene.toast_current.position, scene.toast_current.size) != reflow_rect:
+					printerr("toast capture freeze changed production reflow geometry")
+					quit(1)
+					return
 			if scene.toast_container != null and is_instance_valid(scene.toast_container):
 				scene.toast_container.visible = true
 		"13_round_summary":
@@ -691,28 +760,28 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.start_offline(true)
 			seed_preview_discards(scene)
 			seed_preview_round_summary(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"14_danger_discard":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_discards(scene)
 			seed_preview_danger_discard(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"15_pending_claim_full":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_discards(scene)
 			seed_preview_pending_claim_full(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"16_win_detail":
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_discards(scene)
 			seed_preview_win_detail(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"23_online_lobby_connected":
 			seed_preview_online_lobby_connected(scene)
@@ -747,7 +816,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.start_offline(true)
 			seed_preview_discards(scene)
 			seed_preview_hand_tutorial(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		"18_update_dialog":
 			scene.show_menu(true)
@@ -756,6 +825,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 		"19_reset_progress":
 			scene.show_menu(true)
 			scene.settings_panel_open = true
+			scene.settings_active_section = "系统"
 			scene.refresh_current_screen()
 			# Exercise the same confirmation path as a user click so the row
 			# status, button label, and toast all describe the armed state.
@@ -768,7 +838,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.settings_panel_open = false
 			scene.start_offline(true)
 			seed_preview_discards(scene)
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 			seed_preview_chat_panel(scene)
 		"21_diagnostic":
@@ -786,13 +856,17 @@ func build_screen(scene: Node, screen_name: String) -> void:
 			scene.settings_panel_open = false
 			scene.ai_assist_enabled = true
 			scene.start_offline(true)
-			seed_preview_discards(scene)
-			scene.render_game()
+			# Keep the 64-tile physical ledger while reserving a clear channel for
+			# this three-card reading image. Full-wall and occupied-meld detail
+			# openers are covered by the six-profile battle input gate.
+			seed_preview_midgame_battle(scene)
+			for player in scene.players:
+				for meld in player["melds"]:
+					player["hand"].append_array(meld)
+				player["melds"] = []
+				player["hand_count"] = player["hand"].size()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
-			# render_game() normally creates the advisor through its refresh path. Only
-			# backfill it for a fixture that did not expose the panel.
-			if scene.has_method("draw_advisor_panel") and scene.find_child("AdvisorPanel", true, false) == null:
-				scene.draw_advisor_panel(scene.root_layer, true)
 		"23_score_strip":
 			# Online HUD shows ScoreStrip; offline intentionally omits it.
 			scene.settings_panel_open = false
@@ -803,7 +877,7 @@ func build_screen(scene: Node, screen_name: String) -> void:
 				scene.players[seat]["score"] = 22000 + seat * 1100
 			scene.players[0]["score"] = 28500
 			scene.players[0]["name"] = "你"
-			scene.render_game()
+			render_preview_battle(scene)
 			scene.clear_fx_overlays()
 		_:
 			push_error("unknown screenshot screen: %s" % screen_name)
@@ -867,20 +941,21 @@ func _force_capture_visible_screens(target: Node) -> void:
 		if node is CanvasItem:
 			(node as CanvasItem).modulate = Color(1, 1, 1, 1)
 
-func stabilize_capture_round_summary(target: Node) -> void:
-	if target == null:
-		return
-	var panel := target.find_child("RoundSummaryPanel", true, false) as Control
-	if panel == null:
-		return
-	panel.visible = true
-	panel.z_index = 30
-	panel.modulate = Color(1, 1, 1, 1)
-	panel.scale = Vector2.ONE
-	panel.offset_left = 0.0
-	panel.offset_top = 0.0
-	panel.offset_right = 0.0
-	panel.offset_bottom = 0.0
+func validate_settlement_capture(target: Node) -> bool:
+	var panel := target.find_child("RoundSummaryPanel", true, false) as TextureRect
+	var shield := target.find_child("RoundSummaryModalInputShield", true, false) as Control
+	var actions := target.find_child("RoundSummaryActionRow", true, false) as Control
+	if panel == null or shield == null or actions == null:
+		return false
+	if not panel.is_visible_in_tree() or effective_canvas_alpha(panel) < 0.99 or panel.self_modulate != Color.WHITE:
+		return false
+	if effective_canvas_z(shield) >= effective_canvas_z(panel) or effective_canvas_z(actions) <= effective_canvas_z(panel):
+		return false
+	var marker := target.find_child("LastDiscardFocusMarker", true, false) as Control
+	if marker != null and effective_canvas_z(marker) >= effective_canvas_z(shield):
+		return false
+	print("settlement capture preserves runtime stacking: shield=%d paper=%d actions=%d marker=%d" % [effective_canvas_z(shield), effective_canvas_z(panel), effective_canvas_z(actions), effective_canvas_z(marker) if marker != null else -1])
+	return true
 
 
 func settle() -> void:
@@ -1087,10 +1162,10 @@ func seed_preview_online_lobby_connected(scene: Node) -> void:
 			"甲加入房间",
 			"乙准备就绪",
 			"丙加入房间",
-			"房间同步完成，等待房主开始",
+			"房间同步完成",
 		],
 	}
-	scene.online_feedback = "房间同步完成，等待房主开始。"
+	scene.online_feedback = "房间同步完成。"
 	scene.online_waiting_for_server = false
 
 func seed_preview_online_lobby_disconnect_recovery(scene: Node) -> void:
@@ -1111,22 +1186,29 @@ func seed_preview_round_summary(scene: Node) -> void:
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 0
-	scene.round_summary = "东家自摸九万，8番高番 16分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：南家包赔东家。全场结束。"
+	scene.round_summary = "东家自摸九万，8番封顶 25600分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：南家包赔东家。"
 	scene.last_win_score = {
 		"winner": 0,
 		"fan": 8,
-		"points": 16,
+		"points": 25600,
 		"reasons": ["清一色", "碰碰胡", "门清", "一条龙", "杠上开花", "海底捞月", "自摸", "花牌加番"],
 		"win_tile": "9W",
 		"self_draw": true,
-		"limit_name": "高番",
+		"limit_name": "封顶",
 	}
+	seed_preview_settlement_accounts(scene)
 	for seat in range(4):
-		scene.players[seat]["score"] = 24000 + (3 - seat) * 1200
 		scene.players[seat]["flowers"] = 2 if seat % 2 == 0 else 1
-	scene.players[0]["score"] = 27600
 	scene.offline_package_liability = {0: 1}
 	scene.add_log("预览：本局结算面板。")
+
+func seed_preview_settlement_accounts(scene: Node) -> void:
+	# Seat 1 pays all three shares for this package-liability sample.
+	var deltas: Array[int] = [76800, -76800, 0, 0]
+	scene.last_score_deltas = deltas
+	for seat in range(4):
+		scene.players[seat]["score"] = 25000 + deltas[seat]
+	scene.refresh_score_delta_cache()
 
 func seed_preview_danger_discard(scene: Node) -> void:
 	scene.ai_assist_enabled = true
@@ -1175,20 +1257,19 @@ func seed_preview_win_detail(scene: Node) -> void:
 	scene.offline_last_winner = 0
 	scene.offline_dealer_repeat = false
 	scene.dealer_seat = 1
-	scene.round_summary = "你自摸九万，8番高番 16分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：青竹道人包赔你。全场结束。"
+	scene.round_summary = "你自摸九万，8番封顶 25600分。清一色、碰碰胡、门清、一条龙、杠上开花、海底捞月、自摸、花牌加番。庄家下庄。包三搭：青竹道人包赔你。"
 	scene.last_win_score = {
 		"winner": 0,
 		"fan": 8,
-		"points": 16,
+		"points": 25600,
 		"reasons": ["清一色", "碰碰胡", "门清", "一条龙", "杠上开花", "海底捞月", "自摸", "花牌加番"],
 		"win_tile": "9W",
 		"self_draw": true,
-		"limit_name": "高番",
+		"limit_name": "封顶",
 	}
+	seed_preview_settlement_accounts(scene)
 	for seat in range(4):
-		scene.players[seat]["score"] = 22000 + seat * 900
 		scene.players[seat]["flowers"] = 1 + (seat % 2)
-	scene.players[0]["score"] = 31200
 	scene.players[0]["name"] = "你"
 	scene.offline_package_liability = {0: 1}
 	scene.add_log("预览：胡牌详情结算。")
@@ -1295,7 +1376,7 @@ func seed_preview_online_game(scene: Node, phase: String) -> void:
 	scene.table_logs.clear()
 	scene.table_logs.append("北海若打出三万，等待响应")
 	scene.table_logs.append("在线房间 CAPTURE7 已同步")
-	scene.render_game()
+	render_preview_battle(scene)
 	scene.clear_fx_overlays()
 
 func seed_preview_online_game_chat(scene: Node) -> void:
@@ -1306,7 +1387,7 @@ func seed_preview_online_game_disconnect(scene: Node) -> void:
 	scene.online_feedback = "连接已断开，请重新连接。"
 	scene.online_waiting_for_server = false
 	scene.online_retry_available = true
-	scene.render_game()
+	render_preview_battle(scene)
 	scene.clear_fx_overlays()
 
 

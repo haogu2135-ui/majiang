@@ -11,8 +11,7 @@ if [ -z "${GODOT_BIN:-}" ]; then
 	fi
 fi
 EXPECTED_GODOT_VERSION_PREFIX="${EXPECTED_GODOT_VERSION_PREFIX:-4.6.3}"
-REPORT="$ROOT_DIR/build/qa/ui_regression_verification_report.md"
-LOG_DIR="$ROOT_DIR/build/qa/logs"
+REPORT="${YUNZHUO_QA_REPORT:-$ROOT_DIR/build/qa/ui_regression_verification_report.md}"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %z')"
 REVISION="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
 git_state_fingerprint() {
@@ -24,6 +23,7 @@ git_state_fingerprint() {
 WORKTREE_DIFF_FINGERPRINT="$(git_state_fingerprint)"
 RUNTIME_SOURCE_DIFF_FINGERPRINT="$(git_state_fingerprint project.godot scripts/main_base.gd scripts/main.gd scripts/main_src scripts/ui)"
 QA_BATCH_ID="$(date -u '+%Y%m%dT%H%M%SZ')-${REVISION}-${RUNTIME_SOURCE_DIFF_FINGERPRINT:0:12}"
+LOG_DIR="${YUNZHUO_QA_LOG_DIR:-$ROOT_DIR/build/qa/logs/$QA_BATCH_ID}"
 WORKTREE_STATE="clean"
 RUNTIME_SOURCE_STATE="clean"
 if [ -n "$(git -C "$ROOT_DIR" status --porcelain 2>/dev/null)" ]; then
@@ -149,6 +149,72 @@ capture_accessibility_profiles_for_size() {
 		--size="$screen_size"
 }
 
+capture_guofeng_home_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_home_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_home_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_shop_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_shop_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_shop_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_battle_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_battle_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_battle_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_action_seat_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_action_seats_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_action_seats_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_hand_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_hand_tray_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_hand_tray_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_settlement_profiles() {
+	local screen_size
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_settlement_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_settlement_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_secondary_profiles() {
+	local screen_size
+	export YUNZHUO_GUOFENG_SECONDARY_CAPTURE_DIR="${YUNZHUO_GUOFENG_SECONDARY_CAPTURE_DIR:-res://build/qa/guofeng_secondary}"
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_secondary_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_secondary_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
+capture_guofeng_auxiliary_profiles() {
+	local screen_size
+	export YUNZHUO_GUOFENG_AUXILIARY_CAPTURE_DIR="${YUNZHUO_GUOFENG_AUXILIARY_CAPTURE_DIR:-res://build/qa/guofeng_auxiliary}"
+	for screen_size in 960x540 1280x720 1920x1080; do
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_auxiliary_smoke_test.gd -- "$screen_size" || return 1
+		run_low_resource_xvfb_godot "$screen_size" --path "$ROOT_DIR" -s scripts/ui_guofeng_auxiliary_smoke_test.gd -- "$screen_size" large_contrast || return 1
+	done
+}
+
 run_check() {
 	local name="$1"
 	local log_name="$2"
@@ -156,7 +222,9 @@ run_check() {
 	local log_path="$LOG_DIR/$log_name"
 
 	echo "==> $name"
-	if (cd "$ROOT_DIR" && "$@") >"$log_path" 2>&1; then
+	if (cd "$ROOT_DIR" &&
+		printf '=== QA BATCH: %s ===\n=== RUNTIME SOURCE FINGERPRINT: %s ===\n' "$QA_BATCH_ID" "$RUNTIME_SOURCE_DIFF_FINGERPRINT" &&
+		"$@") >"$log_path" 2>&1; then
 		echo "PASS: $name"
 		ROWS+=("| $name | PASS | \`$log_path\` |")
 		PASS=$((PASS + 1))
@@ -165,6 +233,12 @@ run_check() {
 		echo "FAIL: $name (exit $exit_code)"
 		ROWS+=("| $name | FAIL | \`$log_path\` |")
 		FAIL=$((FAIL + 1))
+		case "$log_name" in
+			assemble_check.log|assemble_verify.log)
+				echo "Stopping QA: generated main.gd is not verified; evidence: $log_path" >&2
+				exit "$exit_code"
+				;;
+		esac
 	fi
 }
 
@@ -227,7 +301,8 @@ run_check "Python QA tools compile" "py_compile.log" \
 	python3 -m py_compile \
 	tools/assemble_main.py \
 	scripts/ui_screenshot_manifest_check.py \
-	scripts/ui_accessibility_manifest_check.py
+	scripts/ui_accessibility_manifest_check.py \
+	tools/verify_reading_capture_manifests.py
 
 if [ -f "$ROOT_DIR/tools/generate_grok_image.py" ]; then
 	run_check "Optional Grok image tool compile" "generate_grok_image_py_compile.log" \
@@ -257,6 +332,53 @@ run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 
 run_check "UI hover pressed focus and connected-lobby smoke" "ui_interaction_smoke.log" \
 	run_low_resource_xvfb_godot 960x540 --path "$ROOT_DIR" -s scripts/ui_interaction_smoke_test.gd
+
+run_check "Lobby feedback and live start-gate consistency" "ui_lobby_feedback_smoke.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_lobby_feedback_smoke_test.gd
+
+run_check "Live battle HUD lane smoke" "ui_hud_live_smoke.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_hud_live_smoke_test.gd
+
+run_check "Real TCP framing and chat-table action ownership" "online_protocol_smoke.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/online_protocol_smoke_test.gd
+
+run_check "Offline native input and deferred-discard lifecycle" "ui_offline_input_lifecycle_smoke.log" \
+	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_offline_input_lifecycle_smoke_test.gd
+
+export YUNZHUO_CAPTURE_BATCH_ID="$QA_BATCH_ID"
+export YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT="$RUNTIME_SOURCE_DIFF_FINGERPRINT"
+run_check "Guofeng home and settings six-profile native-input evidence" "ui_guofeng_home.log" \
+	capture_guofeng_home_profiles
+
+run_check "Guofeng shop six-profile purchase and scroll evidence" "ui_guofeng_shop.log" \
+	capture_guofeng_shop_profiles
+run_check "Guofeng battle six-profile native facts and response evidence" "ui_guofeng_battle.log" \
+	capture_guofeng_battle_profiles
+run_check "Guofeng action and seats six-profile native chi input and reading evidence" "ui_guofeng_action_seats.log" \
+	capture_guofeng_action_seat_profiles
+run_check "Guofeng hand tray six-profile native reading and tutorial evidence" "ui_guofeng_hand_tray.log" \
+	capture_guofeng_hand_profiles
+run_check "Guofeng settlement six-profile exact accounts and native input evidence" "ui_guofeng_settlement.log" \
+	capture_guofeng_settlement_profiles
+run_check "Guofeng secondary pages six-profile reading and native input evidence" "ui_guofeng_secondary.log" \
+	capture_guofeng_secondary_profiles
+run_check "Guofeng auxiliary six-profile reading and native input evidence" "ui_guofeng_auxiliary.log" \
+	capture_guofeng_auxiliary_profiles
+for reading_size in 960x540 1280x720 1920x1080; do
+	run_check "Rules scroll input and lobby reading evidence $reading_size" "ui_reading_evidence_${reading_size}.log" \
+		run_low_resource_xvfb_godot "$reading_size" --path "$ROOT_DIR" -s scripts/ui_reading_evidence_smoke_test.gd -- "$reading_size"
+	run_check "Large-text rules and lobby reading evidence $reading_size" "ui_reading_evidence_${reading_size}_large_contrast.log" \
+		run_low_resource_xvfb_godot "$reading_size" --path "$ROOT_DIR" -s scripts/ui_reading_evidence_smoke_test.gd -- "$reading_size" large_contrast
+	run_check "Battle ledger advisor and chat reading evidence $reading_size" "ui_battle_reading_${reading_size}.log" \
+		run_low_resource_xvfb_godot "$reading_size" --path "$ROOT_DIR" -s scripts/ui_battle_reading_evidence_smoke_test.gd -- "$reading_size"
+	run_check "Large-text battle ledger advisor and chat reading evidence $reading_size" "ui_battle_reading_${reading_size}_large_contrast.log" \
+		run_low_resource_xvfb_godot "$reading_size" --path "$ROOT_DIR" -s scripts/ui_battle_reading_evidence_smoke_test.gd -- "$reading_size" large_contrast
+done
+
+for input_size in 960x540 1280x720 1920x1080; do
+	run_check "UI focus modal and destructive-action safety $input_size" "ui_input_safety_${input_size}.log" \
+		run_low_resource_xvfb_godot "$input_size" --path "$ROOT_DIR" -s scripts/ui_input_safety_smoke_test.gd -- "$input_size"
+done
 
 run_check "Accessibility profiles and focus smoke 1280x720" "ui_accessibility_1280x720.log" \
 	capture_accessibility_profiles_for_size 1280x720
@@ -317,8 +439,35 @@ run_check "Screenshot manifest 1920x1080" "manifest_1920x1080.log" \
 
 run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	check_no_runtime_leaks \
+	"$LOG_DIR/ui_guofeng_home.log" \
+	"$LOG_DIR/ui_guofeng_shop.log" \
+	"$LOG_DIR/ui_guofeng_battle.log" \
+	"$LOG_DIR/ui_guofeng_action_seats.log" \
+	"$LOG_DIR/ui_guofeng_hand_tray.log" \
+	"$LOG_DIR/ui_guofeng_settlement.log" \
+	"$LOG_DIR/ui_guofeng_secondary.log" \
+	"$LOG_DIR/ui_guofeng_auxiliary.log" \
+	"$LOG_DIR/online_protocol_smoke.log" \
+	"$LOG_DIR/ui_offline_input_lifecycle_smoke.log" \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
+	"$LOG_DIR/ui_lobby_feedback_smoke.log" \
+	"$LOG_DIR/ui_hud_live_smoke.log" \
+	"$LOG_DIR/ui_reading_evidence_960x540.log" \
+	"$LOG_DIR/ui_reading_evidence_1280x720.log" \
+	"$LOG_DIR/ui_reading_evidence_1920x1080.log" \
+	"$LOG_DIR/ui_reading_evidence_960x540_large_contrast.log" \
+	"$LOG_DIR/ui_reading_evidence_1280x720_large_contrast.log" \
+	"$LOG_DIR/ui_reading_evidence_1920x1080_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_960x540.log" \
+	"$LOG_DIR/ui_battle_reading_1280x720.log" \
+	"$LOG_DIR/ui_battle_reading_1920x1080.log" \
+	"$LOG_DIR/ui_battle_reading_960x540_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_1280x720_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_1920x1080_large_contrast.log" \
+	"$LOG_DIR/ui_input_safety_960x540.log" \
+	"$LOG_DIR/ui_input_safety_1280x720.log" \
+	"$LOG_DIR/ui_input_safety_1920x1080.log" \
 	"$LOG_DIR/ui_accessibility_1280x720.log" \
 	"$LOG_DIR/ui_accessibility_960x540.log" \
 	"$LOG_DIR/ui_accessibility_1920x1080.log" \
@@ -330,8 +479,35 @@ run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 
 run_check "Runtime error log scan" "runtime_error_scan.log" \
 	check_no_runtime_errors \
+	"$LOG_DIR/ui_guofeng_home.log" \
+	"$LOG_DIR/ui_guofeng_shop.log" \
+	"$LOG_DIR/ui_guofeng_battle.log" \
+	"$LOG_DIR/ui_guofeng_action_seats.log" \
+	"$LOG_DIR/ui_guofeng_hand_tray.log" \
+	"$LOG_DIR/ui_guofeng_settlement.log" \
+	"$LOG_DIR/ui_guofeng_secondary.log" \
+	"$LOG_DIR/ui_guofeng_auxiliary.log" \
+	"$LOG_DIR/online_protocol_smoke.log" \
+	"$LOG_DIR/ui_offline_input_lifecycle_smoke.log" \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
+	"$LOG_DIR/ui_lobby_feedback_smoke.log" \
+	"$LOG_DIR/ui_hud_live_smoke.log" \
+	"$LOG_DIR/ui_reading_evidence_960x540.log" \
+	"$LOG_DIR/ui_reading_evidence_1280x720.log" \
+	"$LOG_DIR/ui_reading_evidence_1920x1080.log" \
+	"$LOG_DIR/ui_reading_evidence_960x540_large_contrast.log" \
+	"$LOG_DIR/ui_reading_evidence_1280x720_large_contrast.log" \
+	"$LOG_DIR/ui_reading_evidence_1920x1080_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_960x540.log" \
+	"$LOG_DIR/ui_battle_reading_1280x720.log" \
+	"$LOG_DIR/ui_battle_reading_1920x1080.log" \
+	"$LOG_DIR/ui_battle_reading_960x540_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_1280x720_large_contrast.log" \
+	"$LOG_DIR/ui_battle_reading_1920x1080_large_contrast.log" \
+	"$LOG_DIR/ui_input_safety_960x540.log" \
+	"$LOG_DIR/ui_input_safety_1280x720.log" \
+	"$LOG_DIR/ui_input_safety_1920x1080.log" \
 	"$LOG_DIR/ui_accessibility_1280x720.log" \
 	"$LOG_DIR/ui_accessibility_960x540.log" \
 	"$LOG_DIR/ui_accessibility_1920x1080.log" \
@@ -384,6 +560,10 @@ fi
 	echo "| 联机大厅未连接状态重复 raw endpoint，主按钮语义不清 | UI layout smoke + offline smoke |"
 	echo "| 联机大厅 hover/pressed/focus 与已连接房间状态缺少证据 | Xvfb interaction smoke + 23_online_lobby_connected 三分辨率截图 |"
 	echo "| 联机对局断线后停留空游戏页、昵称丢失或错误提示不可见 | online protocol smoke + 24_online_lobby_disconnect_recovery 三分辨率截图 |"
+	echo "| 聊天覆盖未确认弃牌／响应／重试，聊天回执误确认牌桌 | real TCP chat-table ownership + nonce/legacy/out-of-order/session cleanup assertions |"
+	echo "| 每 poll 帧预算后的完整 TCP 缓冲消息无新字节时停滞 | real TCP single-write 11-frame drain + full 1500-frame burst at unchanged 8-frame budget |"
+	echo "| 单机重开／续局旧出牌回调串局、卡在 resolving 或同面牌实体错切 | native input lifecycle + real next-frame resolver ownership + exact physical serial assertions |"
+	echo "| 危险确认误换同面副本、旧确认／过牌回答新窗口或续局动作栏复用旧归属 | exact-copy danger consent + native claim lifecycle + same-window redraw and expiry + retained action-bar ownership |"
 	echo "| 每日签到七日预告贴底、层级弱 | UI layout smoke + screenshots |"
 	echo "| 加载页 GPT 背景上叠 native fallback 矩形 | UI layout smoke + screenshots |"
 	echo "| 生成 chrome 伪文字、伪控件、强残影 | UI layout smoke alpha 上限 + screenshots |"

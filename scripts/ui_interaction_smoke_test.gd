@@ -323,6 +323,15 @@ func capture_smoke_state(scene: Node) -> Dictionary:
 		"players", "wall", "current_seat", "dealer_seat", "offline_hand_number", "offline_last_winner", "offline_dealer_repeat", "last_discard", "last_discard_seat", "table_logs", "offline_phase", "offline_turn_needs_draw", "offline_pending_claim", "offline_pending_claim_deadline_msec", "offline_claim_counts", "offline_package_liability", "offline_passed_win_tiles", "offline_claim_discard_bans", "offline_concealed_gang_tiles", "offline_last_draw", "offline_self_draw_ready", "offline_ai_active", "offline_ai_run_queued", "offline_all_bot_mode", "offline_sim_quiet", "offline_skip_ai_profile_reshuffle", "offline_active_rule_variant", "round_summary", "round_result_kind", "last_score_deltas", "last_win_score", "current_human_advice", "current_seat_threat_reports", "advisor_detail_open", "table_log_archive_open", "table_log_chat_restore_pending", "table_log_chat_draft", "pending_danger_discard_index", "pending_danger_discard_tile", "pending_danger_discard_report", "hand_keyboard_selection",
 		"selected_room", "online_connection_host", "online_player_name", "online_room", "online_game", "online_log_seen_count", "online_log_total_count", "online_feedback", "online_waiting_for_server", "online_last_sent_action", "online_last_sent_type", "online_last_sent_msec", "online_last_sent_payload", "online_slow_notice_shown", "online_retry_available", "online_action_sequence", "online_session_id", "online_room_revision", "online_game_revision", "online_resume_context", "online_resume_pending", "online_resume_join_sent", "online_seen_message_ids", "online_seen_voice_sequences", "online_last_chat_sent_msec", "online_last_receive_msec", "online_last_heartbeat_msec", "online_reconnect_attempts", "online_next_reconnect_msec", "online_last_malformed_notice_msec", "online_messages_received", "online_messages_rejected", "online_last_snapshot_fingerprint", "online_last_room_snapshot_fingerprint", "online_players_by_seat", "online_player_index_token", "online_announced_discard_key", "online_pending_local_discard_identity", "sent_hello", "chat_messages", "chat_panel_open", "table_log_chat_restore_pending", "table_log_chat_draft", "safe_area_test_margins_override"
 	]
+	field_names.append("chat_panel_redraw_state")
+	field_names.append("online_pending_chat_requests")
+	field_names.append("offline_ai_run_generation")
+	field_names.append("offline_ai_queued_callback")
+	field_names.append("offline_human_discard_sequence")
+	field_names.append("offline_human_discard_callback")
+	field_names.append("offline_claim_sequence")
+	field_names.append("offline_danger_confirmation_sequence")
+	field_names.append("offline_progress_snapshot_validation_state")
 	var fields: Dictionary = {}
 	for field_name in field_names:
 		fields[field_name] = duplicate_smoke_value(scene.get(field_name))
@@ -814,6 +823,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 		await activate_button(music_button, "mouse")
 		await settle(0.05)
 	check(scene.music_enabled != music_before and scene.settings_panel_open, "music selector changes state while retaining the settings modal")
+	await activate_button(scene.find_child("SettingsSectionNavButton_体验", true, false) as Button, "mouse")
 	var accessibility_button := scene.find_child("SettingRowButton_阅读辅助", true, false) as Button
 	var accessibility_before: String = str(scene.accessibility_profile_label())
 	var settings_large_scroll_before_access := scene.find_child("SettingsLargeTextScroll", true, false) as ScrollContainer
@@ -837,6 +847,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 		if settings_scrollbar != null:
 			settings_large_scroll.scroll_vertical = int(round(maxf(0.0, settings_scrollbar.max_value - settings_scrollbar.page)))
 			await settle(0.04)
+	await activate_button(scene.find_child("SettingsSectionNavButton_系统", true, false) as Button, "key")
 	var telemetry_entry := scene.find_child("SettingRowButton_隐私诊断", true, false) as Button
 	if telemetry_entry != null:
 		await activate_button(telemetry_entry, "mouse")
@@ -1191,7 +1202,7 @@ func run() -> void:
 		return
 	# Disable desktop visual effects and audio backends that are unrelated to
 	# pointer, focus, and state coverage in this low-resource virtual display.
-	# Press-feedback nodes are still created, so input contracts remain observable.
+	# Native button signals and draw state remain observable without desktop FX.
 	OS.set_environment("YUNZHUO_UI_CAPTURE", "1")
 
 	var viewport_size := Vector2i(960, 540)
@@ -1225,7 +1236,7 @@ func run() -> void:
 	var disconnected_room_art := scene.find_child("OnlineLobbyRoomArt", true, false) as Control
 	var disconnected_roster := scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
 	var disconnected_logs := scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
-	var disconnected_empty_state := scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Control
+	var disconnected_empty_state := scene.find_child("OnlineLobbyEmptyStateReadabilityBackplate", true, false) as Control
 	check(not scene.online_waiting_for_server and scene.online_room.is_empty() and disconnected_room_art != null and not disconnected_room_art.visible and disconnected_roster != null and not disconnected_roster.visible and disconnected_logs != null and not disconnected_logs.visible and disconnected_empty_state != null and disconnected_empty_state.visible, "reopened disconnected lobby clears the stale snapshot and shows only its empty state")
 
 	print("--- A) pointer hover and press drive the real lobby button ---")
@@ -1236,6 +1247,7 @@ func run() -> void:
 		var button_down_probe := {"down": 0}
 		connect_button.button_down.connect(func() -> void:
 			button_down_probe["down"] = int(button_down_probe.get("down", 0)) + 1
+			button_down_probe["native_pressed"] = connect_button.get_draw_mode() in [BaseButton.DRAW_PRESSED, BaseButton.DRAW_HOVER_PRESSED]
 		)
 		connect_button.mouse_entered.connect(func() -> void:
 			hover_probe["entered"] = true
@@ -1248,9 +1260,13 @@ func run() -> void:
 		check(not connect_button.is_hovered() and rest_scale.distance_to(Vector2.ONE) <= 0.015, "mouse exit reaches the stable resting transform")
 		await move_pointer(connect_button.get_global_rect().get_center())
 		check(connect_button.is_hovered() and bool(hover_probe.get("entered", false)), "mouse motion enters the hit target and emits the native hover signal")
+		var connect_face := connect_button.find_child("GptButtonFacePlate", true, false) as TextureRect
+		check(connect_face != null and connect_face.texture == scene.optional_gpt_illustration_texture("menu_ink_primary"), "ready connect action shows its authored primary face before activation")
 		await send_left_button(connect_button.get_global_rect().get_center(), true)
 		check(int(button_down_probe.get("down", 0)) == 1, "left-button down reaches the native button-down signal")
-		check(connect_button.find_child("LobbyActionPressFeedback_连接", true, false) != null, "button-down signal produces authored press feedback")
+		var immediate_connect := connect_button.disabled and connect_button.get_draw_mode() == BaseButton.DRAW_DISABLED and str(connect_button.get_meta("lobby_action_state", "")) in ["connecting", "connected"]
+		var expected_connect_face := "button_face_jiangnan_gpt" if immediate_connect else "menu_ink_primary"
+		check((bool(button_down_probe.get("native_pressed", false)) or immediate_connect) and connect_face != null and connect_face.texture == scene.optional_gpt_illustration_texture(expected_connect_face), "native button-down shows the pressed face or the immediately connected disabled face")
 		await send_left_button(connect_button.get_global_rect().get_center(), false)
 		check(not connect_button.button_pressed, "left-button release clears the native pressed state")
 		await move_pointer(Vector2(4.0, 4.0))
@@ -1344,8 +1360,17 @@ func run() -> void:
 	scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
 	scene.selected_room = "ROOM7"
 	scene.online_room = connected_room_fixture()
-	scene.online_feedback = "房间同步完成，等待房主开始。"
+	scene.online_feedback = "房间同步完成。"
 	scene.online_waiting_for_server = false
+	var dynamic_connect := scene.find_child("OnlineLobbyConnectButton", true, false) as Button
+	scene.refresh_online_lobby_action_states()
+	check(dynamic_connect != null and dynamic_connect.disabled and dynamic_connect.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt", "same-page connection refresh gives the disabled connect action its authored paper face")
+	scene.tcp = StreamPeerTCP.new()
+	scene.tcp_status = StreamPeerTCP.STATUS_NONE
+	scene.refresh_online_lobby_action_states()
+	check(dynamic_connect != null and not dynamic_connect.disabled and dynamic_connect.get_meta("guofeng_button_face_key", "") == "menu_ink_primary", "same-page disconnection restores the active connect action's authored ink face")
+	scene.tcp = transport
+	scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
 	scene._show_online_lobby_impl()
 	await settle(0.20)
 	check(scene.lobby_connection_state_text() == "已连接", "connected fixture uses the production transport-status contract")
@@ -1355,10 +1380,10 @@ func run() -> void:
 	var room_art = scene.find_child("OnlineLobbyRoomArt", true, false) as Control
 	var roster = scene.find_child("OnlineLobbyRosterPanel", true, false) as Control
 	var log_list = scene.find_child("OnlineLobbyLogListPanel", true, false) as Control
-	var offline_state = scene.find_child("OnlineLobbyRoomOfflineState", true, false) as Control
+	var offline_state = scene.find_child("OnlineLobbyEmptyStateReadabilityBackplate", true, false) as Control
 	check(connection_label != null and connection_label.text == "已连接", "connection badge reports the connected state")
 	check(start_button != null and start_button.disabled and start_button.text == "等待开局" and start_button.tooltip_text.contains("开局"), "connected lobby gates the primary start action until the server grants permission")
-	check(start_button != null and return_button != null and start_button.size.x > return_button.size.x + 36.0 and return_button.modulate.a <= 0.85, "connected lobby gives start a unique primary hierarchy")
+	check(start_button != null and return_button != null and start_button.size.x > return_button.size.x + 36.0 and start_button.get_theme_color("font_disabled_color") != start_button.get_theme_color("font_color") and not return_button.disabled and return_button.modulate == Color.WHITE, "connected lobby distinguishes the gated start action and keeps return readable and available")
 	check(room_art != null and room_art.visible and roster != null and roster.visible and log_list != null and log_list.visible, "connected lobby reveals room summary, roster, and logs")
 	check(offline_state != null and not offline_state.visible, "connected lobby hides the disconnected empty state")
 	var room_badge = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
@@ -1428,15 +1453,16 @@ func run() -> void:
 	var live_names: Array[String] = []
 	for slot in range(4):
 		var live_name = scene.find_child("OnlineLobbyRosterName_%d" % slot, true, false) as Label
-		var live_seat = scene.find_child("OnlineLobbyPlayerSeat_%d" % slot, true, false) as CanvasItem
+		var live_seat = scene.find_child("OnlineLobbyRosterRow_%d" % slot, true, false) as Control
+		var live_detail = scene.find_child("OnlineLobbyRosterTouchTarget_%d" % slot, true, false) as Button
 		if live_name != null:
 			live_names.append(live_name.text)
-		check(live_seat != null and live_seat.modulate.a >= 0.99, "live roomState activates seat %d" % slot)
+		check(live_seat != null and live_seat.get_meta("roster_slot_state", "") == "occupied" and live_detail != null and not live_detail.disabled and live_detail.mouse_filter == Control.MOUSE_FILTER_STOP, "live roomState activates seat %d and its native detail action" % slot)
 	check(live_names == ["甲新", "乙新", "丙新", "丁"], "live roster follows explicit seats and nickname aliases")
 	logs = scene.find_child("OnlineLobbyLogListText", true, false) as RichTextLabel
 	var log_count_label = scene.find_child("OnlineLobbyLogCountLabel", true, false) as Label
 	check(logs != null and logs.text.contains("实时日志01") and logs.text.contains("实时日志14"), "all fourteen retained room logs remain accessible")
-	check(log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 14 and str(log_count_label.text).begins_with("存14 · 总14 · 未读"), "live log count stays synchronized with retained, total, and unread history")
+	check(log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 14 and str(log_count_label.text).begins_with("14/14\n未读") and log_count_label.tooltip_text.contains("缓存14条；总计14条；未读"), "live log count stays synchronized with retained, total, and unread history")
 	var log_scroll = scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
 	var review_scroll := 0
 	if log_scroll != null:
@@ -1464,7 +1490,7 @@ func run() -> void:
 	scene.handle_online_message(JSON.stringify({"type": "log", "text": "实时日志15"}))
 	await settle(0.05)
 	check((scene.online_room.get("logs", []) as Array).size() == scene.ONLINE_LOG_HISTORY_LIMIT, "appended logs stay within the fourteen-entry history limit")
-	check(logs != null and not logs.text.contains("实时日志01") and logs.text.contains("实时日志15") and log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 15 and str(log_count_label.text).begins_with("存14 · 总15 · 未读"), "log append evicts the oldest line and refreshes retained, total, and unread state")
+	check(logs != null and not logs.text.contains("实时日志01") and logs.text.contains("实时日志15") and log_count_label != null and int(log_count_label.get_meta("retained_count", -1)) == 14 and int(log_count_label.get_meta("total_count", -1)) == 15 and str(log_count_label.text).begins_with("14/15\n未读") and log_count_label.tooltip_text.contains("缓存14条；总计15条；未读"), "log append evicts the oldest line and refreshes retained, total, and unread state")
 	if log_scroll != null:
 		check(log_scroll.scroll_vertical == review_scroll, "new logs preserve the scroll offset while the user reviews history")
 		var before_follow_bar := log_scroll.get_v_scroll_bar()
@@ -1510,7 +1536,11 @@ func run() -> void:
 		await send_screen_touch(roster_center, false)
 		await settle(0.05)
 		check(int(roster_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the roster detail target")
-		check(has_toast_text(scene, "玩家 1：%s" % long_name), "single-finger roster press reveals the complete nickname")
+		var player_detail := scene.toast_detail_panel.find_child("ToastDetailText", true, false) as RichTextLabel if scene.toast_detail_panel != null else null
+		check(player_detail != null and player_detail.text == "玩家 1：%s" % long_name, "single-finger roster press reveals the complete nickname")
+		await send_key(KEY_ESCAPE, 0)
+		await settle(0.05)
+		check(scene.toast_detail_panel == null and roster_touch_target.has_focus(), "Esc closes player details and restores their original touch target")
 	var room_badge_touch = scene.find_child("OnlineLobbyRoomBadge", true, false) as Control
 	if room_badge_touch != null:
 		var room_touch_target := scene.find_child("OnlineLobbyRoomBadgeTouchTarget", true, false) as Button
@@ -1529,7 +1559,10 @@ func run() -> void:
 		await send_screen_touch(room_center, false)
 		await settle(0.05)
 		check(int(room_touch_probe.get("pressed", 0)) == 1, "screen-touch release activates the room detail target")
-		check(has_toast_text(scene, "房间号：%s" % long_room), "single-finger room-badge press reveals the complete room code")
+		var room_detail := scene.toast_detail_panel.find_child("ToastDetailText", true, false) as RichTextLabel if scene.toast_detail_panel != null else null
+		check(room_detail != null and room_detail.text == "房间号：%s" % long_room, "single-finger room-badge press reveals the complete room code")
+		await send_key(KEY_ESCAPE, 0)
+		await settle(0.05)
 
 	print("--- F) diagnostic report scroll and modal dismiss paths ---")
 	var diagnostic_lines := diagnostic_interaction_lines()
@@ -1945,7 +1978,7 @@ func run() -> void:
 		check(achievements_page_value > 0.0, "PageDown advances the achievements catalogue")
 		await send_key(KEY_END, 0)
 		var achievements_end_value := float(achievements_interaction_bar.value)
-		check(achievements_end_value >= achievements_interaction_range - 1.0 and achievements_interaction_status.text.contains("余0") and achievements_interaction_status.text.contains("已完成"), "End reaches the catalogue tail and reports all achievements viewed")
+		check(achievements_end_value >= achievements_interaction_range - 1.0 and achievements_interaction_status.text.contains("余0") and achievements_interaction_status.text.contains("已到末尾"), "End reaches the catalogue tail and reports all achievements viewed")
 	await send_key(KEY_ESCAPE, 0)
 	await settle(0.20)
 	var restored_achievements_entry := scene.find_child("MenuQuickAchievementsButton", true, false) as Button
@@ -2243,6 +2276,10 @@ func run() -> void:
 	check(replay_archive_rows != null and replay_archive_row_nodes.size() == 8 and replay_archive_row_a != null and replay_archive_buttons.size() == 4 and replay_archive_favorite != null and replay_archive_open != null and replay_archive_copy != null and replay_archive_delete != null, "replay archive renders eight rows with four real action targets for the fixture row (entries=%d id=%s rows=%d)" % [scene.replay_archive.size(), replay_archive_id_a, replay_archive_row_nodes.size()])
 	var replay_archive_scroll := scene.find_child("ReplayArchiveScroll", true, false) as ScrollContainer
 	if replay_archive_scroll != null:
+		if scene.ui_is_compact() and replay_archive_row_nodes.size() >= 2:
+			var first_row := replay_archive_row_nodes[0] as Control
+			var second_row := replay_archive_row_nodes[1] as Control
+			check(replay_archive_scroll.get_global_rect().grow(1.0).encloses(first_row.get_global_rect()) and second_row.get_global_rect().position.y >= replay_archive_scroll.get_global_rect().end.y - 0.5, "compact archive starts with a complete row and no clipped next-row text")
 		var replay_archive_scrollbar := replay_archive_scroll.get_v_scroll_bar()
 		check(replay_archive_scrollbar != null and replay_archive_scrollbar.max_value > replay_archive_scrollbar.page, "eight archive rows create a native vertical range")
 		if replay_archive_scrollbar != null and replay_archive_scrollbar.max_value > replay_archive_scrollbar.page:
@@ -2332,6 +2369,18 @@ func run() -> void:
 		replay_archive_copy.grab_focus()
 		await send_key(KEY_ENTER, 0)
 		await settle(0.04)
+		# Favorite/open actions use the same production notification queue.
+		# Observe the copy feedback when it reaches the front, without clearing
+		# earlier user feedback or changing production dwell times.
+		var copy_feedback_deadline := Time.get_ticks_msec() + 10000
+		while Time.get_ticks_msec() < copy_feedback_deadline and (scene.toast_current == null or not has_label_text(scene.toast_current, "已复制归档回放码")):
+			await process_frame
+		if DisplayServer.clipboard_get() != scene.replay_archive_share_code(replay_archive_id_a) or scene.toast_current == null or not has_label_text(scene.toast_current, "已复制归档回放码"):
+			var copy_feedback: Array[String] = []
+			if scene.toast_current != null:
+				for toast_label in scene.toast_current.find_children("*", "Label", true, false):
+					copy_feedback.append(toast_label.text)
+			print("archive copy diagnostic: %s" % JSON.stringify({"clipboard_matches": DisplayServer.clipboard_get() == scene.replay_archive_share_code(replay_archive_id_a), "focus": str(scene.get_viewport().gui_get_focus_owner().name) if scene.get_viewport().gui_get_focus_owner() != null else "none", "feedback": copy_feedback, "pending_toasts": scene.toast_queue.size()}))
 		check(DisplayServer.clipboard_get() == scene.replay_archive_share_code(replay_archive_id_a) and scene.toast_current != null and has_label_text(scene.toast_current, "已复制归档回放码"), "keyboard activation copies the complete archive replay code and shows feedback")
 	var replay_archive_count_before_delete: int = scene.replay_archive.size()
 	if replay_archive_delete != null:

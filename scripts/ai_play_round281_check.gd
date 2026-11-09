@@ -46,8 +46,8 @@ func run() -> void:
 	check(function_281.contains("var normalized_tile := normalize_tile_code(tile)"), "added-gang risk normalizes the tile once")
 	check(function_281.contains("var tile_index_snapshot := tile_index_normalized(normalized_tile)"), "added-gang risk resolves the tile index once")
 	check(function_281.contains("normalized_tile, visible_tile_counts_state_cache_key()"), "added-gang cache keys include public visible-tile state")
-	check(function_281.contains("visible_tile_count_from_counts(normalized_tile, visible_counts, tile_index_snapshot)"), "visible risk count consumes the captured index")
-	check(function_281.contains("single_opponent_deal_in_risk_components(normalized_tile, gang_seat, seat, visible, visible_counts, eval_context, tile_index_snapshot)"), "opponent risk branches consume the normalized snapshot")
+	check(function_281.contains("visible_tile_count_from_counts(normalized_tile, known_counts, tile_index_snapshot)"), "self-known risk count consumes the captured index")
+	check(function_281.contains("single_opponent_deal_in_risk_components(normalized_tile, gang_seat, seat, visible, known_counts, eval_context, tile_index_snapshot)"), "opponent risk branches consume the normalized self-known snapshot")
 	check(not function_281.contains("visible_tile_count_from_counts(tile, visible_counts)"), "added-gang risk avoids the legacy tile lookup")
 
 	scene.players[1]["melds"] = [["5W", "5W", "5W"], ["6W", "6W", "6W"], ["7W", "7W", "7W"]]

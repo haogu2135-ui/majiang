@@ -1,0 +1,5 @@
+Create one production UI bitmap for the player information plaque of an elegant Jiangnan Chinese mahjong game. This image fills a compact, almost square rectangle on a dark green cloth table, behind player name, score and small counters drawn by the game.
+
+Straight-on orthographic view. The whole canvas is the plaque surface, edge to edge, with no exterior scene or background. Use deep pine-green ink and aged dark teal silk paper with restrained natural texture. Give it a very fine muted antique-gold inset border close to the edges and subtle Jiangnan-inspired carved or ink-wash detail only at the corners. Keep the large central area uniformly dark, quiet, and high contrast for pale text. Refined, understated, authentic Chinese visual language, compatible with a hand-painted garden and a jade-green mahjong table. Flat readable UI material with a delicate handmade finish, not a photorealistic object.
+
+No words, letters, numbers, symbols, pseudo-writing, logos, people, tiles, buttons, controls, icons, dividers across the reading area, heavy highlights, thick ornate frame, vignette, or drop shadow outside the canvas. No perspective. No mockup or multiple panels.

@@ -218,6 +218,7 @@ func connect_online() -> void:
 	}
 	online_connection_host = host
 	online_session_id += 1
+	online_pending_chat_requests.clear()
 	online_room_revision = -1
 	online_game_revision = -1
 	if is_instance_valid(online_host_edit):
@@ -260,6 +261,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	# A real transport loss owns the chat lifecycle; a transient status copy
 	# must not make clear_screen infer that the drawer should disappear.
 	chat_panel_open = false
+	chat_panel_redraw_state.clear()
 	clear_remote_voice_players()
 	table_log_chat_restore_pending = false
 	table_log_chat_draft = ""
@@ -276,6 +278,7 @@ func close_online_transport(message: String, return_to_lobby: bool = true, prese
 	tcp_status = tcp.get_status()
 	tcp_buffer.clear()
 	sent_hello = false
+	online_pending_chat_requests.clear()
 	if preserve_game_board:
 		online_room.clear()
 		online_log_seen_count = 0
@@ -350,6 +353,7 @@ func clear_online_room_snapshot(preserve_resume_draft: bool = true) -> void:
 	online_hand_identity_index.clear()
 	online_hand_identity_index_token = -1
 	online_last_chat_sent_msec = 0
+	online_pending_chat_requests.clear()
 	online_next_reconnect_msec = 0
 	online_last_snapshot_fingerprint = ""
 	online_last_room_snapshot_fingerprint = ""
@@ -750,8 +754,61 @@ func online_game_snapshot_validation_error(game: Dictionary) -> String:
 	return ""
 
 
+func online_response_request_id(data: Dictionary) -> String:
+	return str(first_present(data, ["requestId", "request_id", "actionId", "action_id"], "")).strip_edges()
+
+
+func online_response_action_type(data: Dictionary) -> String:
+	return str(first_present(data, ["actionType", "action_type", "requestType", "request_type"], "")).strip_edges()
+
+
+func online_chat_room_context() -> String:
+	var room_code := str(first_present(online_room, ONLINE_ROOM_CODE_KEYS, selected_room))
+	if mode == "online_game":
+		room_code = str(online_game.get("roomCode", room_code))
+	return bounded_online_input(room_code, ONLINE_ROOM_CODE_MAX_LENGTH)
+
+
+func set_online_chat_feedback(text: String) -> void:
+	if online_waiting_for_server or online_retry_available or not online_last_sent_payload.is_empty():
+		show_toast(text, 1500)
+	else:
+		set_online_feedback(text, false)
+
+
+func handle_online_chat_response(data: Dictionary, rejected: bool = false) -> bool:
+	var response_id := online_response_request_id(data)
+	var response_type := online_response_action_type(data)
+	if response_id != "":
+		if not online_pending_chat_requests.has(response_id):
+			return response_type == "chat"
+	elif response_type == "chat" or (response_type == "" and not online_pending_chat_requests.is_empty()):
+		if response_type == "" and (online_waiting_for_server or online_retry_available or not online_last_sent_payload.is_empty()):
+			show_toast("服务器回执缺少操作标识，继续等待牌桌确认。", 1500)
+			return true
+		if online_pending_chat_requests.size() != 1:
+			if not online_pending_chat_requests.is_empty():
+				show_toast("聊天回执缺少消息标识，暂不归属到具体消息。", 1500)
+			return true
+		response_id = str(online_pending_chat_requests.keys()[0])
+	else:
+		return false
+	var context: Dictionary = online_pending_chat_requests[response_id]
+	if int(context.get("session", -1)) != online_session_id or str(context.get("room", "")) != online_chat_room_context():
+		return true
+	if response_type != "" and response_type != "chat":
+		return true
+	online_pending_chat_requests.erase(response_id)
+	var message := online_server_message_text(data, "消息被服务器拒绝" if rejected else "消息已确认")
+	set_online_chat_feedback(("服务器拒绝：" if rejected else "服务器确认：") + message)
+	return true
+
+
 func online_response_matches_current_action(data: Dictionary) -> bool:
-	var response_id := str(first_present(data, ["requestId", "request_id", "actionId", "action_id"], "")).strip_edges()
+	var response_type := online_response_action_type(data)
+	if response_type != "" and response_type != online_last_sent_type:
+		return false
+	var response_id := online_response_request_id(data)
 	if response_id == "":
 		return true
 	var current_id := str(online_last_sent_payload.get("requestId", "")).strip_edges()
@@ -825,6 +882,8 @@ func online_action_validation_error(payload: Dictionary) -> String:
 	return ""
 
 func handle_online_ack(data: Dictionary) -> void:
+	if handle_online_chat_response(data):
+		return
 	if not online_response_matches_current_action(data):
 		return
 	var message = online_server_message_text(data, "")
@@ -835,6 +894,8 @@ func handle_online_ack(data: Dictionary) -> void:
 	online_last_sent_payload.clear()
 
 func handle_online_error(data: Dictionary) -> void:
+	if handle_online_chat_response(data, true):
+		return
 	if not online_response_matches_current_action(data):
 		return
 	var resume_join_rejected := online_resume_pending and online_resume_join_sent and online_last_sent_type == "joinRoom"
@@ -954,6 +1015,7 @@ func handle_online_message(line: String) -> void:
 		var previous_logs: Array = previous_logs_value as Array if typeof(previous_logs_value) == TYPE_ARRAY else []
 		var previous_log_total := online_log_total_count
 		if previous_room_code != "" and next_room_code != "" and previous_room_code != next_room_code:
+			online_pending_chat_requests.clear()
 			online_log_seen_count = 0
 			online_log_total_count = 0
 			online_log_initialized = false
@@ -990,6 +1052,8 @@ func handle_online_message(line: String) -> void:
 		var next_game = normalize_online_game_state(data)
 		var snapshot_error := online_game_snapshot_validation_error(next_game)
 		if str(next_game.get("phase", "")) == "unknown":
+			if str(next_game.get("roomCode", "")) != online_chat_room_context():
+				online_pending_chat_requests.clear()
 			online_game_snapshot_token += 1
 			next_game["_snapshot_token"] = online_game_snapshot_token
 			invalidate_pending_claim_action_stack(online_game_snapshot_token)
@@ -1005,6 +1069,8 @@ func handle_online_message(line: String) -> void:
 		var game_fingerprint := online_snapshot_fingerprint("gameState", next_game)
 		if game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
 			return
+		if str(next_game.get("roomCode", "")) != online_chat_room_context():
+			online_pending_chat_requests.clear()
 		online_last_snapshot_fingerprint = game_fingerprint
 		online_game_snapshot_token += 1
 		next_game["_snapshot_token"] = online_game_snapshot_token
@@ -1489,7 +1555,7 @@ func online_feedback_icon_name() -> String:
 func online_feedback_requires_recovery() -> bool:
 	if online_waiting_for_server:
 		return false
-	for marker in ["连接失败", "连接异常", "服务器拒绝", "协议", "状态无效", "失败", "拒绝"]:
+	for marker in ["连接失败", "连接异常", "断开", "服务器拒绝", "协议", "状态无效", "失败", "拒绝"]:
 		if online_feedback.find(marker) >= 0:
 			return true
 	return false
@@ -1514,16 +1580,25 @@ func online_server_message_text(data: Dictionary, fallback: String) -> String:
 	return text if text != "" else fallback
 
 func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
+	var outbound_type := str(payload.get("type", "")).strip_edges()
 	if tcp.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-		set_online_feedback("请先连接服务器。", false)
+		if outbound_type == "chat":
+			set_online_chat_feedback("请先连接服务器。")
+		else:
+			set_online_feedback("请先连接服务器。", false)
 		return false
 	var outbound: Dictionary = payload if payload_is_owned else payload.duplicate(true)
-	var outbound_type := str(outbound.get("type", "")).strip_edges()
 	if outbound_type != "" and outbound_type != "hello":
 		var validation_error := online_action_validation_error(outbound)
 		if validation_error != "":
-			set_online_feedback(validation_error, false)
+			if outbound_type == "chat":
+				set_online_chat_feedback(validation_error)
+			else:
+				set_online_feedback(validation_error, false)
 			return false
+	if outbound_type == "chat":
+		online_action_sequence += 1
+		outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
 	if not outbound.has("protocolVersion"):
 		outbound["protocolVersion"] = ONLINE_PROTOCOL_VERSION
 	if not outbound.has("clientVersion"):
@@ -1544,6 +1619,10 @@ func send_online(payload: Dictionary, payload_is_owned: bool = false) -> bool:
 	if write_error != OK:
 		close_online_transport("发送失败，请重新连接。")
 		return false
+	if outbound_type == "chat":
+		while online_pending_chat_requests.size() >= ONLINE_CHAT_PENDING_REQUEST_LIMIT:
+			online_pending_chat_requests.erase(online_pending_chat_requests.keys()[0])
+		online_pending_chat_requests[str(outbound["requestId"])] = {"session": online_session_id, "room": online_chat_room_context()}
 	return true
 
 func send_online_action(payload: Dictionary, label: String = "", payload_is_owned: bool = false) -> bool:
@@ -1560,12 +1639,15 @@ func send_online_action(payload: Dictionary, label: String = "", payload_is_owne
 	var action_type := str(payload.get("type", "")).strip_edges()
 	var validation_error := online_action_validation_error(payload)
 	if validation_error != "":
-		set_online_feedback(validation_error, false)
+		if action_type == "chat":
+			set_online_chat_feedback(validation_error)
+		else:
+			set_online_feedback(validation_error, false)
 		return false
 	if action_type == "chat":
 		var now_msec := Time.get_ticks_msec()
 		if online_last_chat_sent_msec > 0 and now_msec - online_last_chat_sent_msec < ONLINE_CHAT_COOLDOWN_MSEC:
-			set_online_feedback("消息发送过快，请稍后再试。", false)
+			set_online_chat_feedback("消息发送过快，请稍后再试。")
 			return false
 	var repeated_request := online_waiting_for_server and (
 		(action_type != "" and action_type == online_last_sent_type) or
@@ -1575,16 +1657,20 @@ func send_online_action(payload: Dictionary, label: String = "", payload_is_owne
 		set_online_feedback("正在等待上一次%s的服务器确认。" % action_label, true)
 		return false
 	var outbound: Dictionary = normalized_payload
-	online_action_sequence += 1
-	outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
+	if action_type != "chat":
+		online_action_sequence += 1
+		outbound["requestId"] = "%d-%d" % [online_session_id, online_action_sequence]
 	if send_online(outbound, true):
+		if action_type == "chat":
+			online_last_chat_sent_msec = Time.get_ticks_msec()
+			if not online_waiting_for_server and not online_retry_available and online_last_sent_payload.is_empty():
+				set_online_feedback("消息已发送。", false)
+			return true
 		play_outgoing_online_action_audio(outbound)
 		online_last_sent_action = action_label
 		online_last_sent_type = action_type
 		online_last_sent_msec = Time.get_ticks_msec()
 		online_last_sent_payload = outbound
-		if action_type == "chat":
-			online_last_chat_sent_msec = Time.get_ticks_msec()
 		online_retry_available = false
 		online_slow_notice_shown = false
 		set_online_feedback("已发送%s，等待服务器确认。" % action_label, true)

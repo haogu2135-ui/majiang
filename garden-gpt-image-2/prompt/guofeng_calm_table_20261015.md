@@ -1,0 +1,9 @@
+Use case: stylized-concept
+Asset type: final full-screen background bitmap for a Chinese mahjong game, 16:9 landscape.
+Primary request: an elegant, quiet Chinese scholar's mahjong table in a Jiangnan garden, with warm walnut wood and muted jade-green cloth. A refined playable surface, with the restrained taste of a Ming scholar's study.
+Composition/framing: exact vertical overhead view, flat rectangular table, symmetrical straight edges parallel to the image edges, no perspective convergence. The uninterrupted jade cloth occupies the central 92 percent of the image width and 90 percent of its height. Only a slim warm wood rim around all four edges. The entire playable area is empty, almost uniform, spacious and visually calm. Tiny glimpses of soft garden stone and out-of-focus bamboo only beyond the extreme outer corners, never inside the cloth.
+Style/medium: polished painterly game environment with convincing natural materials, soft brushed rendering, understated Chinese aesthetic. No glossy photoreal glare. Gentle delicate cloth fibers and fine walnut grain, restrained detail.
+Lighting/mood: soft diffuse daylight in a peaceful garden pavilion, even illumination across the play area, medium-value jade so ivory 2D tiles remain distinct. No spotlight in the middle.
+Color palette: muted warm jade and celadon, natural medium walnut, soft stone grey. The cloth is an even desaturated teal-green, not black, neon or heavily mottled.
+Text: none.
+Constraints: this is the EMPTY environment behind native UI and existing 2D mahjong tiles. No tiles, no cards, no tile walls, no players, no hands, no avatars, no labels, no characters, no interface, no center emblem, no inlaid central logo, no circles or lanes, no marked tile positions. No gold ornament, no gilded corners, no carved dragons, no carpet, no palace, no heavy decorative border, no flowers or bamboo over the cloth, no object on the table, no watermark. Do not render any game pieces.

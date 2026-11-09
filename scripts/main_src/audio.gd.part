@@ -57,8 +57,7 @@ func shutdown_runtime() -> void:
 		mode = "shutdown"
 		flush_telemetry_save(true)
 		game_render_queued = false
-		offline_ai_active = false
-		offline_ai_run_queued = false
+		cancel_offline_ai_run()
 		offline_ai_assistance_queued = false
 		var pending_timers := runtime_delay_timers.duplicate()
 		runtime_delay_timers.clear()

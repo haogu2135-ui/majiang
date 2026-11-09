@@ -1,0 +1,8 @@
+[gd_resource type="AtlasTexture" load_steps=2 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/illustrations/menu_ink_entry_gpt.png" id="1_ink"]
+
+[resource]
+atlas = ExtResource("1_ink")
+region = Rect2(300, 210, 420, 590)
+filter_clip = true
