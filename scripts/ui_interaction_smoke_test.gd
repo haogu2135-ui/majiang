@@ -140,7 +140,10 @@ func set_offline_pending_claim_fixture(scene: Node, claim: String) -> void:
 	scene.players[3]["discards"] = ["3W"]
 	scene.last_discard = "3W"
 	scene.last_discard_seat = 3
+	# The fixture bypasses gameplay mutations, so advance their cache revision.
+	scene.ai_state_revision += 1
 	scene.render_game()
+	check(int(scene.get_player_info(0).get("hand_count", -1)) == hand.size(), "pending fixture exposes its current hand count")
 
 
 func has_label_text(scope: Node, expected: String) -> bool:

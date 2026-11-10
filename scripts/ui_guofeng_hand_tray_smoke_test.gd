@@ -453,6 +453,12 @@ func check_meld_hand_combinations(scene: Node, output_dir: String) -> void:
 		var archive := archive_value as Button
 		if not archive.is_visible_in_tree():
 			continue
+		var archive_label := archive.find_child("DiscardRiverArchiveLabel_*", true, false) as Label
+		check(archive_label != null, "river history %s exposes its visible action label" % archive.name)
+		if archive_label != null:
+			for line in archive_label.text.split("\n"):
+				check(label_text_width(archive_label, line) <= archive_label.size.x + 0.5, "river history %s displays its complete action line %s" % [archive.name, line])
+			check(archive_label.size.y + 0.5 >= archive_label.get_minimum_size().y, "river history %s displays every action row" % archive.name)
 		for action_value in scene.action_bar_buttons():
 			var action := action_value as Button
 			if action != null and action.is_visible_in_tree():

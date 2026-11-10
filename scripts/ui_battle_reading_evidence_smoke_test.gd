@@ -27,10 +27,14 @@ func prepare_offline_reading_fixture(scene: Node) -> void:
 	scene.last_discard = ""
 	scene.last_discard_seat = -1
 	scene.current_human_advice.clear()
+	# Direct fixture mutations must invalidate cached player facts and retained UI.
+	scene.ai_state_revision += 1
 	scene.clear_ai_report_cache()
 	scene.ai_assist_enabled = true
 	scene.render_game()
 	await settle(0.08)
+	for seat in range(4):
+		check(int(scene.get_player_info(seat).get("hand_count", -1)) == scene.players[seat]["hand"].size(), "reading fixture seat %d exposes its current hand count" % seat)
 
 
 func check_table_reading(scene: Node, output_dir: String) -> void:
