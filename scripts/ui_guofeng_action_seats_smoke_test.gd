@@ -424,7 +424,7 @@ func check_discard_archive_separation(scene, viewport_size: Vector2) -> void:
 			var expected := "查看\n更早" if start > 0 else "回到\n最新"
 			if seat == 2 and (viewport_size.x < 1600.0 or viewport_size.y < 900.0):
 				expected = "对家\n" + expected
-			elif archive.get_meta("visual_anchor", "") == "gutter_below_side_river":
+			elif seat != 1 and archive.get_meta("visual_anchor", "") == "gutter_below_side_river":
 				expected = action
 			check(label.text == expected and archive.tooltip_text.contains(str(archive.get_meta("window_label", ""))), "river %d names the next action and preserves the current range" % seat)
 		var conflicts: Array[String] = []
