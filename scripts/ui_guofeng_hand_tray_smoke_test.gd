@@ -1,6 +1,16 @@
 extends "res://scripts/ui_guofeng_battle_smoke_test.gd"
 
 
+func check_history_action_label(archive: Button) -> void:
+	var label := archive.find_child("DiscardRiverArchiveLabel_*", true, false) as Label
+	check(label != null, "river history %s exposes its visible action label" % archive.name)
+	if label == null:
+		return
+	for line in label.text.split("\n"):
+		check(label_text_width(label, line) <= label.size.x + 0.5, "river history %s displays its complete action line %s" % [archive.name, line])
+	check(label.size.y + 0.5 >= label.get_minimum_size().y, "river history %s displays every action row" % archive.name)
+
+
 func run() -> void:
 	print("=== guofeng hand tray UI smoke START ===")
 	var capture_root := OS.get_environment("YUNZHUO_GUOFENG_HAND_CAPTURE_DIR")
@@ -453,12 +463,7 @@ func check_meld_hand_combinations(scene: Node, output_dir: String) -> void:
 		var archive := archive_value as Button
 		if not archive.is_visible_in_tree():
 			continue
-		var archive_label := archive.find_child("DiscardRiverArchiveLabel_*", true, false) as Label
-		check(archive_label != null, "river history %s exposes its visible action label" % archive.name)
-		if archive_label != null:
-			for line in archive_label.text.split("\n"):
-				check(label_text_width(archive_label, line) <= archive_label.size.x + 0.5, "river history %s displays its complete action line %s" % [archive.name, line])
-			check(archive_label.size.y + 0.5 >= archive_label.get_minimum_size().y, "river history %s displays every action row" % archive.name)
+		check_history_action_label(archive)
 		for action_value in scene.action_bar_buttons():
 			var action := action_value as Button
 			if action != null and action.is_visible_in_tree():
@@ -534,6 +539,25 @@ func check_meld_hand_combinations(scene: Node, output_dir: String) -> void:
 	check(right_seen.size() == melds.size(), "pending right meld pagination reaches every complete public group")
 	right_meld_lane = scene.find_child("MeldArea_1", true, false) as Control
 	check(right_meld_lane != null and int(right_meld_lane.get_meta("window_start", -1)) == 0, "pending right meld pagination returns to the first page")
+	var right_history := scene.find_child("DiscardRiverArchiveButton_1", true, false) as Button
+	if right_history != null:
+		var latest_start := int(right_history.get_meta("window_start", -1))
+		for page in range(32):
+			if int(right_history.get_meta("window_start", -1)) <= 0:
+				break
+			await activate_button(right_history, "mouse")
+			await settle()
+			right_history = scene.find_child("DiscardRiverArchiveButton_1", true, false) as Button
+			if right_history == null:
+				break
+		check(right_history != null and int(right_history.get_meta("window_start", -1)) == 0, "right river native history reaches its earliest page")
+		if right_history != null:
+			check_history_action_label(right_history)
+			await save_reading_capture(scene, output_dir, "hand_meld_online_pending_history_earlier", hand_capture_state(scene))
+			await activate_button(right_history, "touch")
+			await settle()
+			right_history = scene.find_child("DiscardRiverArchiveButton_1", true, false) as Button
+			check(right_history != null and int(right_history.get_meta("window_start", -1)) == latest_start, "right river native history returns to its latest page")
 	scene.online_game["pending"]["deadline_msec"] = Time.get_ticks_msec() + 60000
 	scene.online_game_revision += 1
 	scene.render_game()
