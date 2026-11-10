@@ -23315,7 +23315,8 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			var tile_size := discard_zone_tile_size_for_table_size(zone_rect, columns, rows, parent.size)
 			var tile_bottom := float(rows) * tile_size.y + float(maxi(0, rows - 1) * DISCARD_GRID_SEPARATION)
 			archive_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			archive_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
+			var gutter_height := maxf(UI_MIN_TOUCH_TARGET, archive_height) if seat == 1 else UI_MIN_TOUCH_TARGET
+			archive_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, gutter_height)
 			var gutter_top := tile_bottom + 4.0
 			# The right history control shares the corner with the top pager and
 			# response dock. A compact target leaves a horizontal gap beside the
@@ -23325,18 +23326,18 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			if seat == 1:
 				var bottom_archive := parent.find_child("DiscardRiverArchiveButton_0", true, false) as Control
 				if bottom_archive != null:
-					var candidate := Rect2(overlay.get_global_transform() * Vector2(gutter_left, gutter_top), Vector2(gutter_width, UI_MIN_TOUCH_TARGET))
+					var candidate := Rect2(overlay.get_global_transform() * Vector2(gutter_left, gutter_top), Vector2(gutter_width, gutter_height))
 					if candidate.grow(3.0).intersects(bottom_archive.get_global_rect()):
 						var bottom_right := overlay.get_global_transform().affine_inverse() * bottom_archive.get_global_rect().end
 						gutter_left = bottom_right.x + 4.0
 				var top_archive := parent.find_child("DiscardRiverArchiveButton_2", true, false) as Control
 				if top_archive != null:
-					var candidate := Rect2(overlay.get_global_transform() * Vector2(gutter_left, gutter_top), Vector2(gutter_width, UI_MIN_TOUCH_TARGET))
+					var candidate := Rect2(overlay.get_global_transform() * Vector2(gutter_left, gutter_top), Vector2(gutter_width, gutter_height))
 					if candidate.grow(3.0).intersects(top_archive.get_global_rect()):
 						var top_bottom := overlay.get_global_transform().affine_inverse() * top_archive.get_global_rect().end
 						gutter_top = maxf(gutter_top, top_bottom.y + 8.0)
 			archive_button.position = Vector2(gutter_left, gutter_top)
-			archive_button.size = Vector2(gutter_width, UI_MIN_TOUCH_TARGET)
+			archive_button.size = Vector2(gutter_width, gutter_height)
 			archive_button.set_meta("visual_anchor", "gutter_below_side_river")
 			archive_button.set_meta("focus_visual_contract", "same_external_root_rect")
 			archive_button.set_meta("hit_rect_local_to_zone", false)

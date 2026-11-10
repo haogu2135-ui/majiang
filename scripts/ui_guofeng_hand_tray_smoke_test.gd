@@ -6,6 +6,7 @@ func check_history_action_label(archive: Button) -> void:
 	check(label != null, "river history %s exposes its visible action label" % archive.name)
 	if label == null:
 		return
+	check(archive.get_global_rect().grow(0.5).encloses(label.get_global_rect()), "river history %s keeps every action row inside its hit target" % archive.name)
 	for line in label.text.split("\n"):
 		check(label_text_width(label, line) <= label.size.x + 0.5, "river history %s displays its complete action line %s" % [archive.name, line])
 	check(label.size.y + 0.5 >= label.get_minimum_size().y, "river history %s displays every action row" % archive.name)
