@@ -19,6 +19,14 @@ func hand_capture_state(scene: Node) -> Dictionary:
 		for player in scene.online_game.get("players", []):
 			state["hand_counts"].append(int(player.get("handCount", 0)))
 	state["pending_claim_visible"] = scene.has_pending_claim_window()
+	state["river_history_targets"] = []
+	for target in scene.find_children("DiscardRiverArchiveButton_*", "Button", true, false):
+		if target.is_visible_in_tree():
+			state["river_history_targets"].append({"name": str(target.name), "rect": advisor_reading_rect(target)})
+	state["action_targets"] = []
+	for target in scene.action_bar_buttons():
+		if is_instance_valid(target) and target.is_visible_in_tree():
+			state["action_targets"].append({"name": str(target.name), "rect": advisor_reading_rect(target)})
 	var timer := scene.find_child("PendingClaimTimerArt", true, false) as Control
 	state["pending_timer_rect"] = advisor_reading_rect(timer) if timer != null and timer.is_visible_in_tree() else []
 	var wall_label := scene.find_child("TopHudWallText", true, false) as Label

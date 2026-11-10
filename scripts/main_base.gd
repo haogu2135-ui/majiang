@@ -112,6 +112,9 @@ const ANIMATION_ASSET_PATHS := {
 }
 const ILLUSTRATION_ASSET_PATHS := {}
 const GPT_ILLUSTRATION_ASSET_PATHS := {
+	# Preserve the previous authored assets in the registry for archive/provenance checks.
+	"menu_ink_ornate_archive": "res://assets/illustrations/menu_jade_ink_gpt_20261015.png",
+	"table_scholar_archive": "res://assets/illustrations/table_scholar_jade_gpt_20261015.png",
 	"quiet_gold_accent": "res://assets/illustrations/gold_paper_gpt_20261109.png",
 	"menu_guofeng_moonlit": "res://assets/illustrations/menu_jiangnan_ink_gpt_20261023.png",
 	"menu_entry_offline_gpt": "res://assets/illustrations/menu_offline_jiangnan_20261023.png",
