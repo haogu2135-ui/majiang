@@ -2089,7 +2089,7 @@ func draw_center(parent: Control) -> void:
 		# This small instrument has a fixed pixel budget even in large text mode.
 		# Keep its number readable and reserve actual glyph height below the caption.
 		wall_text.add_theme_font_size_override("font_size", 16)
-	var wall_num_color := Color(1.0, 0.45, 0.32) if center_wall_low else Color(1.0, 0.92, 0.65)
+	var wall_num_color := Color(1.0, 0.45, 0.32) if center_wall_low else Color(0.96, 0.92, 0.80)
 	wall_text.add_theme_color_override("font_color", wall_num_color)
 	set_ui_full_text(wall_text, "牌墙剩余 %d/%d 张" % [center_wall_count, center_wall_total], "牌墙剩余数量")
 	wall_text.name = "CenterWallCount"
@@ -2192,7 +2192,7 @@ func draw_center(parent: Control) -> void:
 	var center_current_seat := get_current_seat()
 	var wind_font_size := 15 if compact_center else 17
 	for i in range(4):
-		var wind_color = Color(1.0, 0.90, 0.53) if i == center_current_seat else Color(0.85, 0.86, 0.77)
+		var wind_color = Color(1.0, 0.92, 0.55) if i == center_current_seat else Color(0.72, 0.75, 0.70)
 		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), wind_font_size, wind_color, true)
 		wind.name = "CenterWindLabel_%s" % str(CENTER_WIND_LABELS[i])
 		wind.add_theme_font_override("font", ui_heading_font())
@@ -12003,7 +12003,7 @@ func draw_game_top_hud(parent: Control) -> void:
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
-	var offline_status_size := 19 if hud_viewport_snapshot.x >= 1600.0 and hud_viewport_snapshot.y >= 900.0 else 15
+	var offline_status_size := 20 if hud_viewport_snapshot.x >= 1600.0 and hud_viewport_snapshot.y >= 900.0 else (15 if compact_top_hud else 17)
 	var status = make_label(hud, top_hud_short_status_text(compact_top_hud), offline_status_size if mode == "offline" else (15 if compact_disconnect_status else 16), Color(0.06, 0.15, 0.10), true)
 	status.name = "TopHudStatus"
 	status.add_theme_font_override("font", ui_heading_font())
@@ -12057,7 +12057,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var hud_last_discard := get_last_discard()
 	var hud_last_discard_text := tile_label(hud_last_discard) if hud_last_discard != "" else "无"
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 13, Color(0.08, 0.20, 0.14, 1.0), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 14, Color(0.08, 0.20, 0.14, 1.0), true)
 	wall.name = "TopHudWallText"
 	wall.add_theme_font_override("font", ui_heading_font())
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
@@ -15926,7 +15926,9 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var last_tile := str(discard_snapshot.get("tile", get_last_discard()))
 	var is_source := last_seat == seat and last_tile != ""
 	var wide_seat := viewport_size.x >= 1600.0 and viewport_size.y >= 900.0
-	var name := make_label(panel, ("对家" if side == "top" else seat_wind_label(seat)) + " · " + seat_compact_display_name(seat, player, 2), 18 if wide_seat else 13, Color.WHITE, true)
+	var compact_seat := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
+	var name_font_size := 18 if wide_seat else (13 if compact_seat else 15)
+	var name := make_label(panel, ("对家" if side == "top" else seat_wind_label(seat)) + " · " + seat_compact_display_name(seat, player, 2), name_font_size, Color.WHITE, true)
 	name.name = "SeatCompactName_%d" % seat
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	name.set_meta("name_only_truncation", true)
@@ -17770,7 +17772,7 @@ func draw_table_log(parent: Control) -> void:
 	# fixed-height right column so the reading surface does not cover table art.
 	# Reserve a physical gutter beside the actual first upper-wall tile. Its
 	# position changes with the table's aspect ratio, independently of this HUD.
-	var ledger_right := 0.340
+	var ledger_right := 0.275 if table_log_viewport_size.x >= 1200.0 else (0.340 if compact_log else 0.300)
 	var upper_wall := parent.find_child("WallBackStrip_h_*_0", true, false) as Control
 	if upper_wall != null:
 		var first_face := upper_wall.get_node_or_null("WallTileBack_0") as TextureRect
