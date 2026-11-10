@@ -4,7 +4,7 @@
 - Generator: OpenAI-compatible image API configured by the repository `.gateway.env`, model `gpt-image-2`, via the bundled imagegen skill CLI; quality high, size 1536×1024.
 - Prompt: `output/imagegen/ui_refresh_20261109/table_prompt.txt`.
 - Original output: `output/imagegen/ui_refresh_20261109/table_jade.png` (copied byte for byte).
-- Runtime use: full-screen table and quieter dark reading surfaces for seats and table center. Native 2D tile art is unchanged.
+- Runtime use: full-screen table. Seats and table center use the separate quiet ink bitmap listed below. Native 2D tile art is unchanged.
 - Generation log: `build/qa/ui_refresh_20261109/imagegen_table_02.log`. First attempt stopped because the system Python lacked the SDK; the repository virtual environment succeeded.
 
 ## Shared ink reading surface
