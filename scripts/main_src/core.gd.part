@@ -1246,7 +1246,7 @@ func claim_task_reward(task: Dictionary) -> void:
 	if task_id != "":
 		task_claimed[task_id] = true
 		save_tasks()
-	show_toast("任务完成！+%d金币" % reward, 2500)
+	show_toast("任务完成！+%d铜钱" % reward, 2500)
 
 func claim_available_task(task_id: String) -> bool:
 	var status := get_task_status(task_id)
@@ -1274,9 +1274,9 @@ func add_coins(amount: int) -> void:
 		return
 	currency["coins"] = maxi(0, int(currency.get("coins", 0)) + amount)
 	save_currency()
-	# 金币变化toast提示
+	# 铜钱变化toast提示
 	if amount > 0 and mode == "menu":
-		show_toast("💰 +%d 金币" % amount)
+		show_toast("💰 +%d 铜钱" % amount)
 
 func add_gems(amount: int) -> void:
 	if amount <= 0:
@@ -1284,7 +1284,7 @@ func add_gems(amount: int) -> void:
 	currency["gems"] = maxi(0, int(currency.get("gems", 0)) + amount)
 	save_currency()
 	if amount > 0 and mode == "menu":
-		show_toast("💎 +%d 宝石" % amount)
+		show_toast("💎 +%d 玉符" % amount)
 
 
 func test_audio_setting() -> void:
@@ -9912,7 +9912,7 @@ func _build_fx_toast() -> void:
 
 
 func toast_is_reward_text(text: String) -> bool:
-	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("金币") >= 0 or text.find("宝石") >= 0 or text.find("+") >= 0
+	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("铜钱") >= 0 or text.find("玉符") >= 0 or text.find("+") >= 0
 
 func toast_is_chat_send_text(text: String) -> bool:
 	return text.begins_with("已发送:")
@@ -9957,7 +9957,7 @@ func shop_item_identity_text(item_id: String) -> String:
 		"lucky_charm":
 			return "加运"
 		"double_coins":
-			return "金币"
+			return "铜钱"
 	return "道具"
 
 func toast_icon_name(text: String) -> String:
@@ -10163,7 +10163,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
-	var required_text_height := 26.0 if wide_typography else 24.0
+	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
+	var required_text_height := (26.0 if wide_typography else 24.0) + float(group_titles.size()) * (32.0 + line_gap)
 	for line in lines:
 		var line_height := estimate_wrapped_text_height(str(line), text_width, line_font_size, line_gap)
 		measured_line_heights.append(line_height)
@@ -10191,6 +10192,12 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
+		if group_titles.has(line_index):
+			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(16, 2), Color.WHITE, true)
+			group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
+			group_title.custom_minimum_size = Vector2(0, 32)
+			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			style_guofeng_label(group_title)
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
@@ -10256,7 +10263,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
 	row.add_child(stats_row_plate)
 	var value_left := 0.535
-	var value_right := 0.955
+	var value_right := 0.755
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
@@ -10528,7 +10535,7 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 
 func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	# r215: GPT chrome conversion
-	"""播放购买成功动画 - 增强版：物品闪光 + 金币粒子飞溅"""
+	"""播放购买成功动画 - 增强版：物品闪光 + 铜钱粒子飞溅"""
 	if row == null or not is_instance_valid(row):
 		return
 	var feedback = Control.new()
@@ -10568,7 +10575,7 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	highlight_tween.tween_property(row, "modulate", Color(1.25, 1.22, 1.18, 1.0), 0.15)
 	highlight_tween.tween_property(row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.3)
 
-	# 金币粒子飞溅 - 从行中心向四周散开
+	# 铜钱粒子飞溅 - 从行中心向四周散开
 	if fx_enabled_effective() and is_instance_valid(row):
 		var route_tw := create_screen_tween()
 		route_tw.set_parallel(true)

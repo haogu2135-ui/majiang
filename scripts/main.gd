@@ -12373,6 +12373,25 @@ func add_optional_gpt_center_crop_texture(parent: Control, name: String, rect: R
 	parent.add_child(plate)
 	return plate
 
+func achievement_medallion_texture(key: String, unlocked: bool) -> Texture2D:
+	var atlas := optional_gpt_illustration_texture("achievement_medallions_20261112")
+	if atlas == null:
+		return optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	if achievement_medallion_cache.has(key):
+		return achievement_medallion_cache[key] as Texture2D
+	var order := ["first_win", "seven_pairs", "thirteen_orphans", "pure_one_suit", "mixed_one_suit", "big_three_dragons", "small_three_dragons", "big_four_winds", "small_four_winds", "all_honors", "all_triplets", "full_straight", "concealed_hand", "self_draw", "rob_gang", "five_wins", "ten_wins"]
+	var index := order.find(key)
+	if index < 0:
+		return optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	var cell := atlas.get_size() / Vector2(5.0, 4.0)
+	var texture := AtlasTexture.new()
+	texture.atlas = atlas
+	texture.region = Rect2(Vector2(index % 5, index / 5) * cell, cell)
+	texture.filter_clip = true
+	achievement_medallion_cache[key] = texture
+	return texture
+
+
 func achievement_medal_gpt_key(key: String, unlocked: bool) -> String:
 	if not unlocked:
 		return "achievement_medal_bronze"
@@ -12533,11 +12552,41 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 	apply_rect(summary, rect_full(0.0, 0.0, 0.46, 1.0))
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(summary)
-	var detail := make_label(art, "逐项收录牌桌上的精彩", 13, Color.WHITE, false)
-	detail.name = "AchievementsProgressDetailLabel"
-	apply_rect(detail, rect_full(0.48, 0.0, 1.0, 1.0))
-	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	style_guofeng_label(detail)
+	var next_key := ""
+	# Prefer a cumulative milestone with useful measured progress, then the
+	# first locked entry. The gallery order and saved unlock flags stay stable.
+	for candidate in ["first_win", "five_wins", "ten_wins"]:
+		if achievements.has(candidate) and not bool(achievements[candidate]):
+			next_key = candidate
+			break
+	if next_key == "":
+		for candidate in achievements.keys():
+			if not bool(achievements[candidate]):
+				next_key = str(candidate)
+				break
+	if next_key != "":
+		var target_key := next_key
+		var next_button := make_small_button("下一目标 · %s · %s" % [achievement_display_name(next_key), achievement_progress_text(next_key).trim_prefix("进度 ")], Color.WHITE, func() -> void:
+			var row := parent.find_child("AchievementRow_%s" % target_key, true, false) as Control
+			if row != null:
+				var focus_target := row.find_child("AchievementRowFocusTarget", true, false) as Control
+				if focus_target != null:
+					focus_target.grab_focus()
+					ensure_focus_control_visible(focus_target)
+		)
+		next_button.name = "AchievementsNextTargetButton"
+		next_button.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET)
+		next_button.set_meta("achievement_target_key", next_key)
+		set_ui_full_text(next_button, achievement_goal_text(next_key) + "；" + achievement_progress_text(next_key) + "；点击定位", "下一成就目标")
+		art.add_child(next_button)
+		apply_rect(next_button, rect_full(0.40, 0.0, 1.0, 1.0))
+		style_guofeng_secondary_action(next_button)
+	else:
+		var detail := make_label(art, "全部成就已收录", 13, Color.WHITE, false)
+		detail.name = "AchievementsProgressDetailLabel"
+		apply_rect(detail, rect_full(0.48, 0.0, 1.0, 1.0))
+		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		style_guofeng_label(detail)
 	return art
 
 
@@ -14300,10 +14349,11 @@ func draw_center(parent: Control) -> void:
 		retained_battle_center = null
 		retained_battle_center_signature = ""
 		return
-	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color.WHITE, "menu_ink_primary")
+	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color.WHITE, "battle_ink_plaque_20261112")
 	center.name = "CenterConsole3DShell"
 	center.self_modulate = Color.WHITE
-	center.set_meta("guofeng_surface_key", "menu_ink_primary")
+	center.set_meta("guofeng_surface_key", "battle_ink_plaque_20261112")
+	configure_guofeng_button_slice(center as TextureRect, true, 32, 0.25)
 	center.set_meta("center_identity_signature", center_identity)
 	center.set_meta("overlay_readability_contract", "center wind/wall/latest discard remain readable")
 	parent.add_child(center)
@@ -27442,9 +27492,9 @@ func sync_round_summary_body_status(body_scroll: ScrollContainer, body: Label, s
 	if scrollbar.value >= range_value - 0.5:
 		last_line = total_lines
 	var at_end := scrollbar.value >= range_value - 0.5
-	var tail := "已到末尾" if at_end else "可继续滚动"
 	var detail := "当前显示第%d至%d行，共%d行；%s。右侧显示四家得分，下方保留下一步操作。" % [first_line, last_line, total_lines, ("已到结算说明末尾" if at_end else "可继续滚动查看完整结算说明")]
-	set_dynamic_label_text(status, "结算说明 %d-%d / %d 行 · %s" % [first_line, last_line, total_lines, tail], detail)
+	var reading_hint := "说明已读完" if at_end else "向下滑动查看完整说明"
+	set_dynamic_label_text(status, reading_hint if range_value > 0.5 else "", detail)
 	status.set_meta("round_summary_first_line", first_line)
 	status.set_meta("round_summary_last_line", last_line)
 	status.set_meta("round_summary_total_lines", total_lines)
@@ -28163,21 +28213,21 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		return
 	if not retained.is_empty():
 		release_retained_battle_seat(seat)
-	var panel := make_gpt_center_crop_plate_rect(rect, Color.WHITE, "menu_ink_primary", 1.0)
+	var panel := make_gpt_center_crop_plate_rect(rect, Color.WHITE, "battle_ink_plaque_20261112", 1.0)
 	panel.self_modulate = Color.WHITE
 	panel.name = "SeatPanel_%d" % seat
 	panel.clip_contents = true
-	panel.set_meta("guofeng_surface_key", "menu_ink_primary")
+	panel.set_meta("guofeng_surface_key", "battle_ink_plaque_20261112")
 	panel.set_meta("seat_identity_signature", identity)
 	panel.set_meta("seat_viewport_snapshot", viewport_size)
 	panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	var panel_pixel_size := (viewport_size if viewport_size.x > 1.0 else effective_viewport_size()) * (rect.size - rect.position)
 	var single_line_top := side == "top" and panel_pixel_size.y < 40.0
 	panel.set_meta("seat_layout_mode", "centered_single_line" if single_line_top else ("centered_two_line" if side == "top" and absf((rect.position.x + rect.size.x) * 0.5 - 0.5) < 0.01 else "side_slot"))
-	var seat_source := optional_gpt_illustration_texture("menu_ink_primary")
+	var seat_source := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
 	if seat_source != null and panel is TextureRect:
 		(panel as TextureRect).texture = seat_source
-		configure_guofeng_button_slice(panel as TextureRect, true)
+		configure_guofeng_button_slice(panel as TextureRect, true, 32, 0.25)
 	parent.add_child(panel)
 	var player := get_player_info(seat)
 	var active := int(discard_snapshot.get("current_seat", get_current_seat())) == seat
@@ -29152,7 +29202,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	parent.add_child(art)
 	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-	var summary = make_label(art, "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play], 11, Color(0.11, 0.23, 0.18), true)
+	var summary = make_label(art, "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play], 12, Color(0.11, 0.23, 0.18), true)
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -29456,12 +29506,10 @@ func draw_stats_dashboard_art(parent: Control, viewport_snapshot: Vector2 = Vect
 	var games := maxi(0, int(source.get("games", source.get("games_played", 0))))
 	var wins := clampi(int(source.get("wins", source.get("games_won", 0))), 0, games)
 	var rate := 0.0 if games == 0 else float(wins) / float(games)
-	var trend := "待开局" if games == 0 else ("顺风" if rate >= 0.55 else ("稳守" if rate >= 0.35 else "蓄势"))
-	var average_score := 0 if games == 0 else int(round(float(source.get("score", source.get("total_score", 0))) / float(games)))
-	var average_fan := 0 if games == 0 else int(round(float(source.get("fan_total", source.get("total_fan", 0))) / float(games)))
-	make_stats_summary_chip(dash, "winrate", "走势", trend, rect_full(0.0, 0.0, 0.29, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "games", "场均番", "%d番/局" % average_fan, rect_full(0.34, 0.0, 0.62, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "best", "场均净分", "%d分/局" % average_score, rect_full(0.67, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
+	var total_score := int(source.get("score", source.get("total_score", 0)))
+	make_stats_summary_chip(dash, "winrate", "胜率", "%.1f%%" % (rate * 100.0), rect_full(0.0, 0.0, 0.29, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "games", "总场次", "%d局" % games, rect_full(0.34, 0.0, 0.62, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "best", "累计净分", "%+d分" % total_score, rect_full(0.67, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
 	return dash
 
 
@@ -31461,7 +31509,7 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 	row_plate.name = "AchievementRowGptPlate"
 	row_plate.self_modulate = Color(0.92, 0.88, 0.78) if unlocked else Color(0.86, 0.82, 0.72)
 	row.add_child(row_plate)
-	var medal_tex := optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	var medal_tex := achievement_medallion_texture(key, unlocked)
 	if medal_tex != null:
 		var medal_rect := TextureRect.new()
 		medal_rect.name = "AchievementRowMedalTexture_%s" % key
@@ -32273,7 +32321,7 @@ func make_seal_stamp(parent: Control, rect: Rect2, text: String = "胡", style: 
 
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
-	var button = make_small_button("已开" if enabled else "已关", color, callback)
+	var button = make_small_button("关闭" if enabled else "开启", color, callback)
 	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
 	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
@@ -32282,7 +32330,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", label)
 	button.set_meta("setting_state", "on" if enabled else "off")
-	button.set_meta("accessible_name", "%s：%s" % [label, "开启" if enabled else "关闭"])
+	button.set_meta("accessible_name", "%s：当前%s，点击%s" % [label, "开启" if enabled else "关闭", button.text])
 	button.set_meta("ui_full_text", button.tooltip_text)
 	return button
 
@@ -34989,9 +35037,13 @@ func _show_achievements_screen_impl() -> void:
 	configure_ordered_focus_navigation(panel, achievement_focus_controls, "AchievementsBackButton")
 	# Keep the page-level tab route compact. Individual achievement rows remain
 	# reachable through the scroll container's directional down route below.
+	var next_target := panel.find_child("AchievementsNextTargetButton", true, false) as Control
 	back.focus_previous = scroll.get_path()
-	back.focus_next = scroll.get_path()
-	scroll.focus_previous = back.get_path()
+	back.focus_next = next_target.get_path() if next_target != null else scroll.get_path()
+	if next_target != null:
+		next_target.focus_previous = back.get_path()
+		next_target.focus_next = scroll.get_path()
+	scroll.focus_previous = next_target.get_path() if next_target != null else back.get_path()
 	scroll.focus_next = back.get_path()
 	for focus_route_index in range(achievement_focus_rows.size()):
 		var row_focus := achievement_focus_rows[focus_route_index]
@@ -37702,6 +37754,25 @@ func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrol
 	sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 
 
+func request_shop_currency_exchange() -> void:
+	if mode != "shop":
+		return
+	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
+		shop_exchange_confirm_until_msec = 0
+		show_toast("铜钱不足：需500铜钱。完成对局、签到或每日任务可获得铜钱。", 3200)
+		return
+	if Time.get_ticks_msec() >= shop_exchange_confirm_until_msec:
+		shop_exchange_confirm_until_msec = Time.get_ticks_msec() + 5000
+		_show_shop_screen_impl()
+		show_toast("将消耗500铜钱获得5玉符，请在5秒内再次点击确认兑换。", 3000)
+		return
+	# Consume confirmation before the write, including repeated native input.
+	shop_exchange_confirm_until_msec = 0
+	var exchanged := exchange_coins_for_gems()
+	_show_shop_screen_impl()
+	show_toast("兑换成功：+5玉符" if exchanged else "兑换未完成，铜钱未扣除，请重试。", 2400)
+
+
 func _show_shop_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	var preserve_shop_state: bool = mode == "shop"
@@ -37763,7 +37834,7 @@ func _show_shop_screen_impl() -> void:
 	coins_label.add_theme_color_override("font_color", shop_ink)
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	set_ui_full_text(coins_label, "金币余额：%d" % int(currency.get("coins", 0)), "金币余额")
+	set_ui_full_text(coins_label, "铜钱余额：%d" % int(currency.get("coins", 0)), "铜钱余额")
 
 	var gems_panel := make_layout_host(rect_full(0.635, 0.035, 0.785, 0.090))
 	gems_panel.name = "ShopCurrencyPanel_gems"
@@ -38180,9 +38251,9 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_title, rect_full(0.035, 0.020, 0.200, 0.330))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
-	var footer_body_text := "道具在单机对局中即时生效，购买后进入本地库存。"
+	var footer_body_text := "500铜钱可兑换5玉符；铜钱可通过对局、签到与任务获得。"
 	if affordable_items <= 0:
-		footer_body_text = "当前玉符 %d；最近商品还差 %d 玉符。签到与任务目前只奖励铜钱。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
+		footer_body_text = "当前玉符 %d；还差 %d 玉符可购买。500铜钱可兑换5玉符。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
 	apply_rect(footer_body, rect_full(0.035, 0.380, 0.630, 0.970))
@@ -38194,41 +38265,19 @@ func _show_shop_screen_impl() -> void:
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
 	apply_rect(footer_inventory, rect_full(0.650, 0.175, 0.790, 0.775))
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var state_text := "可买 %d种" % affordable_items if affordable_items > 0 else "玉符说明"
-	var footer_state: Control
-	if affordable_items > 0:
-		footer_state = make_label(shop_footer, state_text, commercial_ui_font_size(13, 2), shop_ink, true)
-		footer_state.name = "ShopCabinetFooterStateBadge"
-		footer_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	else:
-		footer_state = make_small_button(state_text, Color(0.56, 0.38, 0.24), func() -> void:
-			show_toast("玉符获取：当前版本未接入充值渠道；签到与任务奖励为铜钱。", 3600)
-		)
-		var footer_btn := footer_state as Button
-		apply_guofeng_button_face(footer_btn, false)
-		var footer_face := footer_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
-		if footer_face != null:
-			var src := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
-			if src != null:
-				footer_face.texture = src
-		add_shop_focus_marker(footer_btn, footer_btn, null, rect_full(0.04, 0.12, 0.18, 0.88))
-		shop_footer.add_child(footer_state)
-		footer_state.name = "ShopGetGemsButton"
-		footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
-		footer_state.tooltip_text = "玉符说明 · 当前版本未接入充值渠道；签到与任务奖励为铜钱"
-		set_ui_full_text(footer_state, footer_state.tooltip_text, "玉符说明")
-		footer_state.set_meta("recovery_route", "local_honest_explanation_no_purchase_channel")
-		footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
-		footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
-		footer_state.set_meta("shop_state", "insufficient_gems")
-		footer_state.focus_mode = Control.FOCUS_ALL
-		footer_state.mouse_filter = Control.MOUSE_FILTER_STOP
-		footer_state.set_meta("native_target_contract", "44px_currency_recovery_cta")
+	var state_text := "确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符"
+	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
+	apply_guofeng_button_face(footer_state, false)
+	shop_footer.add_child(footer_state)
+	footer_state.name = "ShopGetGemsButton"
+	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
+	footer_state.tooltip_text = "%d铜钱兑换%d玉符；再次点击确认。铜钱可通过对局、签到与每日任务获得。" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
+	set_ui_full_text(footer_state, footer_state.tooltip_text, "铜钱兑换玉符")
+	footer_state.set_meta("recovery_route", "earned_coins_exchange")
+	footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
+	footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
+	footer_state.set_meta("native_target_contract", "44px_currency_recovery_cta")
 	apply_rect(footer_state, rect_full(0.810, 0.175, 0.965, 0.775))
-	if affordable_items > 0:
-		set_ui_full_text(footer_state, "可购买商品%d种；%s；库存%d件" % [affordable_items, state_text, total_inventory], "商店库存与购买状态")
-	else:
-		set_ui_full_text(footer_state, "当前玉符%d；还差%d玉符；当前版本未接入充值渠道，签到与任务只奖励铜钱；点击玉符说明查看详情" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))], "玉符说明")
 	footer_state.set_meta("affordable_items", affordable_items)
 	footer_state.set_meta("total_inventory", total_inventory)
 	footer_state.set_meta("shop_state", "has_affordable" if affordable_items > 0 else "insufficient_gems")
@@ -40030,10 +40079,10 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var reward_text = "今日奖励已入账：" if claimed_today else "今日奖励："
 	var reward_icon_name = "gift"
 	if current_day_in_cycle == 7:
-		reward_text += "双倍金币卡 ×1"
+		reward_text += "双倍铜钱卡 ×1"
 		reward_icon_name = "sparkles"
 	else:
-		reward_text += "金币 +100"
+		reward_text += "铜钱 +100"
 		reward_icon_name = "coin"
 
 	var large_checkin_layout := large_text_enabled or daily_login_viewport_size.y <= 560.0
@@ -40239,7 +40288,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	# 七日奖励预告
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
-	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
+	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
 	var forecast_panel = make_layout_host(rect_full(0.10, forecast_top, 0.90, 0.990))
 	forecast_panel.name = "DailyLoginForecastPanel"
 	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
@@ -43402,7 +43451,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	button.set_meta("settings_state_token", settings_state_token)
 
 	if is_toggle:
-		button_text = "已开" if toggle_enabled else "已关"
+		button_text = "关闭" if toggle_enabled else "开启"
 		button.set_meta("setting_state", "on" if toggle_enabled else "off")
 	else:
 		button.set_meta("setting_state", str(graphics_quality) if setting_key == "画面质量" else button_text)
@@ -43433,7 +43482,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	if overview_summary != null:
 		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_summary.text = "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play]
+		overview_summary.text = "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play]
 		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
 	if overview_fill != null:
 		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
@@ -46631,7 +46680,7 @@ func claim_task_reward(task: Dictionary) -> void:
 	if task_id != "":
 		task_claimed[task_id] = true
 		save_tasks()
-	show_toast("任务完成！+%d金币" % reward, 2500)
+	show_toast("任务完成！+%d铜钱" % reward, 2500)
 
 func claim_available_task(task_id: String) -> bool:
 	var status := get_task_status(task_id)
@@ -46659,9 +46708,9 @@ func add_coins(amount: int) -> void:
 		return
 	currency["coins"] = maxi(0, int(currency.get("coins", 0)) + amount)
 	save_currency()
-	# 金币变化toast提示
+	# 铜钱变化toast提示
 	if amount > 0 and mode == "menu":
-		show_toast("💰 +%d 金币" % amount)
+		show_toast("💰 +%d 铜钱" % amount)
 
 func add_gems(amount: int) -> void:
 	if amount <= 0:
@@ -46669,7 +46718,7 @@ func add_gems(amount: int) -> void:
 	currency["gems"] = maxi(0, int(currency.get("gems", 0)) + amount)
 	save_currency()
 	if amount > 0 and mode == "menu":
-		show_toast("💎 +%d 宝石" % amount)
+		show_toast("💎 +%d 玉符" % amount)
 
 
 func test_audio_setting() -> void:
@@ -55297,7 +55346,7 @@ func _build_fx_toast() -> void:
 
 
 func toast_is_reward_text(text: String) -> bool:
-	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("金币") >= 0 or text.find("宝石") >= 0 or text.find("+") >= 0
+	return text.find("任务完成") >= 0 or text.find("购买成功") >= 0 or text.find("成就") >= 0 or text.find("铜钱") >= 0 or text.find("玉符") >= 0 or text.find("+") >= 0
 
 func toast_is_chat_send_text(text: String) -> bool:
 	return text.begins_with("已发送:")
@@ -55342,7 +55391,7 @@ func shop_item_identity_text(item_id: String) -> String:
 		"lucky_charm":
 			return "加运"
 		"double_coins":
-			return "金币"
+			return "铜钱"
 	return "道具"
 
 func toast_icon_name(text: String) -> String:
@@ -55548,7 +55597,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
-	var required_text_height := 26.0 if wide_typography else 24.0
+	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
+	var required_text_height := (26.0 if wide_typography else 24.0) + float(group_titles.size()) * (32.0 + line_gap)
 	for line in lines:
 		var line_height := estimate_wrapped_text_height(str(line), text_width, line_font_size, line_gap)
 		measured_line_heights.append(line_height)
@@ -55576,6 +55626,12 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
+		if group_titles.has(line_index):
+			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(16, 2), Color.WHITE, true)
+			group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
+			group_title.custom_minimum_size = Vector2(0, 32)
+			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			style_guofeng_label(group_title)
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
@@ -55641,7 +55697,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
 	row.add_child(stats_row_plate)
 	var value_left := 0.535
-	var value_right := 0.955
+	var value_right := 0.755
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
@@ -55913,7 +55969,7 @@ func play_shop_buy_button_feedback(button: Button, affordable: bool) -> void:
 
 func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	# r215: GPT chrome conversion
-	"""播放购买成功动画 - 增强版：物品闪光 + 金币粒子飞溅"""
+	"""播放购买成功动画 - 增强版：物品闪光 + 铜钱粒子飞溅"""
 	if row == null or not is_instance_valid(row):
 		return
 	var feedback = Control.new()
@@ -55953,7 +56009,7 @@ func _play_purchase_success_animation(row: Control, item_color: Color) -> void:
 	highlight_tween.tween_property(row, "modulate", Color(1.25, 1.22, 1.18, 1.0), 0.15)
 	highlight_tween.tween_property(row, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.3)
 
-	# 金币粒子飞溅 - 从行中心向四周散开
+	# 铜钱粒子飞溅 - 从行中心向四周散开
 	if fx_enabled_effective() and is_instance_valid(row):
 		var route_tw := create_screen_tween()
 		route_tw.set_parallel(true)

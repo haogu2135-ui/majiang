@@ -286,9 +286,13 @@ func _show_achievements_screen_impl() -> void:
 	configure_ordered_focus_navigation(panel, achievement_focus_controls, "AchievementsBackButton")
 	# Keep the page-level tab route compact. Individual achievement rows remain
 	# reachable through the scroll container's directional down route below.
+	var next_target := panel.find_child("AchievementsNextTargetButton", true, false) as Control
 	back.focus_previous = scroll.get_path()
-	back.focus_next = scroll.get_path()
-	scroll.focus_previous = back.get_path()
+	back.focus_next = next_target.get_path() if next_target != null else scroll.get_path()
+	if next_target != null:
+		next_target.focus_previous = back.get_path()
+		next_target.focus_next = scroll.get_path()
+	scroll.focus_previous = next_target.get_path() if next_target != null else back.get_path()
 	scroll.focus_next = back.get_path()
 	for focus_route_index in range(achievement_focus_rows.size()):
 		var row_focus := achievement_focus_rows[focus_route_index]
@@ -2999,6 +3003,25 @@ func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrol
 	sync_scroll_thumb_for_input(content_scroll, thumb, sync_callback)
 
 
+func request_shop_currency_exchange() -> void:
+	if mode != "shop":
+		return
+	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
+		shop_exchange_confirm_until_msec = 0
+		show_toast("铜钱不足：需500铜钱。完成对局、签到或每日任务可获得铜钱。", 3200)
+		return
+	if Time.get_ticks_msec() >= shop_exchange_confirm_until_msec:
+		shop_exchange_confirm_until_msec = Time.get_ticks_msec() + 5000
+		_show_shop_screen_impl()
+		show_toast("将消耗500铜钱获得5玉符，请在5秒内再次点击确认兑换。", 3000)
+		return
+	# Consume confirmation before the write, including repeated native input.
+	shop_exchange_confirm_until_msec = 0
+	var exchanged := exchange_coins_for_gems()
+	_show_shop_screen_impl()
+	show_toast("兑换成功：+5玉符" if exchanged else "兑换未完成，铜钱未扣除，请重试。", 2400)
+
+
 func _show_shop_screen_impl() -> void:
 	# r215: GPT chrome conversion
 	var preserve_shop_state: bool = mode == "shop"
@@ -3060,7 +3083,7 @@ func _show_shop_screen_impl() -> void:
 	coins_label.add_theme_color_override("font_color", shop_ink)
 	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	set_ui_full_text(coins_label, "金币余额：%d" % int(currency.get("coins", 0)), "金币余额")
+	set_ui_full_text(coins_label, "铜钱余额：%d" % int(currency.get("coins", 0)), "铜钱余额")
 
 	var gems_panel := make_layout_host(rect_full(0.635, 0.035, 0.785, 0.090))
 	gems_panel.name = "ShopCurrencyPanel_gems"
@@ -3477,9 +3500,9 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_title, rect_full(0.035, 0.020, 0.200, 0.330))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
-	var footer_body_text := "道具在单机对局中即时生效，购买后进入本地库存。"
+	var footer_body_text := "500铜钱可兑换5玉符；铜钱可通过对局、签到与任务获得。"
 	if affordable_items <= 0:
-		footer_body_text = "当前玉符 %d；最近商品还差 %d 玉符。签到与任务目前只奖励铜钱。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
+		footer_body_text = "当前玉符 %d；还差 %d 玉符可购买。500铜钱可兑换5玉符。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
 	apply_rect(footer_body, rect_full(0.035, 0.380, 0.630, 0.970))
@@ -3491,41 +3514,19 @@ func _show_shop_screen_impl() -> void:
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
 	apply_rect(footer_inventory, rect_full(0.650, 0.175, 0.790, 0.775))
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var state_text := "可买 %d种" % affordable_items if affordable_items > 0 else "玉符说明"
-	var footer_state: Control
-	if affordable_items > 0:
-		footer_state = make_label(shop_footer, state_text, commercial_ui_font_size(13, 2), shop_ink, true)
-		footer_state.name = "ShopCabinetFooterStateBadge"
-		footer_state.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	else:
-		footer_state = make_small_button(state_text, Color(0.56, 0.38, 0.24), func() -> void:
-			show_toast("玉符获取：当前版本未接入充值渠道；签到与任务奖励为铜钱。", 3600)
-		)
-		var footer_btn := footer_state as Button
-		apply_guofeng_button_face(footer_btn, false)
-		var footer_face := footer_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
-		if footer_face != null:
-			var src := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
-			if src != null:
-				footer_face.texture = src
-		add_shop_focus_marker(footer_btn, footer_btn, null, rect_full(0.04, 0.12, 0.18, 0.88))
-		shop_footer.add_child(footer_state)
-		footer_state.name = "ShopGetGemsButton"
-		footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
-		footer_state.tooltip_text = "玉符说明 · 当前版本未接入充值渠道；签到与任务奖励为铜钱"
-		set_ui_full_text(footer_state, footer_state.tooltip_text, "玉符说明")
-		footer_state.set_meta("recovery_route", "local_honest_explanation_no_purchase_channel")
-		footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
-		footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
-		footer_state.set_meta("shop_state", "insufficient_gems")
-		footer_state.focus_mode = Control.FOCUS_ALL
-		footer_state.mouse_filter = Control.MOUSE_FILTER_STOP
-		footer_state.set_meta("native_target_contract", "44px_currency_recovery_cta")
+	var state_text := "确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符"
+	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
+	apply_guofeng_button_face(footer_state, false)
+	shop_footer.add_child(footer_state)
+	footer_state.name = "ShopGetGemsButton"
+	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
+	footer_state.tooltip_text = "%d铜钱兑换%d玉符；再次点击确认。铜钱可通过对局、签到与每日任务获得。" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
+	set_ui_full_text(footer_state, footer_state.tooltip_text, "铜钱兑换玉符")
+	footer_state.set_meta("recovery_route", "earned_coins_exchange")
+	footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
+	footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
+	footer_state.set_meta("native_target_contract", "44px_currency_recovery_cta")
 	apply_rect(footer_state, rect_full(0.810, 0.175, 0.965, 0.775))
-	if affordable_items > 0:
-		set_ui_full_text(footer_state, "可购买商品%d种；%s；库存%d件" % [affordable_items, state_text, total_inventory], "商店库存与购买状态")
-	else:
-		set_ui_full_text(footer_state, "当前玉符%d；还差%d玉符；当前版本未接入充值渠道，签到与任务只奖励铜钱；点击玉符说明查看详情" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))], "玉符说明")
 	footer_state.set_meta("affordable_items", affordable_items)
 	footer_state.set_meta("total_inventory", total_inventory)
 	footer_state.set_meta("shop_state", "has_affordable" if affordable_items > 0 else "insufficient_gems")
@@ -5327,10 +5328,10 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var reward_text = "今日奖励已入账：" if claimed_today else "今日奖励："
 	var reward_icon_name = "gift"
 	if current_day_in_cycle == 7:
-		reward_text += "双倍金币卡 ×1"
+		reward_text += "双倍铜钱卡 ×1"
 		reward_icon_name = "sparkles"
 	else:
-		reward_text += "金币 +100"
+		reward_text += "铜钱 +100"
 		reward_icon_name = "coin"
 
 	var large_checkin_layout := large_text_enabled or daily_login_viewport_size.y <= 560.0
@@ -5536,7 +5537,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	# 七日奖励预告
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
-	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍金币卡" if progress >= 7 else "第7天领取双倍金币卡")
+	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
 	var forecast_panel = make_layout_host(rect_full(0.10, forecast_top, 0.90, 0.990))
 	forecast_panel.name = "DailyLoginForecastPanel"
 	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
@@ -8699,7 +8700,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	button.set_meta("settings_state_token", settings_state_token)
 
 	if is_toggle:
-		button_text = "已开" if toggle_enabled else "已关"
+		button_text = "关闭" if toggle_enabled else "开启"
 		button.set_meta("setting_state", "on" if toggle_enabled else "off")
 	else:
 		button.set_meta("setting_state", str(graphics_quality) if setting_key == "画面质量" else button_text)
@@ -8730,7 +8731,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	if overview_summary != null:
 		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_summary.text = "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play]
+		overview_summary.text = "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play]
 		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
 	if overview_fill != null:
 		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)

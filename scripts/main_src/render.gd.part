@@ -114,6 +114,25 @@ func add_optional_gpt_center_crop_texture(parent: Control, name: String, rect: R
 	parent.add_child(plate)
 	return plate
 
+func achievement_medallion_texture(key: String, unlocked: bool) -> Texture2D:
+	var atlas := optional_gpt_illustration_texture("achievement_medallions_20261112")
+	if atlas == null:
+		return optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	if achievement_medallion_cache.has(key):
+		return achievement_medallion_cache[key] as Texture2D
+	var order := ["first_win", "seven_pairs", "thirteen_orphans", "pure_one_suit", "mixed_one_suit", "big_three_dragons", "small_three_dragons", "big_four_winds", "small_four_winds", "all_honors", "all_triplets", "full_straight", "concealed_hand", "self_draw", "rob_gang", "five_wins", "ten_wins"]
+	var index := order.find(key)
+	if index < 0:
+		return optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	var cell := atlas.get_size() / Vector2(5.0, 4.0)
+	var texture := AtlasTexture.new()
+	texture.atlas = atlas
+	texture.region = Rect2(Vector2(index % 5, index / 5) * cell, cell)
+	texture.filter_clip = true
+	achievement_medallion_cache[key] = texture
+	return texture
+
+
 func achievement_medal_gpt_key(key: String, unlocked: bool) -> String:
 	if not unlocked:
 		return "achievement_medal_bronze"
@@ -274,11 +293,41 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 	apply_rect(summary, rect_full(0.0, 0.0, 0.46, 1.0))
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(summary)
-	var detail := make_label(art, "逐项收录牌桌上的精彩", 13, Color.WHITE, false)
-	detail.name = "AchievementsProgressDetailLabel"
-	apply_rect(detail, rect_full(0.48, 0.0, 1.0, 1.0))
-	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	style_guofeng_label(detail)
+	var next_key := ""
+	# Prefer a cumulative milestone with useful measured progress, then the
+	# first locked entry. The gallery order and saved unlock flags stay stable.
+	for candidate in ["first_win", "five_wins", "ten_wins"]:
+		if achievements.has(candidate) and not bool(achievements[candidate]):
+			next_key = candidate
+			break
+	if next_key == "":
+		for candidate in achievements.keys():
+			if not bool(achievements[candidate]):
+				next_key = str(candidate)
+				break
+	if next_key != "":
+		var target_key := next_key
+		var next_button := make_small_button("下一目标 · %s · %s" % [achievement_display_name(next_key), achievement_progress_text(next_key).trim_prefix("进度 ")], Color.WHITE, func() -> void:
+			var row := parent.find_child("AchievementRow_%s" % target_key, true, false) as Control
+			if row != null:
+				var focus_target := row.find_child("AchievementRowFocusTarget", true, false) as Control
+				if focus_target != null:
+					focus_target.grab_focus()
+					ensure_focus_control_visible(focus_target)
+		)
+		next_button.name = "AchievementsNextTargetButton"
+		next_button.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET)
+		next_button.set_meta("achievement_target_key", next_key)
+		set_ui_full_text(next_button, achievement_goal_text(next_key) + "；" + achievement_progress_text(next_key) + "；点击定位", "下一成就目标")
+		art.add_child(next_button)
+		apply_rect(next_button, rect_full(0.40, 0.0, 1.0, 1.0))
+		style_guofeng_secondary_action(next_button)
+	else:
+		var detail := make_label(art, "全部成就已收录", 13, Color.WHITE, false)
+		detail.name = "AchievementsProgressDetailLabel"
+		apply_rect(detail, rect_full(0.48, 0.0, 1.0, 1.0))
+		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		style_guofeng_label(detail)
 	return art
 
 
@@ -2041,10 +2090,11 @@ func draw_center(parent: Control) -> void:
 		retained_battle_center = null
 		retained_battle_center_signature = ""
 		return
-	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color.WHITE, "menu_ink_primary")
+	var center = make_gpt_plate_rect(CENTER_PANEL_RECT, Color.WHITE, "battle_ink_plaque_20261112")
 	center.name = "CenterConsole3DShell"
 	center.self_modulate = Color.WHITE
-	center.set_meta("guofeng_surface_key", "menu_ink_primary")
+	center.set_meta("guofeng_surface_key", "battle_ink_plaque_20261112")
+	configure_guofeng_button_slice(center as TextureRect, true, 32, 0.25)
 	center.set_meta("center_identity_signature", center_identity)
 	center.set_meta("overlay_readability_contract", "center wind/wall/latest discard remain readable")
 	parent.add_child(center)
@@ -15183,9 +15233,9 @@ func sync_round_summary_body_status(body_scroll: ScrollContainer, body: Label, s
 	if scrollbar.value >= range_value - 0.5:
 		last_line = total_lines
 	var at_end := scrollbar.value >= range_value - 0.5
-	var tail := "已到末尾" if at_end else "可继续滚动"
 	var detail := "当前显示第%d至%d行，共%d行；%s。右侧显示四家得分，下方保留下一步操作。" % [first_line, last_line, total_lines, ("已到结算说明末尾" if at_end else "可继续滚动查看完整结算说明")]
-	set_dynamic_label_text(status, "结算说明 %d-%d / %d 行 · %s" % [first_line, last_line, total_lines, tail], detail)
+	var reading_hint := "说明已读完" if at_end else "向下滑动查看完整说明"
+	set_dynamic_label_text(status, reading_hint if range_value > 0.5 else "", detail)
 	status.set_meta("round_summary_first_line", first_line)
 	status.set_meta("round_summary_last_line", last_line)
 	status.set_meta("round_summary_total_lines", total_lines)
@@ -15904,21 +15954,21 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		return
 	if not retained.is_empty():
 		release_retained_battle_seat(seat)
-	var panel := make_gpt_center_crop_plate_rect(rect, Color.WHITE, "menu_ink_primary", 1.0)
+	var panel := make_gpt_center_crop_plate_rect(rect, Color.WHITE, "battle_ink_plaque_20261112", 1.0)
 	panel.self_modulate = Color.WHITE
 	panel.name = "SeatPanel_%d" % seat
 	panel.clip_contents = true
-	panel.set_meta("guofeng_surface_key", "menu_ink_primary")
+	panel.set_meta("guofeng_surface_key", "battle_ink_plaque_20261112")
 	panel.set_meta("seat_identity_signature", identity)
 	panel.set_meta("seat_viewport_snapshot", viewport_size)
 	panel.set_meta("seat_viewport_snapshot_policy", "one_viewport_snapshot_per_seat_draw")
 	var panel_pixel_size := (viewport_size if viewport_size.x > 1.0 else effective_viewport_size()) * (rect.size - rect.position)
 	var single_line_top := side == "top" and panel_pixel_size.y < 40.0
 	panel.set_meta("seat_layout_mode", "centered_single_line" if single_line_top else ("centered_two_line" if side == "top" and absf((rect.position.x + rect.size.x) * 0.5 - 0.5) < 0.01 else "side_slot"))
-	var seat_source := optional_gpt_illustration_texture("menu_ink_primary")
+	var seat_source := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
 	if seat_source != null and panel is TextureRect:
 		(panel as TextureRect).texture = seat_source
-		configure_guofeng_button_slice(panel as TextureRect, true)
+		configure_guofeng_button_slice(panel as TextureRect, true, 32, 0.25)
 	parent.add_child(panel)
 	var player := get_player_info(seat)
 	var active := int(discard_snapshot.get("current_seat", get_current_seat())) == seat
@@ -16893,7 +16943,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	parent.add_child(art)
 	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-	var summary = make_label(art, "声音 %d/3    体验 %d/3" % [enabled_audio, enabled_play], 11, Color(0.11, 0.23, 0.18), true)
+	var summary = make_label(art, "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play], 12, Color(0.11, 0.23, 0.18), true)
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -17197,12 +17247,10 @@ func draw_stats_dashboard_art(parent: Control, viewport_snapshot: Vector2 = Vect
 	var games := maxi(0, int(source.get("games", source.get("games_played", 0))))
 	var wins := clampi(int(source.get("wins", source.get("games_won", 0))), 0, games)
 	var rate := 0.0 if games == 0 else float(wins) / float(games)
-	var trend := "待开局" if games == 0 else ("顺风" if rate >= 0.55 else ("稳守" if rate >= 0.35 else "蓄势"))
-	var average_score := 0 if games == 0 else int(round(float(source.get("score", source.get("total_score", 0))) / float(games)))
-	var average_fan := 0 if games == 0 else int(round(float(source.get("fan_total", source.get("total_fan", 0))) / float(games)))
-	make_stats_summary_chip(dash, "winrate", "走势", trend, rect_full(0.0, 0.0, 0.29, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "games", "场均番", "%d番/局" % average_fan, rect_full(0.34, 0.0, 0.62, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "best", "场均净分", "%d分/局" % average_score, rect_full(0.67, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
+	var total_score := int(source.get("score", source.get("total_score", 0)))
+	make_stats_summary_chip(dash, "winrate", "胜率", "%.1f%%" % (rate * 100.0), rect_full(0.0, 0.0, 0.29, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "games", "总场次", "%d局" % games, rect_full(0.34, 0.0, 0.62, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "best", "累计净分", "%+d分" % total_score, rect_full(0.67, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
 	return dash
 
 
@@ -19202,7 +19250,7 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 	row_plate.name = "AchievementRowGptPlate"
 	row_plate.self_modulate = Color(0.92, 0.88, 0.78) if unlocked else Color(0.86, 0.82, 0.72)
 	row.add_child(row_plate)
-	var medal_tex := optional_gpt_illustration_texture(achievement_medal_gpt_key(key, unlocked))
+	var medal_tex := achievement_medallion_texture(key, unlocked)
 	if medal_tex != null:
 		var medal_rect := TextureRect.new()
 		medal_rect.name = "AchievementRowMedalTexture_%s" % key
@@ -20014,7 +20062,7 @@ func make_seal_stamp(parent: Control, rect: Rect2, text: String = "胡", style: 
 
 func make_setting_button(label: String, enabled: bool, callback: Callable) -> Button:
 	var color = Color(0.22, 0.52, 0.42) if enabled else Color(0.44, 0.32, 0.28)
-	var button = make_small_button("已开" if enabled else "已关", color, callback)
+	var button = make_small_button("关闭" if enabled else "开启", color, callback)
 	button.tooltip_text = "%s：当前%s，点击切换" % [label, "开启" if enabled else "关闭"]
 	ensure_button_gpt_face_plate(button, Color(0.98, 0.92, 0.72, 0.92), "action_gpt_dock_banner_bright")
 	button.custom_minimum_size = Vector2(112, 46)
@@ -20023,7 +20071,7 @@ func make_setting_button(label: String, enabled: bool, callback: Callable) -> Bu
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.set_meta("setting_label", label)
 	button.set_meta("setting_state", "on" if enabled else "off")
-	button.set_meta("accessible_name", "%s：%s" % [label, "开启" if enabled else "关闭"])
+	button.set_meta("accessible_name", "%s：当前%s，点击%s" % [label, "开启" if enabled else "关闭", button.text])
 	button.set_meta("ui_full_text", button.tooltip_text)
 	return button
 

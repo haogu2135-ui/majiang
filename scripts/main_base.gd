@@ -118,6 +118,8 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"quiet_gold_accent": "res://assets/illustrations/gold_paper_gpt_20261109.png",
 	"menu_guofeng_moonlit": "res://assets/illustrations/menu_jiangnan_ink_gpt_20261023.png",
 	"menu_entry_offline_gpt": "res://assets/illustrations/menu_offline_jiangnan_20261023.png",
+	"achievement_medallions_20261112": "res://assets/illustrations/achievement_medallions_gpt_20261112.png",
+	"battle_ink_plaque_20261112": "res://assets/illustrations/battle_ink_plaque_gpt_20261112.png",
 	"menu_ink_primary": "res://assets/illustrations/reading_ink_quiet_gpt_20261109.png",
 	"menu_entry_online_gpt": "res://assets/illustrations/menu_entry_online_gpt_20261021.png",
 	"menu_entry_shop_gpt": "res://assets/illustrations/menu_entry_shop_gpt_20261021.png",
@@ -549,7 +551,7 @@ const ITEM_TYPES := {
 	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
 	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
 	"lucky_charm": {"name": "幸运符", "desc": "本局胡牌概率显示+10%", "icon": "🍀", "cost_gems": 10},
-	"double_coins": {"name": "双倍金币卡", "desc": "本局金币奖励翻倍", "icon": "💰", "cost_gems": 15},
+	"double_coins": {"name": "双倍铜钱卡", "desc": "本局铜钱奖励翻倍", "icon": "💰", "cost_gems": 15},
 }
 
 var tile_textures: Dictionary = {}
@@ -662,6 +664,9 @@ var menu_focus_restore_name := ""
 var shop_scroll_restore_value := -1.0
 var shop_scroll_restore_progress := -1.0
 var shop_focus_restore_name := ""
+var shop_exchange_confirm_until_msec := 0
+const SHOP_EXCHANGE_COINS := 500
+const SHOP_EXCHANGE_GEMS := 5
 var telemetry_sheet_focus_restore_name := ""
 var telemetry_sheet_focus_restore_id := 0
 var diagnostic_focus_restore_name := ""
@@ -1359,6 +1364,7 @@ var player_info_cache: Dictionary = {}
 var player_info_cache_token := ""
 var package_preview_cache: Dictionary = {}
 var package_preview_cache_token := ""
+var achievement_medallion_cache: Dictionary = {}
 var shop_item_ids_cache: Array[String] = []
 var shop_item_index_cache: Dictionary = {}
 var action_dock_status_label: Label = null
@@ -3181,10 +3187,10 @@ func sync_guofeng_button_slice(plate_id: int) -> void:
 		return
 	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 	if edges != null:
-		edges.size = plate.size / 0.125
+		edges.size = plate.size / edges.scale
 
 
-func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool) -> void:
+func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, source_margin: int = 96, bitmap_scale: float = 0.125) -> void:
 	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 	if not preserve_edges:
 		if edges != null:
@@ -3197,9 +3203,9 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool) ->
 		edges = NinePatchRect.new()
 		edges.name = "AuthoredBitmapEdges"
 		edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		edges.scale = Vector2(0.125, 0.125)
+		edges.scale = Vector2(bitmap_scale, bitmap_scale)
 		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-			edges.set_patch_margin(side, 96)
+			edges.set_patch_margin(side, source_margin)
 		plate.add_child(edges)
 		plate.resized.connect(Callable(self, "sync_guofeng_button_slice").bind(plate.get_instance_id()))
 	edges.texture = source
@@ -4901,12 +4907,12 @@ func claim_daily_login_reward() -> Dictionary:
 		inventory["double_coins"] = int(inventory.get("double_coins", 0)) + 1
 		save_inventory()
 		result["item_id"] = "double_coins"
-		result["detail"] = "双倍金币卡 ×1"
+		result["detail"] = "双倍铜钱卡 ×1"
 	else:
 		currency["coins"] = int(currency.get("coins", 0)) + 100
 		save_currency()
 		result["coins"] = 100
-		result["detail"] = "金币 +100"
+		result["detail"] = "铜钱 +100"
 	login_reward_claimed_date = today
 	save_login_state()
 	return result
@@ -5184,7 +5190,27 @@ func save_economy_state() -> void:
 	config.set_value("inventory", "items", inventory)
 	config.set_value("currency", "coins", currency.get("coins", 0))
 	config.set_value("currency", "gems", currency.get("gems", 0))
-	economy_file_loaded = config.save(ECONOMY_PATH) == OK
+	var pending_path := ECONOMY_PATH + ".pending"
+	var saved := config.save(pending_path)
+	if saved == OK:
+		saved = DirAccess.rename_absolute(ProjectSettings.globalize_path(pending_path), ProjectSettings.globalize_path(ECONOMY_PATH))
+	if saved != OK and FileAccess.file_exists(pending_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(pending_path))
+	economy_file_loaded = saved == OK
+
+# Persist both balances in one write; roll back the in-memory transaction if
+# storage fails so the UI never reports a reward that cannot be restored.
+func exchange_coins_for_gems() -> bool:
+	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
+		return false
+	var before := currency.duplicate(true)
+	currency["coins"] = int(currency.get("coins", 0)) - SHOP_EXCHANGE_COINS
+	currency["gems"] = int(currency.get("gems", 0)) + SHOP_EXCHANGE_GEMS
+	save_economy_state()
+	if not economy_file_loaded:
+		currency = before
+		return false
+	return true
 
 func can_afford_gems(amount: int) -> bool:
 	return amount > 0 and int(currency.get("gems", 0)) >= amount
@@ -5245,7 +5271,7 @@ func grant_round_coins(won: bool, score: int) -> int:
 	# Inventory consumption and currency reward are one economy transaction;
 	# persist both sections together so a completed hand performs one write.
 	save_economy_state()
-	call("show_toast", "本局奖励：+%d金币%s" % [reward, "（双倍卡已消耗）" if doubled else ""], 2200)
+	call("show_toast", "本局奖励：+%d铜钱%s" % [reward, "（双倍卡已消耗）" if doubled else ""], 2200)
 	return reward
 
 func offline_progress_state_payload() -> Dictionary:
