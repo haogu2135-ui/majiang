@@ -67,12 +67,13 @@ func run() -> void:
 	check(setting.text == "关闭" and str(setting.get_meta("setting_state", "")) == "on", "enabled setting exposes disable action with actual state")
 	setting.free()
 	scene.tutorial_step = scene.TUTORIAL_STEP_COMPLETE
+	# A resumed round can belong to another seat. Deal a fresh human-dealer
+	# hand so the swap fixture uses a real current draw and its instance serial.
+	scene.reset_offline_progress()
 	scene.start_offline(true)
 	scene.cancel_offline_ai_run()
 	scene.set_process(false)
-	scene.current_seat = 0
-	scene.offline_phase = "await_discard"
-	scene.offline_turn_needs_draw = false
+	check(scene.current_seat == 0 and scene.offline_phase == "await_discard" and int(scene.offline_self_draw_ready.get("seat", -1)) == 0, "inventory fixture starts on the human dealer's actual draw")
 	scene.inventory = {"swap_card": 2, "peek_card": 1, "lucky_charm": 1, "double_coins": 0}
 	scene.save_economy_state()
 	var ledger_before: Dictionary = scene.offline_tile_ledger_report()
