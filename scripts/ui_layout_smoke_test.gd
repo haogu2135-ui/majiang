@@ -552,10 +552,11 @@ func check_ui_round_711_740(scene, viewport_size: Vector2) -> void:
 		check(bool(reset_status.get_meta("status_visual_fit", false)) and not reset_status.text.contains("..."), "settings reset consequence status keeps a fitted visible summary at %s" % viewport_size)
 	var stats_dashboard := scene.find_child("StatsDashboardArt", true, false) as Control
 	if stats_dashboard != null:
-		check(stats_dashboard.get_meta("stats_trend_unit_policy", "") == "state_not_generic_value", "stats trend uses a semantic state unit at %s" % viewport_size)
+		check(stats_dashboard.get_meta("stats_trend_unit_policy", "") == "numeric_units_joined_to_value", "stats summary joins each numeric value to its semantic unit at %s" % viewport_size)
 	var trend_unit := scene.find_child("StatsSummaryUnit_winrate", true, false) as Label
 	if trend_unit != null:
-		check(trend_unit.text == "状态", "stats trend unit is visible as 状态 at %s" % viewport_size)
+		var rate := scene.find_child("StatsSummaryValue_winrate", true, false) as Label
+		check(trend_unit.text == "%" and not trend_unit.visible and rate != null and rate.text.ends_with("%"), "stats win rate presents its percent unit once beside the value at %s" % viewport_size)
 	var shop_position := scene.find_child("ShopItemsScrollPosition", true, false) as Label
 	if shop_position != null:
 		check(str(shop_position.get_meta("shop_restore_status_owner", "")) == "ShopItemsScrollPosition", "shop range status owns scroll restoration feedback at %s" % viewport_size)

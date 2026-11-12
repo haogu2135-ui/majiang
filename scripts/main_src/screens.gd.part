@@ -1311,13 +1311,13 @@ func _show_online_lobby_impl() -> void:
 	var panel := make_guofeng_secondary_page("OnlineLobbyLowFrequencyPagePlate", "Lobby", online_lobby_viewport_size)
 
 	# 标题区域
-	var title = make_heading(panel, "联机大厅", commercial_ui_font_size(32, 6), Color(0.10, 0.22, 0.16), true)
+	var title = make_heading(panel, "好友房", commercial_ui_font_size(32, 6), Color(0.10, 0.22, 0.16), true)
 	title.name = "OnlineLobbyTitle"
 	apply_rect(title, rect_full(0.04, 0.0, 0.58, 0.0))
 	title.offset_bottom = title.get_combined_minimum_size().y
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
-	var subtitle = make_label(panel, "创建房间，或输入房间号与好友同桌。", commercial_ui_font_size(15, 2), Color(0.11, 0.23, 0.18), false)
+	var subtitle = make_label(panel, "本机 / 局域网 · 自建服务器", commercial_ui_font_size(15, 2), Color(0.11, 0.23, 0.18), false)
 	style_guofeng_label(subtitle)
 	subtitle.name = "OnlineLobbySubtitle"
 	apply_rect(subtitle, rect_full(0.04, 0.0, 0.58, 0.0))
@@ -1431,6 +1431,15 @@ func _show_online_lobby_impl() -> void:
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(form_title)
+	var connection_help := make_small_button("连接帮助", Color.WHITE, func() -> void:
+		open_toast_detail("本模式需要先运行兼容的麻将服务器。\n同一 Wi-Fi 下，请房主提供服务器所在电脑的局域网地址，再在下方填写并连接。连接成功后，房主创建房间，将房间号告诉好友；好友连接同一服务器后输入房间号加入。\n127.0.0.1 只连接本机：手机不能用它连接另一台电脑。端口固定为23333。\n当前未提供公共大厅服务；没有服务器地址时可返回首页游玩单机。", "本机与局域网连接")
+	)
+	connection_help.name = "OnlineLobbyConnectionHelpButton"
+	connection_help.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
+	form_panel.add_child(connection_help)
+	apply_rect(connection_help, rect_full(0.54, 0.0, 0.94, 0.115))
+	style_guofeng_secondary_action(connection_help)
+	set_ui_full_text(connection_help, "查看本机、局域网服务器地址和好友入房步骤", "连接帮助")
 	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.668))
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
@@ -2484,9 +2493,10 @@ func _show_rules_screen_impl() -> void:
 		wall_rule_text,
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、碰杠来组合手牌；" + ("吃牌" if rule_allows_chi() else "本档案禁吃"),
-		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
+		"可自摸，也可点炮胡牌",
 		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
 		"点炮多人可胡时保留玩家窗口，最终单家结算",
+		"过水：放弃和牌后，整组听口摸前不可再荣和",
 		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
 		"食替：吃/碰后本拍不得立刻打出刚副露相关张",
 	], 0)

@@ -82,6 +82,15 @@ func check_achievement_range_inputs(scene: Node, output: String) -> void:
 	check(int(state.last) - int(state.first) + 1 == state.readable_title_rows.size() and int(state.last) < scene.achievements.size(), "resize invalidates the previous title geometry without claiming all items are visible")
 	root.size = original_size
 	await settle(0.10)
+	var next_target := scene.find_child("AchievementsNextTargetButton", true, false) as Button
+	check(next_target != null, "an incomplete gallery exposes a real next target")
+	if next_target != null:
+		await activate_button(next_target, "key")
+		var key := str(next_target.get_meta("achievement_target_key", ""))
+		var target_row := scene.find_child("AchievementRow_" + key, true, false) as Control
+		var target_focus := target_row.find_child("AchievementRowFocusTarget", true, false) as Button if target_row != null else null
+		check(target_focus != null and target_focus.has_focus() and target_row.get_global_rect().intersects(scroll.get_global_rect()), "native next-target activation focuses and reveals its actual locked row")
+		await save_reading_capture(scene, output, "achievements_next_target", achievement_range_state(scene))
 
 
 func check_secondary_stats(scene: Node, output: String) -> void:
@@ -93,6 +102,9 @@ func check_secondary_stats(scene: Node, output: String) -> void:
 	check(scene.find_child("StatsSummaryNarrativeBody", true, false) == null, "statistics shows its trend once")
 	var score := scene.find_child("StatsRowValueLabel_累计净分", true, false) as Label
 	check(score != null and score.get_meta("ui_full_text", "").contains("8800"), "statistics retains the complete negative score")
+	for spec in [["winrate", "33.3%"], ["games", "3局"], ["best", "-8800分"]]:
+		var value := scene.find_child("StatsSummaryValue_" + str(spec[0]), true, false) as Label
+		check(value != null and value.text == str(spec[1]) and label_text_width(value, value.text) <= value.size.x + 1.0, "statistics presents complete %s value and unit together" % spec[0])
 	await save_reading_capture(scene, output, "stats_overview", {"score": score.text, "summary": (scene.find_child("StatsSummaryValue_best", true, false) as Label).text})
 	(scene.find_child("StatsRuleFilterButton", true, false) as Button).pressed.emit()
 	await settle(0.20)
@@ -176,6 +188,16 @@ func check_secondary_lobby(scene: Node, output: String) -> void:
 	scene.online_name_edit.text = "云桌道友"
 	scene.online_name_edit.text_changed.emit(scene.online_name_edit.text)
 	await save_reading_capture(scene, output, "lobby_initial", lobby_state(scene))
+	var help := scene.find_child("OnlineLobbyConnectionHelpButton", true, false) as Button
+	check(help != null and help.size.x >= 44 and help.size.y >= 44, "local-network connection help has a practical native action")
+	if help != null:
+		await activate_button(help, "touch")
+		var help_text := scene.toast_detail_panel.find_child("ToastDetailText", true, false) as RichTextLabel if scene.toast_detail_panel != null else null
+		check(help_text != null and help_text.text.contains("127.0.0.1") and help_text.text.contains("同一 Wi-Fi") and help_text.text.contains("公共大厅"), "native help explains local addresses and the supported room mode")
+		await save_reading_capture(scene, output, "lobby_connection_help", lobby_state(scene))
+		await send_key(KEY_ESCAPE, 0)
+		await settle()
+		check(scene.toast_detail_panel == null and help.has_focus() and scene.tcp_status == StreamPeerTCP.STATUS_NONE, "closing help restores focus without attempting a connection")
 	scene.online_feedback = "连接已断开，请重新连接。"
 	scene.refresh_online_lobby_state()
 	scene.refresh_online_feedback_art()

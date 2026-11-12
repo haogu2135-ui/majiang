@@ -76,7 +76,9 @@ func check_settlement_paper(scene: Node) -> void:
 	var yaku_scroll := scene.find_child("WinDetailYakuScroll", true, false) as ScrollContainer
 	var body_scroll := scene.find_child("RoundSummaryBodyScroll", true, false) as ScrollContainer
 	var body := scene.find_child("RoundSummaryBody", true, false) as Label
-	check(body != null and body.text.contains(scene.round_summary) and body_scroll.size.y >= float(body.get_line_height()) * 2.0 + float(body.get_theme_constant("line_spacing")), "the complete settlement source remains scrollable with two reading lines")
+	check(body != null and str(body.get_meta("ui_full_text", "")).contains(scene.round_summary) and body.text.contains(scene.round_summary_body_text()) and body_scroll.size.y >= float(body.get_line_height()) * 2.0 + float(body.get_theme_constant("line_spacing")), "settlement keeps the complete source and two scrollable reading lines for consequences")
+	if basis != null and yaku_scroll != null and yaku_scroll.get_v_scroll_bar().max_value - yaku_scroll.get_v_scroll_bar().page <= 0.5:
+		check(not basis.text.contains("已到末尾") and not basis.text.contains("可滚动"), "fitting settlement reasons do not show scroll diagnostics")
 	if winner != null and score != null and yaku_scroll != null:
 		check(winner.get_global_rect().end.y + 3.5 <= score.get_global_rect().position.y and score.get_global_rect().end.y + 3.5 <= yaku_scroll.get_global_rect().position.y, "winner score and reasons own separate measured lanes")
 		check(yaku_scroll.get_global_rect().end.y < body_scroll.get_global_rect().position.y, "all reasons clear the independent full settlement source")

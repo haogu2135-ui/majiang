@@ -15051,7 +15051,7 @@ func register_ui_round_711_740(root: Control) -> void:
 		settings_panel.set_meta("settings_rule_status_policy", "visible_current_and_next_context")
 	var stats_dashboard := find_control.call("StatsDashboardArt") as Control
 	if stats_dashboard != null:
-		stats_dashboard.set_meta("stats_trend_unit_policy", "state_not_generic_value")
+		stats_dashboard.set_meta("stats_trend_unit_policy", "numeric_units_joined_to_value")
 		stats_dashboard.set_meta("stats_summary_measurement_policy", "value_unit_caption_each_fit_to_slot")
 	var stats_range := find_control.call("StatsRowsScrollStatus") as Control
 	if stats_range != null:
@@ -27305,6 +27305,19 @@ func round_summary_compact_body_text() -> String:
 	return result
 
 
+func round_summary_body_text() -> String:
+	# The header already presents winner, winning tile, fan, base and reasons.
+	# Remove only that generated first sentence; keep every later consequence.
+	if int(last_win_score.get("fan", 0)) <= 0 or players.is_empty():
+		return round_summary
+	var end := round_summary.find("。")
+	var winner := clampi(int(last_win_score.get("winner", offline_last_winner)), 0, players.size() - 1)
+	var first := round_summary.substr(0, end) if end >= 0 else ""
+	if first.begins_with(str(players[winner].get("name", "玩家"))) and first.contains("%d番" % int(last_win_score.get("fan", 0))) and first.contains("%d分" % int(last_win_score.get("points", 0))):
+		return round_summary.substr(end + 1).strip_edges()
+	return round_summary
+
+
 func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	# These rectangles use local pixels (ordinary Rect2 sizes), not anchor endpoints.
 	var title_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(26)))
@@ -27459,7 +27472,7 @@ func draw_round_summary(parent: Control) -> void:
 		place_round_summary_control(result, result_rect)
 		result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		layout["body"] = Rect2(result_rect.position.x, result_rect.end.y + 12.0, result_rect.size.x, (layout["status"] as Rect2).position.y - result_rect.end.y - 16.0)
-	var lines: Array[String] = [round_summary]
+	var lines: Array[String] = [round_summary_body_text()]
 	var package_lines := active_package_lines()
 	if not package_lines.is_empty():
 		lines.append_array(package_lines)
@@ -27475,6 +27488,7 @@ func draw_round_summary(parent: Control) -> void:
 	body_scroll.size = body_scroll.size.floor()
 	var body := make_label(body_scroll, full_summary_text, 14, Color.WHITE, false)
 	body.name = "RoundSummaryBody"
+	set_ui_full_text(body, full_summary_text if full_summary_text == round_summary else round_summary + "\n" + "\n".join(package_lines), "完整结算记录")
 	style_guofeng_label(body)
 	body.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	body.set_meta("settlement_layer", "result_body")
@@ -29552,8 +29566,8 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	chip_plate.self_modulate = Color(0.90, 0.86, 0.76)
 	chip.add_child(chip_plate)
 	var display_value := value_text
-	var unit_text := "状态"
-	for suffix in ["番/局", "分/局", "%"]:
+	var unit_text := ""
+	for suffix in ["番/局", "分/局", "%", "局", "分"]:
 		if display_value.ends_with(suffix):
 			display_value = display_value.trim_suffix(suffix)
 			unit_text = suffix
@@ -29567,9 +29581,9 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	apply_rect(caption, rect_full(0.08, 0.10, 0.92, 0.38))
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(caption)
-	var value := make_label(chip, display_value, 22, Color.WHITE, true)
+	var value := make_label(chip, value_text, 22, Color.WHITE, true)
 	value.name = "StatsSummaryValue_%s" % chip_id
-	apply_rect(value, rect_full(0.08, 0.42, 0.68, 0.90))
+	apply_rect(value, rect_full(0.08, 0.42, 0.94, 0.90))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(value)
 	var unit := make_label(chip, unit_text, 12, Color.WHITE, false)
@@ -29577,6 +29591,8 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	apply_rect(unit, rect_full(0.70, 0.50, 0.94, 0.90))
 	unit.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(unit)
+	# Keep semantic unit metadata for readers; the visible value carries it once.
+	unit.hide()
 	return chip
 
 
@@ -31540,7 +31556,10 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		if not is_instance_valid(status) or not is_instance_valid(yaku_scroll):
 			return
 		var bar := yaku_scroll.get_v_scroll_bar()
-		status.text = "%s · %s" % [score_basis, "已到末尾" if bar.value >= bar.max_value - bar.page - 0.5 else "可滚动"]
+		var overflow := bar.max_value - bar.page > 0.5
+		status.text = score_basis
+		if overflow:
+			status.text += " · " + ("已到末尾" if bar.value >= bar.max_value - bar.page - 0.5 else "可滚动")
 	yaku_scroll.get_v_scroll_bar().value_changed.connect(sync_yaku)
 	yaku_scroll.get_v_scroll_bar().changed.connect(sync_yaku)
 	var limit_name := str(score_data.get("limit_name", ""))
@@ -36147,13 +36166,13 @@ func _show_online_lobby_impl() -> void:
 	var panel := make_guofeng_secondary_page("OnlineLobbyLowFrequencyPagePlate", "Lobby", online_lobby_viewport_size)
 
 	# 标题区域
-	var title = make_heading(panel, "联机大厅", commercial_ui_font_size(32, 6), Color(0.10, 0.22, 0.16), true)
+	var title = make_heading(panel, "好友房", commercial_ui_font_size(32, 6), Color(0.10, 0.22, 0.16), true)
 	title.name = "OnlineLobbyTitle"
 	apply_rect(title, rect_full(0.04, 0.0, 0.58, 0.0))
 	title.offset_bottom = title.get_combined_minimum_size().y
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
-	var subtitle = make_label(panel, "创建房间，或输入房间号与好友同桌。", commercial_ui_font_size(15, 2), Color(0.11, 0.23, 0.18), false)
+	var subtitle = make_label(panel, "本机 / 局域网 · 自建服务器", commercial_ui_font_size(15, 2), Color(0.11, 0.23, 0.18), false)
 	style_guofeng_label(subtitle)
 	subtitle.name = "OnlineLobbySubtitle"
 	apply_rect(subtitle, rect_full(0.04, 0.0, 0.58, 0.0))
@@ -36267,6 +36286,15 @@ func _show_online_lobby_impl() -> void:
 	apply_rect(form_title, rect_full(0.05, 0.020, 0.50, 0.095))
 	form_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(form_title)
+	var connection_help := make_small_button("连接帮助", Color.WHITE, func() -> void:
+		open_toast_detail("本模式需要先运行兼容的麻将服务器。\n同一 Wi-Fi 下，请房主提供服务器所在电脑的局域网地址，再在下方填写并连接。连接成功后，房主创建房间，将房间号告诉好友；好友连接同一服务器后输入房间号加入。\n127.0.0.1 只连接本机：手机不能用它连接另一台电脑。端口固定为23333。\n当前未提供公共大厅服务；没有服务器地址时可返回首页游玩单机。", "本机与局域网连接")
+	)
+	connection_help.name = "OnlineLobbyConnectionHelpButton"
+	connection_help.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
+	form_panel.add_child(connection_help)
+	apply_rect(connection_help, rect_full(0.54, 0.0, 0.94, 0.115))
+	style_guofeng_secondary_action(connection_help)
+	set_ui_full_text(connection_help, "查看本机、局域网服务器地址和好友入房步骤", "连接帮助")
 	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.668))
 	input_group_backplate.name = "OnlineLobbyInputGroupBackplate"
 	form_panel.add_child(input_group_backplate)
@@ -37320,9 +37348,10 @@ func _show_rules_screen_impl() -> void:
 		wall_rule_text,
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、碰杠来组合手牌；" + ("吃牌" if rule_allows_chi() else "本档案禁吃"),
-		"可自摸，也可点炮胡牌；过水后整组听口摸前不可再荣和",
+		"可自摸，也可点炮胡牌",
 		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
 		"点炮多人可胡时保留玩家窗口，最终单家结算",
+		"过水：放弃和牌后，整组听口摸前不可再荣和",
 		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
 		"食替：吃/碰后本拍不得立刻打出刚副露相关张",
 	], 0)
