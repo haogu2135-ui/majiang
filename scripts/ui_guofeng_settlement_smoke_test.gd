@@ -165,6 +165,9 @@ func check_normal_settlements(scene: Node, output_dir: String) -> void:
 		var points := int(scene.last_win_score.get("points", 0))
 		var expected_local := points * 3 if winner == 0 else (-points * 3 if payer == 0 else 0)
 		check(points > 0 and scene.round_summary_score_delta(0) == expected_local, "normal %s independently verifies the actual local payment" % result)
+		var displayed_body := scene.find_child("RoundSummaryBody", true, false) as Label
+		var repeated_reasons := "、".join(scene.last_win_score.get("reasons", []))
+		check(displayed_body != null and (repeated_reasons == "" or not displayed_body.text.contains(repeated_reasons)) and displayed_body.text.contains("庄家"), "normal %s keeps dealer consequences without repeating structured reasons" % result)
 		check_settlement_paper(scene)
 		await save_reading_capture(scene, output_dir, "normal_" + result, settlement_state(scene))
 		scene.offline_sim_quiet = false

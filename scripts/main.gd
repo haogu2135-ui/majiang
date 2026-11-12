@@ -27314,7 +27314,11 @@ func round_summary_body_text() -> String:
 	var winner := clampi(int(last_win_score.get("winner", offline_last_winner)), 0, players.size() - 1)
 	var first := round_summary.substr(0, end) if end >= 0 else ""
 	if first.begins_with(str(players[winner].get("name", "玩家"))) and first.contains("%d番" % int(last_win_score.get("fan", 0))) and first.contains("%d分" % int(last_win_score.get("points", 0))):
-		return round_summary.substr(end + 1).strip_edges()
+		var consequence := round_summary.substr(end + 1).strip_edges()
+		var reasons := "、".join(last_win_score.get("reasons", []))
+		if reasons != "" and consequence.begins_with(reasons):
+			consequence = consequence.trim_prefix(reasons).strip_edges()
+		return consequence
 	return round_summary
 
 
