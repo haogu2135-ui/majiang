@@ -1304,7 +1304,10 @@ func run() -> void:
 	var fade_art = scene.find_child("FadeTransitionArt", true, false)
 	if fade_art != null:
 		dispose_node(fade_art)
-	scene.start_offline(false)
+	# The preceding transition probes intentionally leave the motion layer active;
+	# enter the table synchronously so this structural check inspects the table,
+	# rather than being rejected as a second transition request.
+	scene.start_offline(true)
 	check(scene.find_child("OfflineTable3DCastShadow", true, false) != null and scene.find_child("OfflineTable3DOuterShell", true, false) != null and scene.find_child("OfflineTable3DInnerSurface", true, false) != null, "3D offline table shell exists")
 	check(scene.find_child("OfflineTable3DFloorShadow", true, false) != null and scene.find_child("OfflineTable3DFrontApron", true, false) != null and scene.find_child("BattleTablePerspectiveDepth", true, false) != null, "3D offline table renders floor shadow front apron and perspective depth")
 	check(true, "battle uses single commercial table stage without stacked GPT full-table overlays")
@@ -1322,8 +1325,10 @@ func run() -> void:
 	check(seat_shadow == null and seat_rear == null and seat_jade == null and seat_right_bevel == null and seat_jade_wash == null, "seat HUD retires the multi-layer shell and uses one paper surface")
 	var action_rear = scene.find_child("ActionDock3DRearShell", true, false)
 	var action_jade = scene.find_child("ActionDock3DJadeTrack", true, false)
-	check(action_rear == null and action_jade == null and scene.find_child("ActionDock3DFrontApron", true, false) == null and scene.find_child("ActionButtonDock", true, false).get_meta("guofeng_surface_key", "") == "menu_card_readable_gpt", "action dock uses one authored paper surface rather than stacked shell and track")
-	check_required(scene.find_child("HandTray3DCastShadow", true, false) == null and scene.find_child("HandTray3DFrontLip", true, false) == null and scene.find_child("HandTray3DSideBevel", true, false) == null and scene.find_child("HandTray", true, false).get_meta("guofeng_surface_key", "") == "hand_tray_jiangnan_gpt" and count_nodes_with_name_prefix(scene, "HandTile_") > 0, "hand tray uses one authored Jiangnan surface and keeps every 2D hand tile")
+	var action_dock := scene.find_child("ActionButtonDock", true, false) as Control
+	check(action_rear == null and action_jade == null and scene.find_child("ActionDock3DFrontApron", true, false) == null and action_dock != null and str(action_dock.get_meta("guofeng_surface_key", "")) == "menu_card_readable_gpt", "action dock uses one authored paper surface rather than stacked shell and track")
+	var hand_tray := scene.find_child("HandTray", true, false) as Control
+	check_required(scene.find_child("HandTray3DCastShadow", true, false) == null and scene.find_child("HandTray3DFrontLip", true, false) == null and scene.find_child("HandTray3DSideBevel", true, false) == null and hand_tray != null and str(hand_tray.get_meta("guofeng_surface_key", "")) == "hand_tray_jiangnan_gpt" and count_nodes_with_name_prefix(scene, "HandTile_") > 0, "hand tray uses one authored Jiangnan surface and keeps every 2D hand tile")
 	var offline_commercial_stage = scene.find_child("OfflineCommercial3DStage", true, false) as CanvasItem
 	check(offline_commercial_stage == null, "battle does not mount a 3D tile stage")
 	var menu_probe = scene.find_child("MenuCommercial3DStage", true, false)

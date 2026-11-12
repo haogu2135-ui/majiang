@@ -10289,7 +10289,9 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	mark_ui_optimization(label, "F-086")
 
 	var numeric_value := stat_row_numeric_value(value_text)
-	var display_value_text := ("负向 " + value_text) if numeric_value < 0.0 else value_text
+	# The signed value already communicates direction. Keep the semantic detail in
+	# the accessible description instead of spending scarce value-column width.
+	var display_value_text := value_text
 	var value = make_label(row, display_value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	style_guofeng_label(value)
 	value.name = "StatsRowValueLabel_%s" % label_text
