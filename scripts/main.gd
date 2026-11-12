@@ -50338,6 +50338,10 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			# to add their own minimum-width slack to the visible lane.
 			pending_tail_lane.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 			pending_tail_lane.custom_minimum_size.x = action_bar_pixel_width()
+			for group in pending_tail_lane.get_children():
+				if group is Control:
+					# Empty network/voice groups must not leave trailing HBox gaps.
+					(group as Control).visible = group.get_child_count() > 0
 	if compact_claim_mode and layout_viewport_snapshot.y <= 560.0:
 		# Keep the response stack aligned with the shell. The shell already reserves
 		# its hand-tray gutter, so an extra negative offset would create a false
