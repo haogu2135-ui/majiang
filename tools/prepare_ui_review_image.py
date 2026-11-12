@@ -32,7 +32,15 @@ def main() -> None:
 
     original = source.read_bytes()
     with Image.open(io.BytesIO(original)) as screenshot:
-        rgb = ImageOps.exif_transpose(screenshot).convert("RGB")
+        oriented = ImageOps.exif_transpose(screenshot)
+        # Review copies must show transparent bitmap edges as they composite,
+        # rather than exposing arbitrary RGB hidden beneath nearly zero alpha.
+        if "A" in oriented.getbands() or "transparency" in oriented.info:
+            rgba = oriented.convert("RGBA")
+            backdrop = Image.new("RGBA", rgba.size, (242, 237, 222, 255))
+            rgb = Image.alpha_composite(backdrop, rgba).convert("RGB")
+        else:
+            rgb = oriented.convert("RGB")
         original_size = rgb.size
         rgb.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
         for quality in (85, 75, 65, 55):
