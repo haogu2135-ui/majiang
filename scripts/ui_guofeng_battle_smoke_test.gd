@@ -272,6 +272,16 @@ func check_guofeng_battle_inputs(scene: Node, output_dir: String) -> void:
 	var grid := scene.find_child("PendingClaimResponseGrid", true, false) as Control
 	var peng := first_button_with_text(grid, scene.claim_label("peng"))
 	check(peng != null and not peng.disabled, "pending battle exposes the real peng action")
+	var pass_button: Button = null
+	for button in scene.action_bar_buttons():
+		if bool(button.get_meta("pending_tail", false)):
+			pass_button = button
+			break
+	var tail := scene.find_child("PendingClaimSecondaryLane", true, false) as Control
+	check(pass_button != null and pass_button.size.x >= 44.0 and pass_button.size.y >= 44.0, "secondary pass retains a complete native touch target")
+	if peng != null and pass_button != null and tail != null:
+		check(peng.size.x >= pass_button.size.x * 2.0 and peng.has_focus(), "a single primary claim owns the wider row and default focus ahead of pass")
+		check(absf(pass_button.get_global_rect().end.x - tail.get_global_rect().end.x) <= 2.0, "secondary pass stays at the stable right edge of its lane")
 	if peng != null:
 		await activate_button(peng, "touch")
 		await settle()

@@ -49881,7 +49881,9 @@ func pending_claim_response_button_width(count: int, separation: int, viewport_s
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var available_width := resolved_content_size.x * maxf(0.001, base_rect.size.x - base_rect.position.x)
 	var width := floorf((available_width - float(maxi(0, columns - 1) * separation)) / float(columns))
-	width = minf(action_button_max_width_for_viewport(viewport_snapshot), width)
+	# A single claim owns the primary row; only multi-choice grids need a cap.
+	if pending_claim_response_count(count) > 1:
+		width = minf(action_button_max_width_for_viewport(viewport_snapshot), width)
 	return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
 
 func pending_claim_action_content_height(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
@@ -50365,10 +50367,12 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			button_width = response_width
 			button_font_size = action_button_font_size(response_width)
 		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
-			# Pass/cancel/voice share one full-width lane below the response choices.
-			button_width = (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
+			# Secondary actions keep practical targets at the right edge instead of
+			# turning a lone pass into a larger CTA than the claim above it.
+			var tail_budget := (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
+			button_width = minf(action_button_max_width_for_viewport(layout_viewport_snapshot), tail_budget)
 			button_font_size = 15
-			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.size_flags_horizontal = Control.SIZE_SHRINK_END
 			button.set_meta("fixed_action_width", true)
 		if ended_action_mode and btn_index < ended_widths.size():
 			button_width = float(ended_widths[btn_index])
