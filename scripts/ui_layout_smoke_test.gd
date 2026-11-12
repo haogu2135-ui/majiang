@@ -5925,6 +5925,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 			"ShopItemBuyButton_swap_card", "ShopItemBuyButton_lucky_charm",
 			"ShopItemBuyButton_peek_card", "ShopItemBuyButton_double_coins",
 		]
+	shop_focus_order.append("ShopGetGemsButton")
 	check_focus_route(scene, shop_focus_order, "ShopBackButton", "shop", viewport_size)
 	var cabinet_front = scene.find_child("ShopCabinetFrontPanel", true, false) as Control
 	var cabinet_rear = scene.find_child("ShopCabinet3DRearShell", true, false) as Control
