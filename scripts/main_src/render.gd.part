@@ -1208,6 +1208,8 @@ func draw_actions(parent: Control) -> void:
 			restart_button.set_meta("restart_action", "request")
 			restart_button.set_meta("action_priority", "secondary")
 			set_ui_full_text(restart_button, restart_button.tooltip_text, "请求重开当前牌局")
+			restart_button.hide()
+			restart_button.set_meta("overflow_hidden", true)
 			action_bar.add_child(restart_button)
 		if action_ai_assist_enabled:
 			action_bar.add_child(make_action_button("提示", Color(0.25, 0.58, 0.48), func() -> void:
@@ -11931,6 +11933,46 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 	return art
 
 
+func open_battle_tools_menu() -> void:
+	if mode not in ["offline", "online_game"] or root_layer == null:
+		return
+	var menu := PopupMenu.new()
+	menu.name = "BattleToolsMenu"
+	menu.add_theme_font_override("font", ui_cjk_font())
+	var font_size := accessibility_font_size(16)
+	menu.add_theme_font_size_override("font_size", font_size)
+	menu.add_theme_constant_override("v_separation", maxi(8, ceili(44.0 - ui_cjk_font().get_height(font_size))))
+	var paper := StyleBoxTexture.new()
+	paper.texture = optional_gpt_illustration_texture("menu_card_readable_gpt")
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		paper.set_content_margin(side, 12.0)
+	menu.add_theme_stylebox_override("panel", paper)
+	menu.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
+	if mode == "offline":
+		menu.add_item("重开牌局（需确认）", 0)
+		menu.add_separator("单机行囊")
+		for index in range(3):
+			var item_id: String = ["swap_card", "peek_card", "lucky_charm"][index]
+			menu.add_item("%s ×%d" % [item_display_name(item_id), get_item_count(item_id)], 10 + index)
+			menu.set_item_tooltip(menu.item_count - 1, str(ITEM_TYPES[item_id].get("desc", "")))
+			menu.set_item_disabled(menu.item_count - 1, get_item_count(item_id) <= 0 or not can_self_discard() or has_pending_danger_discard())
+		menu.add_item("双倍铜钱卡 ×%d · 结算自动使用" % get_item_count("double_coins"), 13)
+		menu.set_item_disabled(menu.item_count - 1, true)
+		menu.add_separator()
+	menu.add_item("检查游戏更新", 1)
+	menu.id_pressed.connect(func(id: int) -> void:
+		if id == 0:
+			request_offline_restart()
+		elif id == 1:
+			on_update_primary_pressed()
+		elif id >= 10 and id <= 12:
+			use_offline_inventory_item(["swap_card", "peek_card", "lucky_charm"][id - 10])
+	)
+	menu.popup_hide.connect(menu.queue_free)
+	root_layer.add_child(menu)
+	menu.popup_centered(Vector2i(360, 0))
+
+
 func draw_game_top_hud(parent: Control) -> void:
 	var hud_viewport_snapshot := effective_viewport_size()
 	var hud_signature := battle_top_hud_identity_signature(hud_viewport_snapshot)
@@ -12170,14 +12212,14 @@ func draw_game_top_hud(parent: Control) -> void:
 	back.set_meta("focus_order", 2)
 	mark_ui_optimization(back, "F-253")
 
-	var update = make_top_hud_button("更新", Color(0.54, 0.36, 0.18), func() -> void:
-		on_update_primary_pressed()
+	var update = make_top_hud_button("更多", Color(0.54, 0.36, 0.18), func() -> void:
+		open_battle_tools_menu()
 	)
 	update.name = "TopHudUpdateButton"
 	hud.add_child(update)
 	apply_rect(update, TOP_HUD_UPDATE_BUTTON_RECT)
-	set_ui_full_text(update, "检查并查看当前版本更新状态", "检查更新")
-	update.set_meta("hud_action_role", "update")
+	set_ui_full_text(update, "打开牌桌工具、行囊与更新", "牌桌工具")
+	update.set_meta("hud_action_role", "tools")
 	update.set_meta("focus_order", 3)
 	mark_ui_optimization(update, "F-254")
 	refresh_top_hud_update_button(update)

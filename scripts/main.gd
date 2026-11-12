@@ -12257,6 +12257,52 @@ func human_action_choice_target_position(action: String) -> Vector2:
 			return rect_center_screen_position(seat_meld_rect(0))
 	return rect_center_screen_position(CENTER_PANEL_RECT)
 
+
+func use_offline_inventory_item(item_id: String) -> bool:
+	if mode != "offline" or not can_self_discard() or has_pending_danger_discard() or item_id not in ["swap_card", "peek_card", "lucky_charm"]:
+		show_toast("仅可在单机轮到自己出牌时使用行囊。", 2200)
+		return false
+	if item_id == "swap_card":
+		# Only the actual current draw is exchangeable. Claimed tiles and discard
+		# restrictions cannot be bypassed by an inventory action.
+		if int(offline_self_draw_ready.get("seat", -1)) != 0 or int(offline_last_draw.get("seat", -1)) != 0:
+			show_toast("换牌卡只能替换本拍刚摸到的牌。", 2200)
+			return false
+		var serial := int(offline_last_draw.get("serial", -1))
+		var instances: Array = players[0].get("hand_instance_serials", [])
+		var hand_index := instances.find(serial)
+		var wall_index := -1
+		for index in range(wall.size() - 1, -1, -1):
+			if not is_flower_tile(wall[index]):
+				wall_index = index
+				break
+		if hand_index < 0 or wall_index < 0:
+			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+			return false
+		if not use_item(item_id):
+			return false
+		var old_tile := str(players[0]["hand"][hand_index])
+		var new_tile := str(wall[wall_index])
+		wall[wall_index] = old_tile
+		players[0]["hand"][hand_index] = new_tile
+		offline_last_draw["tile"] = new_tile
+		offline_self_draw_ready["tile"] = new_tile
+		record_round_event("item_swap", {"seat": 0, "old_tile": old_tile, "new_tile": new_tile})
+		mark_offline_progress_dirty()
+		request_game_render()
+		show_toast("换牌完成：%s → %s" % [tile_label(old_tile), tile_label(new_tile)], 2400)
+		return true
+	if item_id == "peek_card":
+		var hand: Array = players[1].get("hand", []) if players.size() > 1 else []
+		if hand.is_empty() or not use_item(item_id):
+			return false
+		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(str(hand[0])), "偷看卡")
+		return true
+	if not use_item(item_id):
+		return false
+	open_toast_detail("竹影摇风，清和满席。愿你从容行牌，好运常伴。\n祈福签不改变摸牌、对手决策或胡牌胜率。", "幸运符 · 清和签")
+	return true
+
 func action_button_width_for_available(count: int, available_width: float, separation: int = -1, viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if count <= 0:
 		return action_button_max_width_for_viewport(viewport_snapshot)
@@ -13467,6 +13513,8 @@ func draw_actions(parent: Control) -> void:
 			restart_button.set_meta("restart_action", "request")
 			restart_button.set_meta("action_priority", "secondary")
 			set_ui_full_text(restart_button, restart_button.tooltip_text, "请求重开当前牌局")
+			restart_button.hide()
+			restart_button.set_meta("overflow_hidden", true)
 			action_bar.add_child(restart_button)
 		if action_ai_assist_enabled:
 			action_bar.add_child(make_action_button("提示", Color(0.25, 0.58, 0.48), func() -> void:
@@ -24190,6 +24238,46 @@ func draw_flying_tile_route_art(tile: String, from_pos: Vector2, to_pos: Vector2
 	return art
 
 
+func open_battle_tools_menu() -> void:
+	if mode not in ["offline", "online_game"] or root_layer == null:
+		return
+	var menu := PopupMenu.new()
+	menu.name = "BattleToolsMenu"
+	menu.add_theme_font_override("font", ui_cjk_font())
+	var font_size := accessibility_font_size(16)
+	menu.add_theme_font_size_override("font_size", font_size)
+	menu.add_theme_constant_override("v_separation", maxi(8, ceili(44.0 - ui_cjk_font().get_height(font_size))))
+	var paper := StyleBoxTexture.new()
+	paper.texture = optional_gpt_illustration_texture("menu_card_readable_gpt")
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		paper.set_content_margin(side, 12.0)
+	menu.add_theme_stylebox_override("panel", paper)
+	menu.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
+	if mode == "offline":
+		menu.add_item("重开牌局（需确认）", 0)
+		menu.add_separator("单机行囊")
+		for index in range(3):
+			var item_id: String = ["swap_card", "peek_card", "lucky_charm"][index]
+			menu.add_item("%s ×%d" % [item_display_name(item_id), get_item_count(item_id)], 10 + index)
+			menu.set_item_tooltip(menu.item_count - 1, str(ITEM_TYPES[item_id].get("desc", "")))
+			menu.set_item_disabled(menu.item_count - 1, get_item_count(item_id) <= 0 or not can_self_discard() or has_pending_danger_discard())
+		menu.add_item("双倍铜钱卡 ×%d · 结算自动使用" % get_item_count("double_coins"), 13)
+		menu.set_item_disabled(menu.item_count - 1, true)
+		menu.add_separator()
+	menu.add_item("检查游戏更新", 1)
+	menu.id_pressed.connect(func(id: int) -> void:
+		if id == 0:
+			request_offline_restart()
+		elif id == 1:
+			on_update_primary_pressed()
+		elif id >= 10 and id <= 12:
+			use_offline_inventory_item(["swap_card", "peek_card", "lucky_charm"][id - 10])
+	)
+	menu.popup_hide.connect(menu.queue_free)
+	root_layer.add_child(menu)
+	menu.popup_centered(Vector2i(360, 0))
+
+
 func draw_game_top_hud(parent: Control) -> void:
 	var hud_viewport_snapshot := effective_viewport_size()
 	var hud_signature := battle_top_hud_identity_signature(hud_viewport_snapshot)
@@ -24429,14 +24517,14 @@ func draw_game_top_hud(parent: Control) -> void:
 	back.set_meta("focus_order", 2)
 	mark_ui_optimization(back, "F-253")
 
-	var update = make_top_hud_button("更新", Color(0.54, 0.36, 0.18), func() -> void:
-		on_update_primary_pressed()
+	var update = make_top_hud_button("更多", Color(0.54, 0.36, 0.18), func() -> void:
+		open_battle_tools_menu()
 	)
 	update.name = "TopHudUpdateButton"
 	hud.add_child(update)
 	apply_rect(update, TOP_HUD_UPDATE_BUTTON_RECT)
-	set_ui_full_text(update, "检查并查看当前版本更新状态", "检查更新")
-	update.set_meta("hud_action_role", "update")
+	set_ui_full_text(update, "打开牌桌工具、行囊与更新", "牌桌工具")
+	update.set_meta("hud_action_role", "tools")
 	update.set_meta("focus_order", 3)
 	mark_ui_optimization(update, "F-254")
 	refresh_top_hud_update_button(update)
@@ -46697,8 +46785,13 @@ func use_item(item_id: String) -> bool:
 	if not ITEM_TYPES.has(item_id) or int(inventory.get(item_id, 0)) <= 0:
 		show_toast("道具不足：%s" % item_display_name(item_id), 1600)
 		return false
-	inventory[item_id] = int(inventory.get(item_id, 0)) - 1
+	var before := int(inventory.get(item_id, 0))
+	inventory[item_id] = before - 1
 	save_inventory()
+	if not economy_file_loaded:
+		inventory[item_id] = before
+		show_toast("未能保存道具使用，库存未扣除。", 2200)
+		return false
 	show_toast("使用道具：%s" % item_display_name(item_id), 1800)
 	return true
 
@@ -51032,43 +51125,38 @@ func refresh_top_hud_update_button(button: Button = null) -> void:
 	var state: String = str(update_state)
 	var label := "更新"
 	var detail := "检查游戏更新"
-	var blocked := false
 	match state:
 		"checking":
 			label = "检查中"
 			detail = "正在检查更新，请稍候"
-			blocked = true
 		"downloading":
 			var download_percent := 0 if update_total_bytes <= 0 else clampi(int(round(float(update_downloaded_bytes) * 100.0 / float(update_total_bytes))), 0, 100)
 			label = "下载 %d%%" % download_percent
 			detail = "升级包正在下载，请稍候"
-			blocked = true
 		"installing":
 			label = "安装中"
 			detail = "安装包正在处理，请稍候"
-			blocked = true
 		"ready":
 			label = "安装"
 			detail = "升级包已校验，打开系统安装"
 		"current":
 			label = "最新"
 			detail = "当前版本已是最新版本"
-			blocked = true
 		"error":
 			label = "重试"
 			detail = update_message if update_message.strip_edges() != "" else "更新失败，点击重试"
-	button.text = label
-	button.disabled = blocked
-	button.tooltip_text = detail
+	button.text = "更多"
+	button.disabled = false
+	button.tooltip_text = "牌桌工具、行囊与更新；" + detail
 	var char_label := button.find_child("TopHudButtonCharLabel", true, false) as Label
 	if char_label != null:
-		char_label.text = label.substr(0, 2)
+		char_label.text = "更多"
 	button.set_meta("update_state", state)
-	button.set_meta("accessible_name", "更新状态：" + label)
-	button.set_meta("ui_full_text", detail)
+	button.set_meta("accessible_name", "牌桌工具；更新状态：" + label)
+	button.set_meta("ui_full_text", button.tooltip_text)
 	button.set_meta("visible_state_summary", label)
 	mark_ui_optimization(button, "F-084")
-	button.modulate = Color(1.0, 1.0, 1.0, 0.70 if blocked else 1.0)
+	button.modulate = Color.WHITE
 
 func update_progress_text() -> String:
 	var viewport := effective_viewport_size()

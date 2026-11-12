@@ -548,10 +548,10 @@ const ONLINE_RECONNECT_MAX_DELAY_MSEC := 12000
 const ONLINE_VOICE_SILENCE_THRESHOLD := 0.018
 const ONLINE_LOG_OVERLAP_WINDOW := 16
 const ITEM_TYPES := {
-	"swap_card": {"name": "换牌卡", "desc": "重新摸一张牌", "icon": "🔄", "cost_gems": 5},
-	"peek_card": {"name": "偷看卡", "desc": "查看对手一张手牌", "icon": "👁", "cost_gems": 8},
-	"lucky_charm": {"name": "幸运符", "desc": "本局胡牌概率显示+10%", "icon": "🍀", "cost_gems": 10},
-	"double_coins": {"name": "双倍铜钱卡", "desc": "本局铜钱奖励翻倍", "icon": "💰", "cost_gems": 15},
+	"swap_card": {"name": "换牌卡", "desc": "单机替换本拍摸牌，换出牌放回牌墙", "icon": "🔄", "cost_gems": 5},
+	"peek_card": {"name": "偷看卡", "desc": "单机查看下家一张手牌", "icon": "👁", "cost_gems": 8},
+	"lucky_charm": {"name": "幸运符", "desc": "单机祈福签，不改变摸牌与胜率", "icon": "🍀", "cost_gems": 10},
+	"double_coins": {"name": "双倍铜钱卡", "desc": "下次结算自动消耗，铜钱奖励翻倍", "icon": "💰", "cost_gems": 15},
 }
 
 var tile_textures: Dictionary = {}

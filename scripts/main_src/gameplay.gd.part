@@ -5627,3 +5627,49 @@ func human_action_choice_target_position(action: String) -> Vector2:
 		"concealed_gang", "added_gang":
 			return rect_center_screen_position(seat_meld_rect(0))
 	return rect_center_screen_position(CENTER_PANEL_RECT)
+
+
+func use_offline_inventory_item(item_id: String) -> bool:
+	if mode != "offline" or not can_self_discard() or has_pending_danger_discard() or item_id not in ["swap_card", "peek_card", "lucky_charm"]:
+		show_toast("仅可在单机轮到自己出牌时使用行囊。", 2200)
+		return false
+	if item_id == "swap_card":
+		# Only the actual current draw is exchangeable. Claimed tiles and discard
+		# restrictions cannot be bypassed by an inventory action.
+		if int(offline_self_draw_ready.get("seat", -1)) != 0 or int(offline_last_draw.get("seat", -1)) != 0:
+			show_toast("换牌卡只能替换本拍刚摸到的牌。", 2200)
+			return false
+		var serial := int(offline_last_draw.get("serial", -1))
+		var instances: Array = players[0].get("hand_instance_serials", [])
+		var hand_index := instances.find(serial)
+		var wall_index := -1
+		for index in range(wall.size() - 1, -1, -1):
+			if not is_flower_tile(wall[index]):
+				wall_index = index
+				break
+		if hand_index < 0 or wall_index < 0:
+			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+			return false
+		if not use_item(item_id):
+			return false
+		var old_tile := str(players[0]["hand"][hand_index])
+		var new_tile := str(wall[wall_index])
+		wall[wall_index] = old_tile
+		players[0]["hand"][hand_index] = new_tile
+		offline_last_draw["tile"] = new_tile
+		offline_self_draw_ready["tile"] = new_tile
+		record_round_event("item_swap", {"seat": 0, "old_tile": old_tile, "new_tile": new_tile})
+		mark_offline_progress_dirty()
+		request_game_render()
+		show_toast("换牌完成：%s → %s" % [tile_label(old_tile), tile_label(new_tile)], 2400)
+		return true
+	if item_id == "peek_card":
+		var hand: Array = players[1].get("hand", []) if players.size() > 1 else []
+		if hand.is_empty() or not use_item(item_id):
+			return false
+		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(str(hand[0])), "偷看卡")
+		return true
+	if not use_item(item_id):
+		return false
+	open_toast_detail("竹影摇风，清和满席。愿你从容行牌，好运常伴。\n祈福签不改变摸牌、对手决策或胡牌胜率。", "幸运符 · 清和签")
+	return true
