@@ -2046,7 +2046,7 @@ func run() -> void:
 	check(low_gem_swap_command != null and low_gem_swap_command.text == "5玉·差2玉" and low_gem_swap_price != null and low_gem_swap_price.text == "5玉" and not low_gem_swap_price.visible, "low-gem shop item shows its total price and exact shortage in the CTA")
 	var low_coin_value := scene.find_child("ShopCurrencyValue_coins", true, false) as Label
 	var low_gem_value := scene.find_child("ShopCurrencyValue_gems", true, false) as Label
-	check(low_coin_value != null and low_coin_value.text == "铜钱 0" and low_gem_value != null and low_gem_value.text == "玉符 3", "low-balance shop shows exact currency values without arbitrary meter thresholds")
+	check(low_coin_value != null and low_coin_value.text == "铜钱 0" and low_gem_value != null and low_gem_value.text == "玉符 3" and low_gem_value.tooltip_text == "玉符余额：3" and str(low_gem_value.get_meta("accessible_name", "")) == "玉符余额", "low-balance shop shows exact currency values and consistent full/accessibility labels")
 	check(scene.find_child("ShopCurrencyLowRoute_coins", true, false) == null and scene.find_child("ShopCurrencyLowRoute_gems", true, false) == null and count_nodes_with_name_prefix(scene, "ShopCurrencyLowTick_") == 0, "low-balance shop avoids obsolete low-resource chrome")
 	var low_shop_buy := scene.find_child("ShopItemBuyButton_swap_card", true, false) as Button
 	check(low_shop_buy != null and low_shop_buy.disabled and low_shop_buy.get_meta("guofeng_button_face_key", "") == "button_face_jiangnan_gpt" and int(low_shop_buy.get_meta("currency_gap_gems", 0)) == 2, "low-balance shop keeps its real disabled purchase and exact currency gap")

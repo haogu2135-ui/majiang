@@ -3106,7 +3106,7 @@ func _show_shop_screen_impl() -> void:
 	gems_label.add_theme_color_override("font_color", shop_ink)
 	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
 	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	set_ui_full_text(gems_label, "玉石余额：%d" % int(currency.get("gems", 0)), "玉石余额")
+	set_ui_full_text(gems_label, "玉符余额：%d" % int(currency.get("gems", 0)), "玉符余额")
 
 	# 返回按钮
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
