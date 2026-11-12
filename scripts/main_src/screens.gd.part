@@ -3006,6 +3006,7 @@ func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrol
 func request_shop_currency_exchange() -> void:
 	if mode != "shop":
 		return
+	shop_focus_restore_name = "ShopGetGemsButton"
 	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
 		shop_exchange_confirm_until_msec = 0
 		show_toast("铜钱不足：需500铜钱。完成对局、签到或每日任务可获得铜钱。", 3200)
@@ -3558,6 +3559,7 @@ func _show_shop_screen_impl() -> void:
 			shop_focus_controls.append(shop_buy_controls[index])
 	else:
 		shop_focus_controls.append_array(shop_buy_controls)
+	shop_focus_controls.append(footer_state)
 	panel.set_meta("shop_focus_controls", shop_focus_controls)
 	configure_ordered_focus_navigation(panel, shop_focus_controls, "ShopBackButton")
 

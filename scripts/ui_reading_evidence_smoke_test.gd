@@ -8,6 +8,8 @@ func save_reading_capture(scene: Node, output_dir: String, name: String, state: 
 	var metadata := state.duplicate(true)
 	metadata["runtime_source_diff_fingerprint"] = OS.get_environment("YUNZHUO_CAPTURE_RUNTIME_SOURCE_DIFF_FINGERPRINT")
 	metadata["capture_batch_id"] = OS.get_environment("YUNZHUO_CAPTURE_BATCH_ID")
+	metadata["capture_revision"] = OS.get_environment("YUNZHUO_CAPTURE_REVISION")
+	metadata["source_manifest_sha256"] = OS.get_environment("YUNZHUO_CAPTURE_SOURCE_MANIFEST_SHA256")
 	metadata["capture_time_utc"] = Time.get_datetime_string_from_system(true)
 	metadata["viewport_size"] = [root.size.x, root.size.y]
 	metadata["game_version"] = scene.APP_VERSION

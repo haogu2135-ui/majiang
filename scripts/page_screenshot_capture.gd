@@ -191,6 +191,7 @@ func write_capture_metadata(output_dir_res: String, viewport_size: Vector2i) -> 
 	var metadata := {
 		"capture_revision": OS.get_environment("YUNZHUO_CAPTURE_REVISION"),
 		"capture_batch_id": OS.get_environment("YUNZHUO_CAPTURE_BATCH_ID"),
+		"source_manifest_sha256": OS.get_environment("YUNZHUO_CAPTURE_SOURCE_MANIFEST_SHA256"),
 		"worktree_state": OS.get_environment("YUNZHUO_CAPTURE_WORKTREE_STATE"),
 		"runtime_source_state": OS.get_environment("YUNZHUO_CAPTURE_RUNTIME_SOURCE_STATE"),
 		"worktree_diff_fingerprint": OS.get_environment("YUNZHUO_CAPTURE_WORKTREE_DIFF_FINGERPRINT"),

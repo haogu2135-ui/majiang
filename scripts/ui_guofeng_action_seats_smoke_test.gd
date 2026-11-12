@@ -289,7 +289,9 @@ func check_guofeng_battle_inputs(scene: Node, output_dir: String) -> void:
 func check_all_seat_reading(scene: Node) -> void:
 	for seat in range(4):
 		var panel := scene.find_child("SeatPanel_%d" % seat, true, false) as TextureRect
-		check(panel != null and panel.get_meta("guofeng_surface_key", "") == "menu_ink_primary" and panel.modulate == Color.WHITE and panel.self_modulate == Color.WHITE, "seat %d uses exactly one untinted authored ink surface" % seat)
+		check(panel != null and panel.get_meta("guofeng_surface_key", "") == "battle_ink_plaque_20261112" and panel.modulate == Color.WHITE and panel.self_modulate == Color.WHITE, "seat %d uses exactly one untinted authored ink surface" % seat)
+		var edges := panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if panel != null else null
+		check(edges != null and edges.texture == scene.optional_gpt_illustration_texture("battle_ink_plaque_20261112") and edges.visible, "seat %d renders the registered authored bitmap through native nine-slice" % seat)
 		var labels: Array = []
 		for prefix in ["SeatCompactName_", "SeatCompactScore_", "SeatCompactMeta_", "SeatCompactDealer_", "SeatCompactStatus_", "SeatThreatBadge_"]:
 			var label := scene.find_child(prefix + str(seat), true, false) as Label
@@ -502,8 +504,8 @@ func check_table_chrome_lifecycle(scene: Node, output_dir: String) -> void:
 	scene.render_game()
 	await settle()
 	var advice := scene.find_child("RecommendedDiscardButton", true, false) as Button
-	var restart := scene.find_child("OfflineRestartButton", true, false) as Button
-	check(advice != null and restart != null, "ordinary assisted play retains its native recommendation and restart actions")
+	var tools := scene.find_child("TopHudUpdateButton", true, false) as Button
+	check(advice != null and tools != null and tools.is_visible_in_tree() and not tools.disabled and scene.find_child("OfflineRestartButton", true, false) == null, "ordinary assisted play prioritizes its native recommendation with restart available in table tools")
 	var buttons: Array[Button] = scene.action_bar_buttons()
 	var grouped_dock := scene.find_child("ActionButtonDock", true, false) as Control
 	for index in range(buttons.size()):

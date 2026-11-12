@@ -34,6 +34,9 @@ if [ -n "$(git -C "$ROOT_DIR" status --porcelain -- project.godot scripts/main_b
 fi
 
 mkdir -p "$LOG_DIR" "$(dirname "$REPORT")"
+SOURCE_MANIFEST_SHA256="$(python3 "$ROOT_DIR/tools/write_ui_source_receipt.py" "$LOG_DIR/source_receipt.json")" || exit 1
+export YUNZHUO_CAPTURE_SOURCE_MANIFEST_SHA256="$SOURCE_MANIFEST_SHA256"
+export YUNZHUO_CAPTURE_REVISION="$REVISION"
 
 PASS=0
 FAIL=0

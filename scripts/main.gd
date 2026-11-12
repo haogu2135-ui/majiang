@@ -12921,6 +12921,10 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var count = action_bar_button_count(action_buttons)
 	if count <= 0:
 		release_retained_battle_action_chrome()
+		# Timeout feedback remains visible even when the new turn offers no
+		# auxiliary buttons. Its lifetime belongs to response state, not tools.
+		if mode == "offline" and offline_phase != "ended" and not has_pending_claim_window() and pending_claim_auto_pass_feedback != "" and pending_claim_auto_pass_feedback_until_msec > Time.get_ticks_msec():
+			draw_action_intent_dock(parent, 0, false, disconnected)
 		return action_buttons
 	var pending_claim_mode := bool(pending_claim_snapshot) if pending_claim_snapshot >= 0 else has_pending_claim_window()
 	var danger_confirm_mode := mode == "offline" and (bool(pending_danger_snapshot) if pending_danger_snapshot >= 0 else has_pending_danger_discard())
@@ -13071,12 +13075,12 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 		intent_text = pending_claim_auto_pass_feedback
 	var intent_detail := online_recovery_detail_text() if disconnected else intent_text
 	if mode == "offline" and can_self_discard():
-		intent_detail = "当前轮到你出牌：请点击下方手牌出牌；托盘按键为辅助建议与重开操作"
+		intent_detail = "当前轮到你出牌：请点击下方手牌出牌；更多菜单提供牌桌工具"
 	var text := make_label(intent, intent_text, 10, ink, false)
 	text.name = "ActionIntentText"
 	text.set_meta("ui_action_status_priority", priority)
 	style_guofeng_label(text)
-	apply_rect(text, rect_full(0.040, 0.0, 0.970 if disconnected else 0.790, 1.0))
+	apply_rect(text, rect_full(0.040, 0.0, 0.970 if disconnected or count == 0 else 0.790, 1.0))
 	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(text)
 	set_ui_full_text(text, intent_detail, "当前行动提示")
@@ -13084,7 +13088,7 @@ func draw_action_intent_dock(parent: Control, count: int, force_icon_fallback :=
 	var count_label := make_label(intent, "重连" if disconnected else "%d项" % count, 10, ink, false)
 	count_label.name = "ActionIntentCount"
 	style_guofeng_label(count_label)
-	count_label.visible = not disconnected
+	count_label.visible = not disconnected and count > 0
 	apply_rect(count_label, rect_full(0.810, 0.0, 0.970, 1.0))
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var count_detail := ("托盘提供 %d 个辅助与操作项" % count) if (mode == "offline" and can_self_discard()) else ("%d 个可执行操作" % count)
@@ -13505,17 +13509,6 @@ func draw_actions(parent: Control) -> void:
 			set_ui_full_text(cancel_restart, cancel_restart.tooltip_text, "取消重开当前牌局")
 			action_bar.add_child(cancel_restart)
 			action_bar.set_meta("restart_confirmation_lane", "confirm_then_cancel")
-		else:
-			var restart_button := make_action_button("重开", Color(0.70, 0.32, 0.22), Callable(self, "request_offline_restart"))
-			restart_button.name = "OfflineRestartButton"
-			restart_button.icon = null
-			restart_button.tooltip_text = "重开牌局 · 放弃当前手牌重新开局（需二次确认）"
-			restart_button.set_meta("restart_action", "request")
-			restart_button.set_meta("action_priority", "secondary")
-			set_ui_full_text(restart_button, restart_button.tooltip_text, "请求重开当前牌局")
-			restart_button.hide()
-			restart_button.set_meta("overflow_hidden", true)
-			action_bar.add_child(restart_button)
 		if action_ai_assist_enabled:
 			action_bar.add_child(make_action_button("提示", Color(0.25, 0.58, 0.48), func() -> void:
 				set_status(human_hint_text())
@@ -24252,6 +24245,10 @@ func open_battle_tools_menu() -> void:
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 		paper.set_content_margin(side, 12.0)
 	menu.add_theme_stylebox_override("panel", paper)
+	var hover := StyleBoxTexture.new()
+	hover.texture = optional_gpt_illustration_texture("menu_ink_primary")
+	menu.add_theme_stylebox_override("hover", hover)
+	menu.add_theme_color_override("font_hover_color", Color(0.97, 0.93, 0.78))
 	menu.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	if mode == "offline":
 		menu.add_item("重开牌局（需确认）", 0)
@@ -37845,6 +37842,7 @@ func set_rules_scroll_from_track_position(content_scroll: ScrollContainer, scrol
 func request_shop_currency_exchange() -> void:
 	if mode != "shop":
 		return
+	shop_focus_restore_name = "ShopGetGemsButton"
 	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
 		shop_exchange_confirm_until_msec = 0
 		show_toast("铜钱不足：需500铜钱。完成对局、签到或每日任务可获得铜钱。", 3200)
@@ -38397,6 +38395,7 @@ func _show_shop_screen_impl() -> void:
 			shop_focus_controls.append(shop_buy_controls[index])
 	else:
 		shop_focus_controls.append_array(shop_buy_controls)
+	shop_focus_controls.append(footer_state)
 	panel.set_meta("shop_focus_controls", shop_focus_controls)
 	configure_ordered_focus_navigation(panel, shop_focus_controls, "ShopBackButton")
 
