@@ -232,11 +232,9 @@ func check_guofeng_battle_inputs(scene: Node, output_dir: String) -> void:
 			if (candidate as Label).is_visible_in_tree():
 				visible_markers += 1
 		check(button.has_focus() and marker.is_visible_in_tree() and visible_markers == 1, "%s owns the only visible HUD focus marker" % node_name)
-		var icon := button.find_child("Icon_*", true, false) as TextureRect
-		var icon_tint := icon.modulate if icon != null else Color.TRANSPARENT
-		if icon != null and icon.material is ShaderMaterial:
-			icon_tint = (icon.material as ShaderMaterial).get_shader_parameter("icon_color")
-		check(icon_tint.r >= 0.95 and icon_tint.a >= 0.99 and marker.get_theme_color("font_color").r >= 0.95 and marker.get_theme_color("font_color").a >= 0.99, "%s focus icon and arrow switch to fully opaque paper-white foreground on ink" % node_name)
+		var caption := button.find_child("TopHudButtonCharLabel", true, false) as Label
+		var caption_tint := caption.get_theme_color("font_color") if caption != null else Color.TRANSPARENT
+		check(caption != null and caption.is_visible_in_tree() and caption_tint.r >= 0.95 and caption_tint.a >= 0.99 and marker.get_theme_color("font_color").r >= 0.95 and marker.get_theme_color("font_color").a >= 0.99, "%s visible focus caption and marker switch to fully opaque paper-white foreground on ink" % node_name)
 		check(label_text_width(marker, marker.text) <= marker.size.x + 1.0, "%s native focus arrow fits its actual glyph lane" % node_name)
 	var settings := scene.find_child("TopHudSettingsButton", true, false) as Button
 	if settings != null:

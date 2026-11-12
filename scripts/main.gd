@@ -12817,7 +12817,7 @@ func prepare_compact_normal_action_overflow(buttons: Array[Button]) -> Array[But
 		return buttons
 	var popup := PopupMenu.new()
 	popup.name = "NormalActionOverflowMenu"
-	popup.set_meta("ui_action_name", "其他建议与牌桌工具")
+	popup.set_meta("ui_action_name", "其他出牌建议与提示")
 	popup.set_meta("overflow_count", hidden_buttons.size())
 	var font := ui_cjk_font()
 	var font_size := accessibility_font_size(16)
@@ -12850,7 +12850,7 @@ func prepare_compact_normal_action_overflow(buttons: Array[Button]) -> Array[But
 			popup.popup_centered(Vector2i(240, 0))
 	)
 	overflow.name = "NormalActionOverflowButton"
-	set_ui_full_text(overflow, "打开其他建议、重开与提示 · %d项" % hidden_buttons.size(), "其他建议与牌桌工具")
+	set_ui_full_text(overflow, "打开其他出牌建议与提示 · %d项" % hidden_buttons.size(), "其他出牌建议与提示")
 	overflow.set_meta("overflow_menu", true)
 	action_bar.add_child(overflow)
 	return action_bar_buttons()

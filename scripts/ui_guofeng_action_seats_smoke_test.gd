@@ -660,10 +660,11 @@ func check_countdown_lifecycle(scene: Node, output_dir: String) -> void:
 func check_normal_action_capacity(scene: Node, output_dir: String) -> void:
 	if scene.effective_viewport_size().y > 560.0:
 		return
-	for capacity in [7, 8]:
+	# Restart belongs to the top HUD tools menu, outside these game actions.
+	for capacity in [6, 7]:
 		await prepare_offline_reading_fixture(scene)
 		scene.offline_restart_confirming = false
-		if capacity == 7:
+		if capacity == 6:
 			scene.players[0]["hand"] = ["1W", "1W", "1W", "1W", "2W", "3W", "4T", "4T", "4T", "5T", "5T", "5T", "6B", "6B"]
 		else:
 			scene.players[0]["hand"] = ["1W", "1W", "1W", "1W", "2W", "3W", "5W", "6W", "7W", "8B", "8B"]
@@ -673,18 +674,25 @@ func check_normal_action_capacity(scene: Node, output_dir: String) -> void:
 		scene.render_game()
 		await settle()
 		check(scene.can_win_for_seat(0) and scene.first_concealed_gang_tile(0) == "1W", "capacity %d fixture legally offers self win and concealed kong" % capacity)
-		if capacity == 8:
-			check(scene.first_added_gang_tile(0) == "7W", "eight-action fixture also legally offers added kong")
+		if capacity == 7:
+			check(scene.first_added_gang_tile(0) == "7W", "seven-action fixture also legally offers added kong")
 		var popup := scene.find_child("NormalActionOverflowMenu", true, false) as PopupMenu
 		var more := scene.find_child("NormalActionOverflowButton", true, false) as Button
 		var dock := scene.find_child("ActionButtonDock", true, false) as Control
 		var buttons: Array[Button] = scene.action_bar_buttons()
-		check(popup != null and more != null and buttons.size() <= 5, "capacity %d keeps its primary actions and one native More entry" % capacity)
-		if popup == null or more == null:
-			continue
-		check(popup.item_count + buttons.size() - 1 >= capacity, "capacity %d preserves every original game and tool callback" % capacity)
+		if capacity == 6:
+			check(popup == null and more == null and buttons.size() == capacity, "six actions remain directly available without unnecessary overflow")
+		else:
+			check(popup != null and more != null and buttons.size() <= 5, "capacity %d keeps its primary actions and one native More entry" % capacity)
+			if popup == null or more == null:
+				continue
+			check(popup.item_count + buttons.size() - 1 == capacity, "capacity %d preserves every original game and advice callback" % capacity)
 		for button in buttons:
 			check(button.size.x >= 50.0 and button.size.y >= 44.0 and dock.get_global_rect().grow(1.0).encloses(button.get_global_rect()), "capacity %d retains %s inside the dock with its real target" % [capacity, button.text])
+			check(not button.get_signal_connection_list("pressed").is_empty(), "capacity %d retains the native %s action callback" % [capacity, button.text])
+		if capacity == 6:
+			await save_reading_capture(scene, output_dir, "action_capacity_6_direct", action_seat_state(scene))
+			continue
 		var hand_before: Array = scene.get_self_hand().duplicate()
 		await activate_button(more, "key")
 		check(popup.visible and scene.get_self_hand() == hand_before, "capacity %d opens the native More menu without discarding" % capacity)
@@ -699,7 +707,7 @@ func check_normal_action_capacity(scene: Node, output_dir: String) -> void:
 		await send_key(KEY_ESCAPE, 0)
 		await settle()
 		check(not popup.visible and more.has_focus() and scene.get_self_hand() == hand_before, "capacity %d closes More and restores its native focus without a game action" % capacity)
-		if capacity == 8:
+		if capacity == 7:
 			var tools := scene.find_child("TopHudUpdateButton", true, false) as Button
 			await activate_button(tools, "key")
 			var tools_popup := scene.find_child("BattleToolsMenu", true, false) as PopupMenu
@@ -720,7 +728,7 @@ func check_normal_action_capacity(scene: Node, output_dir: String) -> void:
 				await settle()
 				var confirmation: Array[Button] = scene.action_bar_buttons()
 				check(confirmation.size() == 2 and scene.find_child("OfflineRestartConfirmButton", true, false) != null and scene.find_child("OfflineRestartCancelButton", true, false) != null, "restart confirmation owns a separate two-action lane")
-				await save_reading_capture(scene, output_dir, "action_capacity_8_restart", action_seat_state(scene))
+				await save_reading_capture(scene, output_dir, "action_capacity_7_restart", action_seat_state(scene))
 				var cancel := scene.find_child("OfflineRestartCancelButton", true, false) as Button
 				await activate_button(cancel, "key")
 				await settle()
