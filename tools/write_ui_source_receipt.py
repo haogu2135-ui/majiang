@@ -11,6 +11,7 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--verify", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     paths = {root / "project.godot", root / "Main.tscn"}
@@ -34,6 +35,12 @@ def main():
         "manifest_sha256": digest,
         "files": files,
     }
+    if args.verify:
+        previous = json.loads(args.output.read_text())
+        if previous["files"] != files or previous["revision"] != receipt["revision"]:
+            raise SystemExit("FAIL: source/asset bytes or Git revision changed during UI QA")
+        print("PASS: source/asset bytes and Git revision match the batch receipt")
+        return
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(receipt, indent=2) + "\n")
     print(digest)

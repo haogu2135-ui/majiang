@@ -528,6 +528,9 @@ run_check "Runtime error log scan" "runtime_error_scan.log" \
 	"$LOG_DIR/capture_pages_960x540.log" \
 	"$LOG_DIR/capture_pages_1920x1080.log"
 
+run_check "Frozen source asset and revision receipt" "source_receipt_verification.log" \
+	python3 "$ROOT_DIR/tools/write_ui_source_receipt.py" "$LOG_DIR/source_receipt.json" --verify
+
 STATUS="PASS"
 if [ "$FAIL" -ne 0 ]; then
 	STATUS="FAIL"
@@ -539,6 +542,7 @@ fi
 	echo "- Time: $TIMESTAMP"
 	echo "- Git revision: \`$REVISION\`"
 	echo "- QA batch: \`$QA_BATCH_ID\`"
+	echo "- Source manifest SHA-256: \`$SOURCE_MANIFEST_SHA256\`"
 	echo "- Worktree state: $WORKTREE_STATE"
 	echo "- Runtime source vs HEAD: $RUNTIME_SOURCE_STATE"
 	echo "- Worktree diff fingerprint: \`$WORKTREE_DIFF_FINGERPRINT\`"
