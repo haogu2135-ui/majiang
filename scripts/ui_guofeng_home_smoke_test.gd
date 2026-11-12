@@ -204,7 +204,7 @@ func check_guofeng_home(scene: Node, output_dir: String) -> void:
 	var music_before: bool = scene.music_enabled
 	await activate_button(toggle, "mouse")
 	check(scene.music_enabled != music_before and scene.find_child("SettingRowButton_背景音乐", true, false) == toggle and toggle.has_focus(), "the restyled switch updates its real setting in place without losing focus")
-	check(toggle != null and toggle.text == ("已开" if scene.music_enabled else "已关") and str(toggle.get_meta("guofeng_button_face_key", "")) == ("menu_ink_primary" if scene.music_enabled else "button_face_jiangnan_gpt"), "switch state remains explicit in native text and the authored face")
+	check(toggle != null and toggle.text == ("关闭" if scene.music_enabled else "开启") and str(toggle.get_meta("guofeng_button_face_key", "")) == ("menu_ink_primary" if scene.music_enabled else "button_face_jiangnan_gpt"), "switch state remains explicit in native text and the authored face")
 	await activate_button(toggle, "key")
 	check(scene.music_enabled == music_before and toggle.find_child("SettingSwitchArt", true, false) == null, "keyboard activation restores the setting without rebuilding obsolete switch art")
 	await activate_button(scene.find_child("SettingsSectionNavButton_系统", true, false) as Button, "key")

@@ -19301,7 +19301,7 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 		medal_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		medal_rect.texture = medal_tex
 		if not unlocked:
-			medal_rect.modulate = Color(0.65, 0.65, 0.65, 0.45)
+			medal_rect.modulate = Color(0.86, 0.86, 0.86, 0.78)
 		apply_rect(medal_rect, rect_full(0.015, 0.080, 0.080, 0.920))
 		row.add_child(medal_rect)
 	var focus_marker := make_label(row, "▸", 16, Color.WHITE, true)

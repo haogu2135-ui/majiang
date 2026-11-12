@@ -1230,14 +1230,14 @@ func run() -> void:
 	check(update_stage_ready_color.a > update_stage_downloading_color.a and update_stage_ready_color.a > update_stage_checking_color.a and update_stage_install_color.a < update_stage_checking_color.a, "ready update dialog stage nodes highlight verify stage and dim future install stage")
 	scene.update_state = "idle"
 	scene.dismiss_active_toast()
-	scene.show_toast("任务完成！+30金币", 1000)
+	scene.show_toast("任务完成！+30铜钱", 1000)
 	var notice := scene.find_child("Toast", true, false) as Control
 	var notice_message := notice.get_node_or_null("ToastMessageLabel") as Label if notice != null else null
 	var notice_face := notice.get_node_or_null("ToastGptFacePlate") as TextureRect if notice != null else null
 	var notice_pending := notice.get_node_or_null("ToastPendingLabel") as Label if notice != null else null
 	var notice_detail := notice.get_node_or_null("ToastDetailButton") as Button if notice != null else null
 	check(scene.find_child("ToastContainer", true, false) != null and notice_face != null and notice_face.texture is AtlasTexture and notice_face.texture.atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt"), "toast uses one existing opaque paper surface")
-	check(notice_message != null and notice_message.text == "任务完成！+30金币" and notice_message.get_theme_constant("shadow_offset_x") == 0 and notice_message.get_theme_color("font_color").r < 0.25, "reward toast preserves the actual native dark message without ornamental signals")
+	check(notice_message != null and notice_message.text == "任务完成！+30铜钱" and notice_message.get_theme_constant("shadow_offset_x") == 0 and notice_message.get_theme_color("font_color").r < 0.25, "reward toast preserves the actual native dark message without ornamental signals")
 	check(notice_pending != null and not notice_pending.visible and notice_detail != null, "toast owns independent optional status and explicit full-text action")
 	check(scene.find_child("ToastEntryFeedback", true, false) == null and scene.find_child("ToastEntryAckGlyph", true, false) == null and scene.find_child("ToastMessageRoute", true, false) == null, "toast does not recreate retired delivery glyphs or visual routes")
 	scene.show_toast("已发送: 准备好了", 1000)
@@ -1372,14 +1372,14 @@ func run() -> void:
 	scene.fast_mode_enabled = true
 	scene.save_settings()
 	var setting_button = scene.make_setting_button("音乐", true, Callable())
-	check(setting_button.text == "已开" and setting_button.text.length() <= 4 and setting_button.clip_text, "setting button uses compact state label")
+	check(setting_button.text == "关闭" and setting_button.text.length() <= 4 and setting_button.clip_text, "setting button uses compact state label")
 	check(setting_button.action_mode == BaseButton.ACTION_MODE_BUTTON_PRESS, "setting buttons trigger on press for mobile responsiveness")
 	check(not setting_button.button_down.is_connected(scene.wake_audio_from_interaction), "touch buttons rely on global input to wake audio")
 	check(setting_button.find_child("SettingSwitchArt", true, false) != null and setting_button.find_child("SettingSwitchRail", true, false) != null and setting_button.find_child("SettingSwitchKnobOn", true, false) != null and setting_button.find_child("SettingSwitchOnLight", true, false) != null, "enabled setting buttons render switch illustration and on-state light")
 	check(setting_button.find_child("SettingSwitchEnergyRail", true, false) == null and setting_button.find_child("SettingSwitchDirectionRoute", true, false) == null and setting_button.find_child("SettingSwitchDirectionFill", true, false) == null and setting_button.find_child("SettingSwitchDirectionGate", true, false) == null and setting_button.find_child("SettingSwitchKnobConfirmRoute", true, false) == null and setting_button.find_child("SettingSwitchKnobConfirmFill", true, false) == null and setting_button.find_child("SettingSwitchKnobConfirmGate", true, false) == null, "enabled setting buttons omit obsolete route clutter")
 	dispose_node(setting_button)
 	var disabled_setting_button = scene.make_setting_button("音乐", false, Callable())
-	check(disabled_setting_button.text == "已关" and disabled_setting_button.find_child("SettingSwitchKnobOff", true, false) != null, "disabled setting buttons render off switch illustration with compact state label")
+	check(disabled_setting_button.text == "开启" and disabled_setting_button.find_child("SettingSwitchKnobOff", true, false) != null, "disabled setting buttons render off switch illustration with compact state label")
 	check(disabled_setting_button.find_child("SettingSwitchOffLock", true, false) != null and disabled_setting_button.find_child("SettingSwitchEnergyFill", true, false) == null, "disabled setting buttons render lock while omitting dim energy fill clutter")
 	check(disabled_setting_button.find_child("SettingSwitchDirectionRoute", true, false) == null and disabled_setting_button.find_child("SettingSwitchDirectionFill", true, false) == null and disabled_setting_button.find_child("SettingSwitchDirectionGate", true, false) == null and disabled_setting_button.find_child("SettingSwitchKnobConfirmRoute", true, false) == null and disabled_setting_button.find_child("SettingSwitchKnobConfirmFill", true, false) == null and disabled_setting_button.find_child("SettingSwitchKnobConfirmGate", true, false) == null, "disabled setting buttons omit reverse route clutter")
 	dispose_node(disabled_setting_button)
@@ -1868,7 +1868,7 @@ func run() -> void:
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsSection3DCastShadow_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DDepthEdge_") == 3 and count_nodes_with_name_prefix(settings_parent, "SettingsSection3DTopRim_") == 3, "settings sections render three complete physical shadow depth and top-rim layers")
 	check(settings_parent.find_child("SettingsCompassTexture", true, false) != null, "settings overlay renders reusable compass PNG texture")
 	check(scene.optional_gpt_illustration_texture("settings_gpt_panel") == null or settings_parent.find_child("SettingsGPTPanelTexture", true, false) != null, "settings overlay consumes optional GPT panel texture when generated")
-	check(settings_parent.get_child_count() == 1 and (has_button_text(settings_parent, "已开") or has_button_text(settings_parent, "已关")) and has_button_text(settings_parent, "试音") and not has_button_text(settings_parent, "切换") and not has_button_text(settings_parent, "音乐开") and not has_button_text(settings_parent, "快速开"), "settings overlay renders stateful toggle and test-audio buttons")
+	check(settings_parent.get_child_count() == 1 and (has_button_text(settings_parent, "关闭") or has_button_text(settings_parent, "开启")) and has_button_text(settings_parent, "试音") and not has_button_text(settings_parent, "切换") and not has_button_text(settings_parent, "音乐开") and not has_button_text(settings_parent, "快速开"), "settings overlay renders stateful toggle and test-audio buttons")
 	check(count_texture_rects(settings_parent) >= 1, "settings overlay renders lucide title icon")
 	check(settings_parent.find_child("SettingsCloseButton", true, false) != null and settings_parent.find_child("SettingsCloseButtonArt", true, false) != null and settings_parent.find_child("SettingsCloseSilkTexture", true, false) != null and settings_parent.find_child("SettingsCloseRail", true, false) != null and settings_parent.find_child("SettingsCloseFill", true, false) != null and settings_parent.find_child("SettingsCloseGate", true, false) != null, "settings close button renders reusable silk texture and dismiss route art")
 	check(count_nodes_with_name_prefix(settings_parent, "SettingsCloseTick_") == 2, "settings close button renders dismiss rhythm ticks")

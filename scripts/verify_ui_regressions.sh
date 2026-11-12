@@ -327,6 +327,12 @@ run_check "Runtime UI avoids code-painted shape primitives" "runtime_shape_polic
 run_check "Target Godot engine is 4.6.3" "godot_version.log" \
 	check_target_godot_version
 
+run_commercial_product_smoke() {
+	XDG_DATA_HOME="$LOG_DIR/product_userdata" run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/commercial_product_smoke_test.gd
+}
+run_check "Product economy inventory and next-goal native actions" "commercial_product_smoke.log" \
+	run_commercial_product_smoke
+
 run_check "UI layout regression smoke" "ui_layout_smoke.log" \
 	run_low_resource_godot --headless --path "$ROOT_DIR" -s scripts/ui_layout_smoke_test.gd
 
@@ -449,6 +455,7 @@ run_check "Runtime resource leak scan" "runtime_leak_scan.log" \
 	"$LOG_DIR/ui_guofeng_auxiliary.log" \
 	"$LOG_DIR/online_protocol_smoke.log" \
 	"$LOG_DIR/ui_offline_input_lifecycle_smoke.log" \
+	"$LOG_DIR/commercial_product_smoke.log" \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
 	"$LOG_DIR/ui_lobby_feedback_smoke.log" \
@@ -489,6 +496,7 @@ run_check "Runtime error log scan" "runtime_error_scan.log" \
 	"$LOG_DIR/ui_guofeng_auxiliary.log" \
 	"$LOG_DIR/online_protocol_smoke.log" \
 	"$LOG_DIR/ui_offline_input_lifecycle_smoke.log" \
+	"$LOG_DIR/commercial_product_smoke.log" \
 	"$LOG_DIR/ui_layout_smoke.log" \
 	"$LOG_DIR/ui_interaction_smoke.log" \
 	"$LOG_DIR/ui_lobby_feedback_smoke.log" \

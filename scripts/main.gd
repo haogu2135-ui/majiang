@@ -31606,7 +31606,7 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 		medal_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		medal_rect.texture = medal_tex
 		if not unlocked:
-			medal_rect.modulate = Color(0.65, 0.65, 0.65, 0.45)
+			medal_rect.modulate = Color(0.86, 0.86, 0.86, 0.78)
 		apply_rect(medal_rect, rect_full(0.015, 0.080, 0.080, 0.920))
 		row.add_child(medal_rect)
 	var focus_marker := make_label(row, "▸", 16, Color.WHITE, true)
@@ -38168,14 +38168,13 @@ func _show_shop_screen_impl() -> void:
 		# 购买按钮 - 增强样式
 		var can_afford: bool = int(currency.get("gems", 0)) >= cost
 		var buy_btn = make_small_button("", Color(0.42, 0.38, 0.58), func() -> void:
-			if spend_gems(cost):
+			if purchase_shop_item(item_id):
 				var purchase_scrollbar := scroll.get_v_scroll_bar()
 				if purchase_scrollbar != null:
 					var purchase_range := maxf(0.0, purchase_scrollbar.max_value - purchase_scrollbar.page)
 					shop_scroll_restore_progress = 0.0 if purchase_range <= 0.0 else clampf(float(purchase_scrollbar.value) / purchase_range, 0.0, 1.0)
 				shop_scroll_restore_value = scroll.scroll_vertical
 				shop_focus_restore_name = "ShopItemBuyButton_%s" % item_id
-				add_item(item_id, 1)
 				show_toast("购买成功！获得%s" % item_info.get("name", item_id), 2000)
 				# 播放购买成功动画
 				if ui_motion_enabled():
@@ -38183,7 +38182,7 @@ func _show_shop_screen_impl() -> void:
 				# 刷新显示
 				_show_shop_screen_impl()
 			else:
-				show_toast("玉符不足", 1800)
+				show_toast("购买未完成，玉符未扣除；请检查余额后重试。", 2400)
 		)
 		# Keep the CTA distinct without repeating the full high-frequency button frame.
 		ensure_button_gpt_face_plate(buy_btn, Color(0.42, 0.38, 0.58, 0.38))
@@ -42378,6 +42377,8 @@ func replay_event_line_text(event: Dictionary) -> String:
 		detail = " · " + tile_label(str(event.get("tile", "")))
 	elif kind == "draw" or kind == "draw_flower":
 		detail = " · 座位%d" % int(event.get("seat", -1))
+	elif kind == "item_swap":
+		detail = " · " + tile_label(str(event.get("old_tile", ""))) + " → " + tile_label(str(event.get("new_tile", "")))
 	elif kind == "claim":
 		detail = " · " + claim_display_label(str(event.get("claim", "")))
 	elif kind == "win":
@@ -42411,13 +42412,15 @@ func replay_event_display_name(kind: String, event: Dictionary = {}) -> String:
 			return "响应%s" % (claim if claim != "" else "动作")
 		"win":
 			return "胡牌"
+		"item_swap":
+			return "换牌卡"
 		"wall_draw":
 			return "荒庄"
 	return "事件"
 
 
 func replay_timeline_event_allowed(event: Dictionary) -> bool:
-	return ["round_start", "draw", "draw_flower", "discard", "claim", "win", "wall_draw"].has(str(event.get("type", "")).strip_edges())
+	return ["round_start", "draw", "draw_flower", "discard", "claim", "win", "wall_draw", "item_swap"].has(str(event.get("type", "")).strip_edges())
 
 
 func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
@@ -43545,7 +43548,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 		button.set_meta("setting_state", str(graphics_quality) if setting_key == "画面质量" else button_text)
 	button.text = button_text
 	button.tooltip_text = button_tooltip
-	button.set_meta("accessible_name", "%s：%s" % [setting_key, button_text])
+	button.set_meta("accessible_name", "%s：%s，点击%s" % [setting_key, full_status, button_text])
 	button.set_meta("ui_full_text", button_tooltip)
 	set_ui_full_text(button, button_tooltip if setting_key == "本地进度" else "%s：%s" % [setting_key, full_status], "%s设置" % setting_key)
 	if setting_key == "本地进度":
@@ -55477,7 +55480,7 @@ func shop_item_identity_text(item_id: String) -> String:
 		"peek_card":
 			return "窥牌"
 		"lucky_charm":
-			return "加运"
+			return "祈福"
 		"double_coins":
 			return "铜钱"
 	return "道具"

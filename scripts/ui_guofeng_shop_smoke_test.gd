@@ -101,7 +101,7 @@ func check_shop_purchase_inputs(scene: Node, output_dir: String) -> void:
 		await send_screen_touch(center, false)
 	check(int(scene.currency.get("gems", -1)) == 0 and scene.get_item_count("swap_card") == 2, "mouse and touch cannot spend through an unavailable purchase")
 	var recovery := scene.find_child("ShopGetGemsButton", true, false) as Button
-	check(recovery != null and recovery.size.y >= 44.0 and recovery.tooltip_text.contains("未接入充值渠道"), "the empty shop offers an honest native currency explanation rather than a dead end")
+	check(recovery != null and recovery.size.y >= 44.0 and recovery.tooltip_text.contains("500铜钱兑换5玉符"), "the empty shop offers a native earned-currency exchange")
 	await activate_button(recovery, "key")
 	check(scene.mode == "shop" and int(scene.currency.get("gems", -1)) == 0 and scene.get_item_count("swap_card") == 2, "keyboard currency recovery explains the limitation without changing balances")
 	await settle()

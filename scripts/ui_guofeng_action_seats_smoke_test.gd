@@ -698,14 +698,19 @@ func check_normal_action_capacity(scene: Node, output_dir: String) -> void:
 		await settle()
 		check(not popup.visible and more.has_focus() and scene.get_self_hand() == hand_before, "capacity %d closes More and restores its native focus without a game action" % capacity)
 		if capacity == 8:
-			await activate_button(more, "key")
+			var tools := scene.find_child("TopHudUpdateButton", true, false) as Button
+			await activate_button(tools, "key")
+			var tools_popup := scene.find_child("BattleToolsMenu", true, false) as PopupMenu
+			check(tools_popup != null, "table tools remain keyboard reachable")
+			if tools_popup == null:
+				continue
 			var restart_index := -1
-			for item in range(popup.item_count):
-				if popup.get_item_text(item) == "重开":
+			for item in range(tools_popup.item_count):
+				if tools_popup.get_item_text(item).begins_with("重开牌局"):
 					restart_index = item
-			check(restart_index >= 0, "More retains the original restart action")
+			check(restart_index >= 0, "table tools retain the confirmed restart action")
 			if restart_index >= 0:
-				popup.set_focused_item(restart_index)
+				tools_popup.set_focused_item(restart_index)
 				await send_key(KEY_ENTER, 0)
 				await settle()
 				check(scene.offline_restart_confirming and scene.get_self_hand() == hand_before, "native menu restart requests confirmation before changing the game")

@@ -9955,7 +9955,7 @@ func shop_item_identity_text(item_id: String) -> String:
 		"peek_card":
 			return "窥牌"
 		"lucky_charm":
-			return "加运"
+			return "祈福"
 		"double_coins":
 			return "铜钱"
 	return "道具"

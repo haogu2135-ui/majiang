@@ -3535,7 +3535,7 @@ func check_top_hud_buttons(scene, viewport_size: Vector2) -> void:
 			check(connection_surface.get_meta("ui_state_source", "") == "tcp_status" and connection_surface.tooltip_text.contains("在线连接状态"), "online connection lane exposes its transport source and full detail at %s" % viewport_size)
 		if connection_label != null:
 			check(connection_label.text == scene.online_connection_status_text() and connection_label.clip_text and connection_label.tooltip_text.contains(scene.online_connection_status_text()), "online connection lane keeps the current state visible and inspectable at %s" % viewport_size)
-	var labels := ["设置", "返回", "更新"]
+	var labels := ["设置", "返回", "更多"]
 	var rects: Array[Rect2] = []
 	for label_text in labels:
 		var button = first_top_hud_button(scene.root_layer, label_text)
@@ -5542,16 +5542,16 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 			check(small_maint_rect.size.y >= 64.0, "settings maintenance section keeps readable height on compact viewport at %s" % viewport_size)
 			check(small_audio_section.visible != small_play_section.visible or small_maint_section.visible, "settings compact categories show one reading area at %s" % viewport_size)
 	var expected_setting_buttons := {
-		"背景音乐": ["已开", "已关"],
-		"音效反馈": ["已开", "已关"],
-		"语音报牌": ["已开", "已关"],
+		"背景音乐": ["关闭", "开启"],
+		"音效反馈": ["关闭", "开启"],
+		"语音报牌": ["关闭", "开启"],
 		"播放测试": "试音",
 		"AI 节奏": ["快速", "标准"],
 		"AI 难度": ["简单", "标准", "困难"],
-		"桌面特效": ["已开", "已关"],
+		"桌面特效": ["关闭", "开启"],
 		"阅读辅助": ["标准", "大字", "高对比", "减动效", "专注", "清晰"],
 		"画面质量": ["自动", "省电", "标准", "精细"],
-		"出牌辅助": ["已开", "已关"],
+		"出牌辅助": ["关闭", "开启"],
 		"播放曲目": "切歌",
 		"本地进度": "重置",
 		"隐私诊断": ["已同意", "已关闭", "未设置"],
@@ -5956,7 +5956,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	check(footer_panel != null and footer_title != null and footer_body != null and footer_inventory != null and footer_state != null, "shop exposes cabinet footer information panel at %s (panel=%s title=%s body=%s inventory=%s state=%s get_gems=%s)" % [viewport_size, footer_panel != null, footer_title != null, footer_body != null, footer_inventory != null, footer_state != null, scene.find_child("ShopGetGemsButton", true, false) != null])
 	var get_gems_button = scene.find_child("ShopGetGemsButton", true, false) as Control
 	if get_gems_button != null:
-		check(get_gems_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET and str(get_gems_button.get_meta("recovery_route", "")).contains("honest_explanation"), "shop exposes an honest gem recovery route at %s" % viewport_size)
+		check(get_gems_button.custom_minimum_size.y >= scene.UI_MIN_TOUCH_TARGET and str(get_gems_button.get_meta("recovery_route", "")) == "earned_coins_exchange", "shop exposes earned-currency exchange recovery at %s" % viewport_size)
 	for meter_kind in ["coins", "gems"]:
 		var meter_texture = scene.find_child("ShopCurrencyMeterPanelTexture_%s" % meter_kind, true, false) as CanvasItem
 		check(meter_texture == null or meter_texture.modulate.a <= 0.12, "shop currency %s generated meter plate stays behind native values at %s" % [meter_kind, viewport_size])
@@ -6135,9 +6135,9 @@ func check_compact_seat_panels(scene, viewport_size: Vector2) -> void:
 		check(panel != null and name != null and score != null and meta != null and scene.find_child("SeatAvatar_%d" % seat, true, false) == null, "seat %d has real native facts without a stacked pseudo-avatar at %s" % [seat, viewport_size])
 		if panel == null or name == null or score == null or meta == null:
 			continue
-		check(panel.get_meta("guofeng_surface_key", "") == "menu_ink_primary" and panel.clip_contents, "seat %d uses the same authored ink and bounded reading surface at %s" % [seat, viewport_size])
+		check(panel.get_meta("guofeng_surface_key", "") == "battle_ink_plaque_20261112" and panel.clip_contents, "seat %d uses the same authored ink and bounded reading surface at %s" % [seat, viewport_size])
 		var seat_edges := panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
-		check(seat_edges != null and seat_edges.texture == scene.optional_gpt_illustration_texture("menu_ink_primary") and seat_edges.visible, "seat %d preserves the authored ink border at %s" % [seat, viewport_size])
+		check(seat_edges != null and seat_edges.texture == scene.optional_gpt_illustration_texture("battle_ink_plaque_20261112") and seat_edges.visible, "seat %d preserves the authored ink border at %s" % [seat, viewport_size])
 		var labels: Array[Label] = [name, score, meta]
 		for prefix in ["SeatCompactStatus_", "SeatCompactDealer_", "SeatThreatBadge_"]:
 			var optional := scene.find_child(prefix + str(seat), true, false) as Label

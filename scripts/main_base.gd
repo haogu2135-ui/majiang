@@ -5212,6 +5212,23 @@ func exchange_coins_for_gems() -> bool:
 		return false
 	return true
 
+func purchase_shop_item(item_id: String) -> bool:
+	if not ITEM_TYPES.has(item_id):
+		return false
+	var cost := int(ITEM_TYPES[item_id].get("cost_gems", 0))
+	if cost <= 0 or not can_afford_gems(cost) or get_item_count(item_id) >= 999999:
+		return false
+	var previous_currency := currency.duplicate(true)
+	var previous_inventory := inventory.duplicate(true)
+	currency["gems"] = int(currency.get("gems", 0)) - cost
+	inventory[item_id] = get_item_count(item_id) + 1
+	save_economy_state()
+	if not economy_file_loaded:
+		currency = previous_currency
+		inventory = previous_inventory
+		return false
+	return true
+
 func can_afford_gems(amount: int) -> bool:
 	return amount > 0 and int(currency.get("gems", 0)) >= amount
 

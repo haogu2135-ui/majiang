@@ -41,6 +41,11 @@ func run() -> void:
 		scene.shop_exchange_confirm_until_msec = Time.get_ticks_msec() - 1
 		scene.request_shop_currency_exchange()
 		check(scene.currency == {"coins": 500, "gems": 5}, "expired confirmation cannot perform a transaction")
+	scene.inventory = {"swap_card": 0}
+	check(scene.purchase_shop_item("swap_card") and scene.currency == {"coins": 500, "gems": 0} and scene.get_item_count("swap_card") == 1, "purchase atomically converts the displayed gem price into inventory")
+	var purchased := ConfigFile.new()
+	check(purchased.load(scene.ECONOMY_PATH) == OK and int(purchased.get_value("currency", "gems", -1)) == 0 and int(purchased.get_value("inventory", "items", {}).get("swap_card", 0)) == 1, "fresh config contains both the purchase debit and item credit")
+	check(not scene.purchase_shop_item("swap_card") and scene.get_item_count("swap_card") == 1, "insufficient purchase cannot debit gems or duplicate inventory")
 	scene.achievements["first_win"] = true
 	scene.achievements["five_wins"] = false
 	scene.game_stats["games_won"] = 3
@@ -61,6 +66,33 @@ func run() -> void:
 	var setting := scene.make_setting_button("测试声音", true, Callable()) as Button
 	check(setting.text == "关闭" and str(setting.get_meta("setting_state", "")) == "on", "enabled setting exposes disable action with actual state")
 	setting.free()
+	scene.tutorial_step = scene.TUTORIAL_STEP_COMPLETE
+	scene.start_offline(true)
+	scene.cancel_offline_ai_run()
+	scene.set_process(false)
+	scene.current_seat = 0
+	scene.offline_phase = "await_discard"
+	scene.offline_turn_needs_draw = false
+	scene.inventory = {"swap_card": 2, "peek_card": 1, "lucky_charm": 1, "double_coins": 0}
+	scene.save_economy_state()
+	var ledger_before: Dictionary = scene.offline_tile_ledger_report()
+	check(bool(ledger_before.get("ok", false)), "inventory fixture starts with a conserved tile ledger")
+	var wall_count := scene.wall.size() as int
+	var hand_count := scene.players[0]["hand"].size() as int
+	check(scene.use_offline_inventory_item("swap_card"), "swap card replaces the actual draw on the human discard turn")
+	check(scene.wall.size() == wall_count and scene.players[0]["hand"].size() == hand_count and bool(scene.offline_tile_ledger_report().get("ok", false)) and scene.get_item_count("swap_card") == 1, "swap preserves every tile and consumes exactly one inventory item")
+	scene.offline_self_draw_ready = {"seat": -1, "serial": -1}
+	check(not scene.use_offline_inventory_item("swap_card") and scene.get_item_count("swap_card") == 1, "swap cannot bypass a claim turn without a current draw")
+	scene.mode = "online_game"
+	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == 1, "inventory cannot expose opponents in online matches")
+	scene.mode = "offline"
+	scene.open_battle_tools_menu()
+	var tools_menu := scene.find_child("BattleToolsMenu", true, false) as PopupMenu
+	check(tools_menu != null and tools_menu.get_item_text(0).contains("需确认"), "native tools menu exposes restart confirmation and inventory")
+	if tools_menu != null:
+		tools_menu.id_pressed.emit(0)
+		check(scene.offline_restart_confirming, "tools menu restart requests confirmation before replacing the round")
+		tools_menu.hide()
 	scene.queue_free()
 	for _step in range(4):
 		await process_frame

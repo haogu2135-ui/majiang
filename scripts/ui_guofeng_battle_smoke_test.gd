@@ -86,10 +86,13 @@ func check_battle_surfaces(scene: Node) -> void:
 			var face := Rect2(Vector2(bounds[0], bounds[1]), Vector2(bounds[2], bounds[3]))
 			var clearance := 8.0 if str(obstacle["name"]).begins_with("WallBackStrip_h_16_0") else 4.0
 			check(not ledger.get_global_rect().intersects(face.grow(clearance - 0.5)), "ledger keeps %d pixels clear of actual %s" % [int(clearance), obstacle["name"]])
-	for entry in [[hud, "battle_hud_jiangnan_gpt"], [center, "menu_ink_primary"], [ledger, "menu_card_readable_gpt"]]:
+	for entry in [[hud, "battle_hud_jiangnan_gpt"], [center, "battle_ink_plaque_20261112"], [ledger, "menu_card_readable_gpt"]]:
 		var surface := entry[0] as TextureRect
 		if surface != null:
 			var source: Texture2D = surface.texture
+			var edges := surface.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if source == null and edges != null:
+				source = edges.texture
 			if source != scene.optional_gpt_illustration_texture(entry[1]) and source is AtlasTexture:
 				source = (source as AtlasTexture).atlas
 			check(surface.get_meta("guofeng_surface_key", "") == entry[1] and source == scene.optional_gpt_illustration_texture(entry[1]) and surface.self_modulate == Color.WHITE, "each battle reading surface uses its declared authored bitmap without tinting")

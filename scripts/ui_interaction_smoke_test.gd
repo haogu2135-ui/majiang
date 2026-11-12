@@ -756,7 +756,7 @@ func run_extended_ui_contracts(scene: Node) -> void:
 	scene.hand_keyboard_selection = -1
 	scene.render_game()
 	await settle(0.06)
-	var keyboard_action_button := scene.find_child("OfflineRestartButton", true, false) as Button
+	var keyboard_action_button := scene.find_child("TopHudUpdateButton", true, false) as Button
 	check(keyboard_action_button != null and keyboard_action_button.focus_mode != Control.FOCUS_NONE, "offline action button remains reachable from the keyboard")
 	if keyboard_action_button != null:
 		keyboard_action_button.grab_focus()
@@ -1004,7 +1004,7 @@ func run_new_ui_optimization_contracts(scene: Node) -> void:
 	scene.refresh_current_screen()
 	await settle(0.05)
 	var music_reopened := scene.find_child("SettingRowButton_背景音乐", true, false) as Button
-	check(music_reopened != null and music_reopened.get_meta("setting_label", "") == "音乐" and music_reopened.get_meta("setting_state", "") == ("on" if scene.music_enabled else "off") and music_reopened.text in ["已开", "已关"], "settings rebuild retains the changed audio control")
+	check(music_reopened != null and music_reopened.get_meta("setting_label", "") == "音乐" and music_reopened.get_meta("setting_state", "") == ("on" if scene.music_enabled else "off") and music_reopened.text in ["关闭", "开启"], "settings rebuild retains the changed audio control")
 	scene.close_settings_panel()
 
 	print("--- F-209/F-210/F-211/F-212) stats empty state, latest result, and signed semantics ---")
