@@ -1213,6 +1213,7 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 	var controls: Array = [
 		find_control.call("OnlineLobbyNameEdit"),
 		find_control.call("OnlineLobbyHostEdit"),
+		find_control.call("OnlineLobbyConnectionHelpButton"),
 		find_control.call("OnlineLobbyRoomEdit"),
 		find_control.call("OnlineLobbyConnectButton"),
 		find_control.call("OnlineLobbyConnectionRetryButton"),

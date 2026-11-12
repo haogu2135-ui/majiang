@@ -36068,6 +36068,7 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 	var controls: Array = [
 		find_control.call("OnlineLobbyNameEdit"),
 		find_control.call("OnlineLobbyHostEdit"),
+		find_control.call("OnlineLobbyConnectionHelpButton"),
 		find_control.call("OnlineLobbyRoomEdit"),
 		find_control.call("OnlineLobbyConnectButton"),
 		find_control.call("OnlineLobbyConnectionRetryButton"),
@@ -55824,7 +55825,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
 	row.add_child(stats_row_plate)
 	var value_left := 0.535
-	var value_right := 0.755
+	var value_right := 0.935 if large_text_enabled and effective_viewport_size().x <= 960.0 else 0.755
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)

@@ -102,6 +102,7 @@ func check_secondary_stats(scene: Node, output: String) -> void:
 	check(scene.find_child("StatsSummaryNarrativeBody", true, false) == null, "statistics shows its trend once")
 	var score := scene.find_child("StatsRowValueLabel_累计净分", true, false) as Label
 	check(score != null and score.get_meta("ui_full_text", "").contains("8800"), "statistics retains the complete negative score")
+	check(score != null and label_text_width(score, score.text) <= score.size.x + 1.0, "the negative score detail fits visibly without an ellipsis")
 	for spec in [["winrate", "33.3%"], ["games", "3局"], ["best", "-8800分"]]:
 		var value := scene.find_child("StatsSummaryValue_" + str(spec[0]), true, false) as Label
 		check(value != null and value.text == str(spec[1]) and label_text_width(value, value.text) <= value.size.x + 1.0, "statistics presents complete %s value and unit together" % spec[0])
@@ -191,6 +192,9 @@ func check_secondary_lobby(scene: Node, output: String) -> void:
 	var help := scene.find_child("OnlineLobbyConnectionHelpButton", true, false) as Button
 	check(help != null and help.size.x >= 44 and help.size.y >= 44, "local-network connection help has a practical native action")
 	if help != null:
+		scene.online_host_edit.grab_focus()
+		await send_key(KEY_TAB, 0)
+		check(help.has_focus(), "connection help participates in the native keyboard route")
 		await activate_button(help, "touch")
 		var help_text := scene.toast_detail_panel.find_child("ToastDetailText", true, false) as RichTextLabel if scene.toast_detail_panel != null else null
 		check(help_text != null and help_text.text.contains("127.0.0.1") and help_text.text.contains("同一 Wi-Fi") and help_text.text.contains("公共大厅"), "native help explains local addresses and the supported room mode")
