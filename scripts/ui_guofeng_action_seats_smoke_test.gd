@@ -400,6 +400,12 @@ func check_meld_pagination_inputs(scene: Node, expected: Array) -> void:
 			check(pager != null and pager.text.contains("%d/%d" % [page + 1, page_count]), "seat %d shows the current meld page %d/%d" % [seat, page + 1, page_count])
 			if pager == null:
 				break
+			var pager_font := pager.get_theme_font("font")
+			var pager_font_size := pager.get_theme_font_size("font_size")
+			check(pager.size.x >= 44.0 and pager.size.y >= 44.0 and pager.size.y >= pager.get_combined_minimum_size().y - 0.5, "seat %d meld pager keeps its full native text and touch height" % seat)
+			check(not scene.large_text_enabled or pager_font_size >= 13, "seat %d meld pager respects large-text reading size" % seat)
+			for line in pager.text.split("\n"):
+				check(pager_font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, pager_font_size).x <= pager.size.x - 4.0, "seat %d meld pager displays complete line %s" % [seat, line])
 			await activate_button(pager, ["mouse", "touch", "key", "mouse"][seat])
 			await settle()
 			if seat == 2:

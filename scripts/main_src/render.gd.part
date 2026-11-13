@@ -13505,7 +13505,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 			var page_button := make_action_button(page_copy, Color(0.54, 0.58, 0.42), Callable(self, "cycle_meld_window").bind(seat, lane_capacity))
 			page_button.name = "MeldLaneArchiveButton_%d" % seat
 			page_button.custom_minimum_size = Vector2(50, UI_MIN_TOUCH_TARGET)
-			page_button.add_theme_font_size_override("font_size", 10)
+			page_button.add_theme_font_size_override("font_size", 13 if large_text_enabled else 10)
 			page_button.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 			page_button.add_theme_color_override("font_hover_color", Color(0.18, 0.36, 0.28))
 			var page_face := page_button.get_node_or_null("GptButtonFacePlate") as TextureRect
