@@ -12360,7 +12360,9 @@ func draw_hand(parent: Control) -> void:
 	mark_ui_optimization(tray_text, "F-098")
 	tray_text.visible = not hand_has_pending_claim_window and not hand_has_pending_danger_discard and not tutorial_hint_visible
 	if shortcut_hint_text != "":
-		var shortcut_size := 15 if hand_viewport_size.x >= 1600.0 and hand_viewport_size.y >= 900.0 else 11
+		var wide_shortcuts := hand_viewport_size.x >= 1600.0 and hand_viewport_size.y >= 900.0
+		var readable_shortcuts := hand_viewport_size.x >= 1200.0 and hand_viewport_size.y >= 650.0
+		var shortcut_size := 15 if wide_shortcuts else (13 if readable_shortcuts else 11)
 		var shortcut_label := make_label(tray, shortcut_hint_text, shortcut_size, Color.WHITE, false)
 		shortcut_label.name = "HandTrayShortcutHint"
 		apply_rect(shortcut_label, rect_full(0.030 if not tray_text.visible else 0.505, header_top, 0.970 if hand_has_pending_claim_window else 0.830, header_bottom))
@@ -12369,9 +12371,10 @@ func draw_hand(parent: Control) -> void:
 		shortcut_label.add_theme_color_override("font_color", Color(0.96, 0.94, 0.85))
 		var shortcut_width := hand_tray_size.x * (shortcut_label.anchor_right - shortcut_label.anchor_left)
 		var shortcut_font := shortcut_label.get_theme_font("font")
-		if hand_can_self_discard and shortcut_font.get_string_size(shortcut_hint_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, shortcut_label.get_theme_font_size("font_size")).x > shortcut_width:
+		if hand_can_self_discard and ((readable_shortcuts and not wide_shortcuts) or shortcut_font.get_string_size(shortcut_hint_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, shortcut_label.get_theme_font_size("font_size")).x > shortcut_width):
 			shortcut_label.text = "←/→选牌 · Enter出牌"
-		fit_label_font_size(shortcut_label, shortcut_width + 8.0, shortcut_label.get_theme_font_size("font_size"), 11)
+		var shortcut_minimum := accessibility_font_size(shortcut_size) if readable_shortcuts else 11
+		fit_label_font_size(shortcut_label, shortcut_width + 8.0, shortcut_label.get_theme_font_size("font_size"), shortcut_minimum)
 		set_ui_full_text(shortcut_label, shortcut_hint_text, "手牌快捷操作：" + shortcut_hint_text)
 		shortcut_label.set_meta("prompt_lane", "above_tiles")
 		shortcut_label.set_meta("minimum_clearance_px", 6.0)
@@ -17867,7 +17870,7 @@ func draw_table_log(parent: Control) -> void:
 	var wide_log := table_log_viewport_size.x >= 1600.0 and table_log_viewport_size.y >= 900.0
 	var ledger_title_base := 16 if wide_log else (10 if compact_log else 12)
 	var ledger_count_base := 14 if wide_log else (8 if compact_log else 10)
-	var ledger_body_base := 15 if wide_log else (11 if compact_log else 10)
+	var ledger_body_base := 15 if wide_log else (11 if compact_log else 13)
 	# The pending response context occupies the ledger's upper-left reading lane.
 	# Hide the secondary ledger during the decision window; the archive remains
 	# available through the existing history routes after the action.
@@ -17898,7 +17901,7 @@ func draw_table_log(parent: Control) -> void:
 		var face_global := left_wall.get_global_transform() * Vector2(0.0, face_top)
 		var ledger_end := parent.get_global_transform().affine_inverse() * (face_global - Vector2(0.0, 4.0))
 		ledger_bottom = minf(ledger_bottom, ledger_end.y / maxf(parent.size.y, 1.0))
-	var ledger_height := maxf(52.0, float(accessibility_font_size(ledger_title_base if wide_log else 12) + accessibility_font_size(ledger_body_base if wide_log else 11)) * 1.45 + 10.0)
+	var ledger_height := maxf(52.0, float(accessibility_font_size(ledger_title_base if wide_log else 12) + accessibility_font_size(ledger_body_base)) * 1.45 + 10.0)
 	ledger_bottom = minf(ledger_bottom, 0.128 + ledger_height / safe_content_pixel_size().y)
 	# A centered compact opponent identity shares this vertical band. Reserve
 	# its real bounds rather than letting the latest-record card run behind it.
