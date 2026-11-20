@@ -574,7 +574,9 @@ func prepare_normal_action_groups() -> void:
 		button.set_meta("normal_action_group", group)
 		if group == "advice" and effective_viewport_size().y <= 560.0:
 			var full_text := button.text
-			if full_text.begins_with("推荐"):
+			if full_text.begins_with("推荐打"):
+				button.text = full_text.substr(2)
+			elif full_text.begins_with("推荐"):
 				button.text = "荐" + full_text.substr(2)
 			elif full_text.begins_with("最安"):
 				button.text = "稳" + full_text.substr(2)
