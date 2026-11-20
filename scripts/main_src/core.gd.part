@@ -9153,9 +9153,11 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 	if button == null or not is_instance_valid(button):
 		return
 	var resolved_width := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
-	# Callers pass base sizes; apply the reading preference once at final sizing.
-	var minimum_font_size := accessibility_font_size(12)
-	var resolved_font_size := maxi(minimum_font_size, accessibility_font_size(font_size))
+	# Response actions must keep the reading preference at final sizing. The
+	# ordinary compact toolbar uses its existing independent width budget.
+	var scale_response_font := has_pending_claim_window()
+	var minimum_font_size := accessibility_font_size(12) if scale_response_font else 12
+	var resolved_font_size := maxi(minimum_font_size, accessibility_font_size(font_size) if scale_response_font else font_size)
 	# Measure the actual CJK font before reducing the label. Character-count
 	# estimates overstate mixed labels such as 吃1-3 and unnecessarily drop
 	# compact response actions below the readable 14px floor.
