@@ -4048,7 +4048,7 @@ func recommended_discard_report(report_snapshot: Array = []) -> Dictionary:
 	return duplicate_ai_report(reports[0], true)
 
 func recommended_discard_button_text(tile: String) -> String:
-	return "推荐%s" % tile_label(tile)
+	return "推荐打%s" % tile_label(tile)
 
 func recommended_discard_button_color(report: Dictionary) -> Color:
 	var safety = str(report.get("safety_label", ""))
@@ -13475,7 +13475,7 @@ func draw_actions(parent: Control) -> void:
 					human_discard_by_tile(selected_recommended_tile)
 				)
 				recommended_button.name = "RecommendedDiscardButton"
-				recommended_button.tooltip_text = ai_discard_brief(recommended_report)
+				recommended_button.tooltip_text = "直接打出%s · %s" % [tile_label(selected_recommended_tile), ai_discard_brief(recommended_report)]
 				action_bar.add_child(recommended_button)
 				var alternative_limit = 1 if offer_safest and safest_tile != "" and safest_tile != recommended_tile else 2
 				for report in discard_action_alternative_reports(excluded_action_tiles, alternative_limit, report_snapshot):
@@ -13487,7 +13487,7 @@ func draw_actions(parent: Control) -> void:
 						human_discard_by_tile(selected_action_tile)
 					)
 					alternative_button.name = "AlternativeDiscardButton_%s" % alternative_tile
-					alternative_button.tooltip_text = ai_discard_brief(report)
+					alternative_button.tooltip_text = "备选出牌，直接打出%s · %s" % [tile_label(alternative_tile), ai_discard_brief(report)]
 					action_bar.add_child(alternative_button)
 		if offline_restart_confirming:
 			var confirm_restart := make_action_button("确认重开", Color(0.86, 0.40, 0.24), Callable(self, "request_offline_restart"))
@@ -52510,7 +52510,7 @@ func suggest_human_discard() -> String:
 
 
 func alternative_discard_button_text(report: Dictionary) -> String:
-	return "备%s" % tile_label(str(report.get("tile", "")))
+	return "打%s" % tile_label(str(report.get("tile", "")))
 
 func alternative_discard_button_color(report: Dictionary) -> Color:
 	var safety = str(report.get("safety_label", ""))
@@ -54442,15 +54442,10 @@ func count_gang_melds(seat: int) -> int:
 	return int(scoring_meld_state_for_seat(seat).get("gang_count", 0))
 
 
-func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bool, marker_parent: Control = null) -> void:
+func add_clickable_tile_press_art(button: Button, size: Vector2, _highlighted: bool, marker_parent: Control = null) -> void:
 	var visual_parent: Control = marker_parent if marker_parent != null and is_instance_valid(marker_parent) else button
-	var focus_glow = Control.new()
-	focus_glow.name = "ClickableTileFocusGlow"
-	focus_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	focus_glow.modulate = Color(1.0, 1.0, 1.0, 0.66 if highlighted else 0.0)
-	visual_parent.add_child(focus_glow)
-	apply_rect(focus_glow, rect_full(0.035, 0.035, 0.965, 0.965))
-	ensure_fx_ring_gpt_plate(focus_glow, GOLD_BRIGHT, 0.40)
+	# The existing external marker and hand lift identify the selected tile.
+	# Keep its authored face clear rather than placing a persistent flash over it.
 
 	var sheen = make_gpt_plate_rect(rect_full(0.12, 0.07, 0.88, 0.16), Color(1.0, 0.93, 0.60, 0.0), "ui_soft_flash")
 	sheen.name = "ClickableTilePressSheen"
@@ -54515,9 +54510,6 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, highlighted: bo
 		tw.tween_property(tap_dot, "modulate:a", 0.62, 0.05).from(0.0)
 		tw.tween_property(tap_dot, "modulate:a", 0.0, 0.18).set_delay(0.05)
 		tw.tween_property(tap_dot, "scale", Vector2(1.12, 1.12), 0.18).from(Vector2(0.58, 0.58)).set_ease(Tween.EASE_OUT)
-		if is_instance_valid(focus_glow) and not highlighted:
-			tw.tween_property(focus_glow, "modulate:a", 0.35, 0.05).from(0.0)
-			tw.tween_property(focus_glow, "modulate:a", 0.0, 0.18).set_delay(0.05)
 		var release_scale := Vector2(1.085, 1.085) if button.is_hovered() else Vector2.ONE
 		tw.tween_property(button, "scale", Vector2(0.92, 0.92), 0.04).from(button.scale)
 		tw.chain().tween_property(button, "scale", release_scale, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -54722,7 +54714,9 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 	if button == null or not is_instance_valid(button):
 		return
 	var resolved_width := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
-	var resolved_font_size := maxi(12, font_size)
+	# Callers pass base sizes; apply the reading preference once at final sizing.
+	var minimum_font_size := accessibility_font_size(12)
+	var resolved_font_size := maxi(minimum_font_size, accessibility_font_size(font_size))
 	# Measure the actual CJK font before reducing the label. Character-count
 	# estimates overstate mixed labels such as 吃1-3 and unnecessarily drop
 	# compact response actions below the readable 14px floor.
@@ -54736,7 +54730,7 @@ func configure_action_button_size(button: Button, width: float, height: float, f
 	var normal_style := button.get_theme_stylebox("normal")
 	if normal_style != null:
 		horizontal_padding = maxf(8.0, normal_style.get_content_margin(SIDE_LEFT) + normal_style.get_content_margin(SIDE_RIGHT))
-	while text_width + horizontal_padding > resolved_width and resolved_font_size > 12:
+	while text_width + horizontal_padding > resolved_width and resolved_font_size > minimum_font_size:
 		resolved_font_size -= 1
 		if action_font != null:
 			text_width = action_font.get_string_size(button.text.strip_edges(), HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_font_size).x

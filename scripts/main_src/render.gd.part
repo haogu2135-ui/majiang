@@ -1170,7 +1170,7 @@ func draw_actions(parent: Control) -> void:
 					human_discard_by_tile(selected_recommended_tile)
 				)
 				recommended_button.name = "RecommendedDiscardButton"
-				recommended_button.tooltip_text = ai_discard_brief(recommended_report)
+				recommended_button.tooltip_text = "直接打出%s · %s" % [tile_label(selected_recommended_tile), ai_discard_brief(recommended_report)]
 				action_bar.add_child(recommended_button)
 				var alternative_limit = 1 if offer_safest and safest_tile != "" and safest_tile != recommended_tile else 2
 				for report in discard_action_alternative_reports(excluded_action_tiles, alternative_limit, report_snapshot):
@@ -1182,7 +1182,7 @@ func draw_actions(parent: Control) -> void:
 						human_discard_by_tile(selected_action_tile)
 					)
 					alternative_button.name = "AlternativeDiscardButton_%s" % alternative_tile
-					alternative_button.tooltip_text = ai_discard_brief(report)
+					alternative_button.tooltip_text = "备选出牌，直接打出%s · %s" % [tile_label(alternative_tile), ai_discard_brief(report)]
 					action_bar.add_child(alternative_button)
 		if offline_restart_confirming:
 			var confirm_restart := make_action_button("确认重开", Color(0.86, 0.40, 0.24), Callable(self, "request_offline_restart"))

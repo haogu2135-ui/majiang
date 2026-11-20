@@ -2577,7 +2577,7 @@ func run() -> void:
 	await create_timer(0.24).timeout
 	dispose_node(clickable_tile_view)
 	var highlighted_clickable_tile = scene.make_tile_view("6W", Vector2(62, 84), true, Callable(), true)
-	check(highlighted_clickable_tile.find_child("ClickableTileFocusGlow", true, false) != null and highlighted_clickable_tile.find_child("ClickableTilePressSheen", true, false) != null, "highlighted clickable tiles render focus glow and press art")
+	check(highlighted_clickable_tile.find_child("ClickableTileFocusGlow", true, false) == null and highlighted_clickable_tile.find_child("TileRecentDiscardMarker", true, false) != null and highlighted_clickable_tile.find_child("ClickableTilePressSheen", true, false) != null, "highlighted clickable tiles retain their external marker and press art without covering the face")
 	dispose_node(highlighted_clickable_tile)
 	var hand_group_spacer = scene.make_hand_group_spacer(84.0, 12.0, scene.hand_group_label("1B"))
 	check(hand_group_spacer.name == "HandGroupDivider" and hand_group_spacer.find_child("HandGroupDividerCap", true, false) != null, "hand group divider renders stable cap decoration")

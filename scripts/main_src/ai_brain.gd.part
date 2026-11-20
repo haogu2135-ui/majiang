@@ -3014,7 +3014,7 @@ func recommended_discard_report(report_snapshot: Array = []) -> Dictionary:
 	return duplicate_ai_report(reports[0], true)
 
 func recommended_discard_button_text(tile: String) -> String:
-	return "推荐%s" % tile_label(tile)
+	return "推荐打%s" % tile_label(tile)
 
 func recommended_discard_button_color(report: Dictionary) -> Color:
 	var safety = str(report.get("safety_label", ""))
