@@ -1538,7 +1538,9 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(0.98).set_delay(0.08)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
 	else:
-		feedback.modulate.a = 0.88
+		# Keep authored feedback nodes intact for state/smoke contracts without
+		# leaving a persistent dark wash or stray vertical bar across the input.
+		feedback.modulate.a = 0.0
 	return feedback
 
 
@@ -5048,19 +5050,43 @@ func ended_action_button_widths(count: int) -> Array[float]:
 		if str(visible_buttons[i].get_meta("action_priority", "secondary")) == "primary":
 			primary_index = i
 			break
-	var secondary = 0.0
+	var secondary_widths: Array[float] = []
 	if secondary_count > 0:
 		var minimum_secondary_total: float = (50.0 + separation) * float(secondary_count)
 		primary = minf(primary, maxf(50.0, available - minimum_secondary_total))
-		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 50.0, 132.0)
-		var used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+		var secondary_budget := maxf(50.0 * float(secondary_count), available - primary - separation * float(secondary_count))
+		var weights: Array[float] = []
+		var total_weight := 0.0
+		for i in range(resolved_count):
+			if i == primary_index:
+				continue
+			var text_len := visible_buttons[i].text.strip_edges().length() if i < visible_buttons.size() else 2
+			var weight := 1.38 if text_len >= 4 else 0.90
+			weights.append(weight)
+			total_weight += weight
+		var used_secondary := 0.0
+		for weight in weights:
+			var slot_w := clampf(secondary_budget * (weight / maxf(0.1, total_weight)), 50.0, 140.0)
+			secondary_widths.append(slot_w)
+			used_secondary += slot_w
+		var used = primary + used_secondary + separation * float(secondary_count)
 		if used > available:
-			secondary = maxf(50.0, (available - primary - separation * float(secondary_count)) / float(secondary_count))
-			used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+			var overflow := used - available
+			var shrink_each := overflow / float(secondary_count)
+			used_secondary = 0.0
+			for j in range(secondary_widths.size()):
+				secondary_widths[j] = maxf(50.0, secondary_widths[j] - shrink_each)
+				used_secondary += secondary_widths[j]
+			used = primary + used_secondary + separation * float(secondary_count)
 			if used > available:
-				primary = maxf(50.0, available - secondary * float(secondary_count) - separation * float(secondary_count))
+				primary = maxf(50.0, available - used_secondary - separation * float(secondary_count))
+	var sec_cursor := 0
 	for i in range(resolved_count):
-		widths.append(primary if i == primary_index else secondary)
+		if i == primary_index:
+			widths.append(primary)
+		else:
+			widths.append(secondary_widths[sec_cursor] if sec_cursor < secondary_widths.size() else 50.0)
+			sec_cursor += 1
 	return widths
 
 func ended_action_max_visible_button_count() -> int:
@@ -10168,27 +10194,33 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
-	var required_text_height := (26.0 if wide_typography else 24.0) + float(group_titles.size()) * (32.0 + line_gap)
+	var required_text_height := (30.0 if wide_typography else 28.0) + float(group_titles.size()) * (36.0 + line_gap)
 	for line in lines:
 		var line_height := estimate_wrapped_text_height(str(line), text_width, line_font_size, line_gap)
 		measured_line_heights.append(line_height)
 		required_text_height += line_height + line_gap
-	required_text_height += 38.0 if wide_typography else 34.0
+	required_text_height += 44.0 if wide_typography else 38.0
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
+	var section_plate := add_optional_gpt_illustration_texture(section, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if section_plate != null:
+		section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
+		section_plate.self_modulate = Color(0.96, 0.94, 0.88, 0.92)
+		configure_guofeng_button_slice(section_plate, true, 64, 0.16)
 	var vbox = VBoxContainer.new()
-	vbox.anchor_left = 0.058
-	vbox.anchor_top = 0.040
-	vbox.anchor_right = 0.96
-	vbox.anchor_bottom = 0.970
+	vbox.anchor_left = 0.024
+	vbox.anchor_top = 0.045
+	vbox.anchor_right = 0.976
+	vbox.anchor_bottom = 0.965
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
 	var numbered_title := "%02d · %s" % [section_index + 1, title_text] if section_index >= 0 else title_text
-	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
+	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(20, 3), Color(1.00, 0.91, 0.60), true)
 	style_guofeng_label(title_label)
+	title_label.add_theme_font_override("font", ui_heading_font())
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
 	title_label.tooltip_text = title_text
-	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
+	title_label.custom_minimum_size = Vector2(0, 30 if wide_typography else 28)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 	set_ui_full_text(title_label, title_text, "规则章节标题：" + title_text)
@@ -10197,11 +10229,12 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
 		if group_titles.has(line_index):
-			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(16, 2), Color.WHITE, true)
+			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(17, 2), Color.WHITE, true)
 			group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
-			group_title.custom_minimum_size = Vector2(0, 32)
+			group_title.custom_minimum_size = Vector2(0, 34)
 			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_guofeng_label(group_title)
+			group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
@@ -10266,8 +10299,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	stats_row_plate.name = "StatsRowGptPlate"
 	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
 	row.add_child(stats_row_plate)
-	var value_left := 0.535
-	var value_right := 0.935 if large_text_enabled and effective_viewport_size().x <= 960.0 else 0.755
+	var value_left := 0.500
+	var value_right := 0.950
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
@@ -10290,6 +10323,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	var display_value_text := value_text
 	var value = make_label(row, display_value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	style_guofeng_label(value)
+	if numeric_value < 0.0:
+		value.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	value.name = "StatsRowValueLabel_%s" % label_text
 	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

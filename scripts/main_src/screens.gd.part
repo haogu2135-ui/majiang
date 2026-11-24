@@ -9,7 +9,7 @@ func make_guofeng_lobby_action_button(text: String, color: Color, callback: Call
 
 func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> void:
 	apply_guofeng_button_face(button, ink_face)
-	button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.38, 0.40, 0.34))
+	button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.26, 0.31, 0.27))
 	var is_back := str(button.get_meta("ui_navigation_role", "")) == "page_back" or "back" in button.name.to_lower() or "close" in button.name.to_lower() or button.text.strip_edges() == "关闭"
 	if not ink_face and is_back:
 		var old_focus_face := button.get_node_or_null("ButtonFocusPlate")
@@ -25,13 +25,16 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 			button.remove_child(old_marker)
 			old_marker.queue_free()
 		return
-	var marker_glyph := "▸"
+	var marker_glyph := "•" if is_back else "▸"
 	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
 	var marker := button.get_node_or_null("GuofengActionFocusMarker") as Label
 	if marker == null:
 		marker = make_label(button, marker_glyph, 12, marker_color, true)
 		marker.name = "GuofengActionFocusMarker"
-		apply_rect(marker, rect_full(0.04, 0.0, 0.16, 1.0))
+		apply_rect(marker, rect_full(0.0, 0.0, 0.0, 1.0))
+		marker.offset_left = 10.0
+		marker.offset_right = 22.0
+		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var focus_marker := marker
 		button.focus_entered.connect(func() -> void:
 			if is_instance_valid(focus_marker):
@@ -61,7 +64,8 @@ func make_guofeng_secondary_badge(parent: Control, rect: Rect2, text: String, fo
 func style_guofeng_reading_tree(owner: Node) -> void:
 	for child in owner.get_children():
 		if child is Label:
-			style_guofeng_label(child as Label, str(child.get_meta("guofeng_text_surface", "paper")) == "ink")
+			if not bool(child.get_meta("preserve_semantic_color", false)):
+				style_guofeng_label(child as Label, str(child.get_meta("guofeng_text_surface", "paper")) == "ink")
 		elif child is RichTextLabel:
 			(child as RichTextLabel).add_theme_color_override("default_color", Color(0.11, 0.23, 0.18))
 			for key in ["outline_size", "shadow_offset_x", "shadow_offset_y"]:
@@ -111,7 +115,7 @@ func _show_achievements_screen_impl() -> void:
 	clear_screen()
 	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
-	var panel_height = max(1.0, content_size.y * 0.96)
+	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
 	var achievement_scroll_top := 0.265
 	var achievement_scroll_max_bottom := 0.955
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
@@ -119,12 +123,12 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_row_gap := 12.0 if wide_achievement_gallery else 8.0
 	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
 	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
-	var complete_scroll_height = max_scroll_height
+	var complete_scroll_height = float(visible_row_count) * achievement_row_height + float(maxi(0, visible_row_count - 1)) * achievement_row_gap
 	var achievement_scroll_bottom = min(achievement_scroll_max_bottom, achievement_scroll_top + complete_scroll_height / panel_height)
 	var panel := make_guofeng_secondary_page("AchievementGalleryFrontPanel", "Achievements", achievement_viewport_size)
 
 	var title = make_heading(panel, "成就图鉴", 30, Color(1.0, 0.94, 0.62), true)
-	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	apply_rect(title, rect_full(0.055, 0.028, 0.42, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, title.text, "成就图鉴页面标题")
 	mark_ui_optimization(title, "F-469")
@@ -161,8 +165,9 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.name = "AchievementsScrollBar"
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.946, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color.WHITE, "menu_card_readable_gpt")
+	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.950, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color.WHITE, "menu_card_readable_gpt")
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
+	achievements_scroll_gutter.self_modulate = Color(0.86, 0.82, 0.72, 0.78)
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(achievements_scroll_gutter)
 	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.050), Color(0.11, 0.23, 0.18))
@@ -197,7 +202,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.86, 0.92, 0.78), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.925, 0.250))
+	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.940, 0.250))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(achievements_browse_status)
 	configure_clipped_label(achievements_browse_status)
@@ -979,6 +984,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.add_theme_stylebox_override("read_only", input_styles["read_only"])
 	for style_name in ["normal", "focus", "read_only"]:
 		var field_style := input_styles[style_name].duplicate() as StyleBox
+		field_style.content_margin_left = maxf(field_style.content_margin_left, 12.0)
 		field_style.content_margin_right = maxf(field_style.content_margin_right, float(UI_MIN_TOUCH_TARGET) + 8.0)
 		edit.add_theme_stylebox_override(style_name, field_style)
 	edit.set_meta("clear_proxy_right_inset_px", float(UI_MIN_TOUCH_TARGET) + 8.0)
@@ -1266,7 +1272,7 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	var lane_gap := 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
 	var form_top := form.position.y
-	var form_height := form.size.y
+	var form_height := minf(form.size.y, maxf(form.get_combined_minimum_size().y, 120.0))
 	form.anchor_top = 0.0
 	form.anchor_bottom = 0.0
 	form.offset_top = form_top
@@ -1335,18 +1341,19 @@ func _show_online_lobby_impl() -> void:
 	server_caption.name = "OnlineLobbyServerCaption"
 	style_guofeng_label(server_caption)
 	server_caption.add_theme_color_override("font_color", Color(0.24, 0.36, 0.30))
-	apply_rect(server_caption, rect_full(0.600, 0.012, 0.705, 0.040))
+	apply_rect(server_caption, rect_full(0.600, 0.022, 0.705, 0.048))
 	server_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.600, 0.040, 0.785, 0.105), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.600, 0.046, 0.772, 0.106), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
 	if server_badge_label != null:
 		server_badge_label.name = "OnlineLobbyServerEndpointLabel"
-		apply_rect(server_badge_label, rect_full(0.055, 0.04, 0.945, 0.96))
+		apply_rect(server_badge_label, rect_full(0.0, 0.04, 0.96, 0.96))
+		server_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		server_badge_label.tooltip_text = "完整服务器地址：%s" % endpoint_text
 		configure_clipped_label(server_badge_label)
 		set_ui_full_text(server_badge_label, endpoint_text, "服务器地址")
@@ -1366,7 +1373,7 @@ func _show_online_lobby_impl() -> void:
 	endpoint_copy_button.set_meta("summary_route", "endpoint_copy")
 	set_ui_full_text(endpoint_copy_button, endpoint_copy_button.tooltip_text, "复制服务器地址")
 	style_guofeng_secondary_action(endpoint_copy_button, false)
-	apply_rect(endpoint_copy_button, rect_full(0.790, 0.040, 0.835, 0.105))
+	apply_rect(endpoint_copy_button, rect_full(0.775, 0.044, 0.832, 0.104))
 	panel.add_child(endpoint_copy_button)
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
@@ -1451,7 +1458,7 @@ func _show_online_lobby_impl() -> void:
 	form.anchor_top = 0.125 if compact_lobby_form else 0.133
 	form.anchor_right = 0.94
 	form.anchor_bottom = 0.630
-	form.add_theme_constant_override("separation", 0)
+	form.add_theme_constant_override("separation", 8)
 	form_panel.add_child(form)
 	online_name_edit = add_lobby_line_edit(form, "昵称", online_player_name, ONLINE_NAME_MAX_LENGTH)
 	online_name_edit.name = "OnlineLobbyNameEdit"
@@ -1576,10 +1583,10 @@ func _show_online_lobby_impl() -> void:
 
 	# 房间状态面板
 	var compact_large_roster := compact_lobby_form and large_text_enabled
-	var log_panel := make_layout_host(rect_full(lobby_log_left, 0.170 if room_first_layout else 0.215, lobby_log_right, 0.925 if compact_large_roster or room_first_layout else 0.87))
+	var log_panel := make_layout_host(rect_full(lobby_log_left, 0.170 if room_first_layout else 0.215, lobby_log_right, 0.915 if room_first_layout else (0.925 if compact_large_roster else 0.87)))
 	if room_first_layout:
-		apply_rect(start_reason_backplate, rect_full(lobby_log_left, 0.940, lobby_log_right, 0.992))
-		apply_rect(start_reason, rect_full(lobby_log_left + 0.015, 0.944, lobby_log_right - 0.015, 0.990))
+		apply_rect(start_reason_backplate, rect_full(lobby_log_left, 0.920, lobby_log_right, 0.972))
+		apply_rect(start_reason, rect_full(lobby_log_left + 0.015, 0.924, lobby_log_right - 0.015, 0.968))
 	if compact_large_roster:
 		apply_rect(start_reason_backplate, rect_full(0.505, 0.940, 0.975, 0.992))
 		apply_rect(start_reason, rect_full(0.520, 0.944, 0.965, 0.990))
@@ -1623,7 +1630,7 @@ func _show_online_lobby_impl() -> void:
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
 	style_guofeng_secondary_action(lobby_chat_button, false)
 	# Reserve a full touch lane between the room title and the room summary.
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.020, 0.635, 0.104))
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
@@ -1638,7 +1645,7 @@ func _show_online_lobby_impl() -> void:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		apply_rect(room_badge_label, rect_full(0.015, 0.040, 0.895 if compact_room_badge else 0.780, 0.960))
 		room_badge_label.tooltip_text = room_badge_full_text
-	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
+	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.24, 0.36, 0.30, 0.92))
 	if room_badge_info_icon != null:
 		room_badge_info_icon.name = "OnlineLobbyRoomBadgeViewIcon"
 		room_badge.move_child(room_badge_info_icon, room_badge_label.get_index() if room_badge_label != null else room_badge.get_child_count() - 1)
@@ -1754,13 +1761,13 @@ func online_connection_state_icon(state: String) -> String:
 func online_connection_state_tint(state: String) -> Color:
 	match state:
 		"已连接":
-			return Color(0.46, 0.92, 0.64, 0.98)
+			return Color(0.14, 0.48, 0.28, 0.98)
 		"连接中":
-			return Color(0.98, 0.78, 0.34, 0.98)
+			return Color(0.62, 0.38, 0.08, 0.98)
 		"异常":
-			return Color(1.00, 0.50, 0.38, 0.98)
+			return Color(0.68, 0.16, 0.12, 0.98)
 		_:
-			return Color(0.84, 0.66, 0.56, 0.98)
+			return Color(0.42, 0.34, 0.26, 0.96)
 
 
 func online_lobby_start_gate(connection_state_override: String = "") -> Dictionary:

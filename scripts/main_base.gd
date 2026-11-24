@@ -1674,7 +1674,7 @@ const SETTINGS_PANEL_FILL := Color(0.082, 0.190, 0.132, 0.940)
 const SETTINGS_PANEL_BORDER := Color(0.68, 0.56, 0.34, 0.32)
 const SETTINGS_PANEL_RECT := Rect2(Vector2(0.145, 0.055), Vector2(0.855, 0.955))
 const SETTINGS_TITLE_RECT := Rect2(Vector2(0.040, 0.045), Vector2(0.375, 0.155))
-const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.830, 0.055), Vector2(0.965, 0.165))
+const SETTINGS_CLOSE_RECT := Rect2(Vector2(0.830, 0.045), Vector2(0.965, 0.135))
 const SETTINGS_AUDIO_SECTION_RECT := Rect2(Vector2(0.040, 0.240), Vector2(0.488, 0.805))
 const SETTINGS_PLAY_SECTION_RECT := Rect2(Vector2(0.512, 0.240), Vector2(0.960, 0.805))
 const SETTINGS_MAINT_SECTION_RECT := Rect2(Vector2(0.040, 0.805), Vector2(0.960, 0.955))
@@ -3238,7 +3238,12 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 			face.texture = null
 		face.modulate = Color.WHITE
 		face.self_modulate = Color.WHITE
-		configure_guofeng_button_slice(face, not ink_face and button.name.begins_with("SettingRowButton_"))
+		var use_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
+			button.name.begins_with("SettingRowButton_")
+			or button.name.begins_with("SettingsSectionNavButton_")
+			or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
+		)
+		configure_guofeng_button_slice(face, use_nine_slice)
 	button.set_meta("guofeng_button_font_color", text_color)
 	button.set_meta("guofeng_button_face_key", face_key)
 	var empty_style := StyleBoxEmpty.new()
@@ -3259,7 +3264,12 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 				focus_plate.texture = gpt_center_crop_texture(raw_focus, face_key, 0.65)
 		else:
 			focus_plate.texture = null
-		configure_guofeng_button_slice(focus_plate, not ink_face and button.name.begins_with("SettingRowButton_"))
+		var use_focus_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
+			button.name.begins_with("SettingRowButton_")
+			or button.name.begins_with("SettingsSectionNavButton_")
+			or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
+		)
+		configure_guofeng_button_slice(focus_plate, use_focus_nine_slice)
 	var press_sheen := button.get_node_or_null("ButtonPressSheen") as Control
 	if press_sheen != null:
 		button.remove_child(press_sheen)
@@ -3403,7 +3413,7 @@ func configure_touch_button(button: Button) -> void:
 func add_button_focus_feedback(button: Button) -> void:
 	if button == null or not is_instance_valid(button):
 		return
-	var focus_plate = add_optional_gpt_illustration_texture(button, "ui_button_face_plate", rect_full(-0.025, -0.025, 1.025, 1.025), 0.0, false)
+	var focus_plate = add_optional_gpt_illustration_texture(button, "ui_button_face_plate", rect_full(0.0, 0.0, 1.0, 1.0), 0.0, false)
 	if focus_plate != null:
 		focus_plate.name = "ButtonFocusPlate"
 		focus_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
