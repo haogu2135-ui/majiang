@@ -3329,6 +3329,7 @@ func make_top_hud_button(text: String, color: Color, callback: Callable) -> Butt
 	if hud_face != null:
 		hud_face.texture = optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		hud_face.self_modulate = Color.WHITE
+		configure_guofeng_button_slice(hud_face, true, 96, 0.125)
 	draw_top_hud_button_art(button, text, color)
 	return button
 
@@ -3354,11 +3355,14 @@ func draw_top_hud_button_art(button: Button, text: String, _color: Color) -> Con
 	# HUD actions deliberately use an ink focus face with paired ivory artwork.
 	var hud_focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if hud_focus_plate != null:
-		var ink_source := optional_gpt_illustration_texture("menu_ink_primary")
-		if ink_source != null:
-			hud_focus_plate.texture = gpt_center_crop_texture(ink_source, "menu_ink_primary", 0.65)
+		var plaque_source := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+		if plaque_source != null:
+			hud_focus_plate.texture = plaque_source
+			configure_guofeng_button_slice(hud_focus_plate, true, 32, 0.25)
 		else:
-			hud_focus_plate.texture = null
+			var ink_source := optional_gpt_illustration_texture("menu_ink_primary")
+			hud_focus_plate.texture = gpt_center_crop_texture(ink_source, "menu_ink_primary", 0.65) if ink_source != null else null
+			configure_guofeng_button_slice(hud_focus_plate, false)
 	var marker := make_label(art, "•", 8, Color(0.82, 0.24, 0.18), false)
 	marker.name = "TopHudButtonFocusMarker"
 	style_guofeng_label(marker, true)

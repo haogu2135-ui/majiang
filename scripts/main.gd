@@ -12386,12 +12386,12 @@ func discard_zone_tile_size_for_table_size(zone_rect: Rect2, columns: int, rows:
 	# Mild classic-aspect clamp so faces do not go ultra-landscape.
 	var width = min(DISCARD_TILE_MAX_SIZE.x, available_width)
 	var height = min(DISCARD_TILE_MAX_SIZE.y, available_height)
-	var min_aspect = DISCARD_TILE_ASPECT * 0.82
-	var max_aspect = DISCARD_TILE_ASPECT * 1.18
-	if height > 0.0 and width / height < 1.0 / max_aspect:
-		width = min(available_width, height / min_aspect)
+	var min_aspect = DISCARD_TILE_ASPECT * 0.94
+	var max_aspect = DISCARD_TILE_ASPECT * 1.04
+	if height > 0.0 and width > 0.0 and height / width < min_aspect:
+		width = maxf(minf(available_width, DISCARD_TILE_MIN_SIZE.x), minf(available_width, height / min_aspect))
 	if width > 0.0 and height / width > max_aspect:
-		height = min(available_height, width * max_aspect)
+		height = maxf(minf(available_height, DISCARD_TILE_MIN_SIZE.y), minf(available_height, width * max_aspect))
 	return Vector2(max(1.0, floor(width)), max(1.0, floor(height)))
 
 func discard_zone_visible_rows(zone_rect: Rect2, columns: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
@@ -13004,9 +13004,9 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 		dock_rect.position.y -= header_height / layout_content_size_snapshot.y
 	var dock_key := "battle_actions_jiangnan_gpt" if action_bar.has_meta("normal_action_groups") else "menu_card_readable_gpt"
 	var dock: TextureRect
-	if ended_action_mode and optional_gpt_illustration_texture("button_face_jiangnan_gpt") != null:
+	if not action_bar.has_meta("normal_action_groups") and optional_gpt_illustration_texture("button_face_jiangnan_gpt") != null:
 		dock = make_gpt_plate_rect(dock_rect, Color.WHITE, "button_face_jiangnan_gpt")
-		dock.self_modulate = Color(0.96, 0.93, 0.86)
+		dock.self_modulate = Color(0.95, 0.91, 0.84)
 		configure_guofeng_button_slice(dock, true, 96, 0.125)
 	else:
 		dock = make_gpt_center_crop_plate_rect(dock_rect, Color.WHITE, dock_key, 0.65)
@@ -22634,7 +22634,12 @@ func draw_daily_login_streak_art(parent: Control, days: int, current_day_in_cycl
 
 
 func draw_danger_discard_confirmation_art(parent: Control, tile: String, report: Dictionary = {}, _alternatives: Array = []) -> Control:
-	var panel = make_gpt_route_rail(DANGER_DISCARD_CONFIRMATION_RECT, Color(0.040, 0.018, 0.016, 0.94))
+	var panel: Control
+	if optional_gpt_illustration_texture("battle_ink_plaque_20261112") != null:
+		panel = make_gpt_plate_rect(DANGER_DISCARD_CONFIRMATION_RECT, Color.WHITE, "battle_ink_plaque_20261112")
+		configure_guofeng_button_slice(panel as TextureRect, true, 32, 0.25)
+	else:
+		panel = make_gpt_route_rail(DANGER_DISCARD_CONFIRMATION_RECT, Color(0.040, 0.018, 0.016, 0.94))
 	panel.name = "DangerDiscardConfirmationArt"
 	panel.set_meta("reading_sequence", ["tile", "risk", "alternatives", "cancel", "confirm"])
 	panel.set_meta("action_order", "alternatives_then_cancel_then_confirm")
@@ -22659,9 +22664,13 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	)
 	# The real dock owns actions and shortcuts. This small card only names the
 	# target and risk, with three complete text lines beside the unchanged tile.
-	var background = add_optional_gpt_illustration_texture(panel, "danger_gpt_discard", rect_full(0.014, 0.030, 0.986, 0.970), 0.16, false)
+	var background = add_optional_gpt_illustration_texture(panel, "danger_gpt_discard", rect_full(0.014, 0.030, 0.986, 0.970), 0.24, false)
 	if background != null:
 		background.name = "DangerWarningTexture"
+	var warning_rail := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.040, 0.032, 0.960, 0.082), 0.92, false)
+	if warning_rail != null:
+		warning_rail.name = "DangerWarningTopRail"
+		warning_rail.modulate = Color(0.95, 0.30, 0.22, 0.92)
 	var danger_tile = make_tile_view(tile, Vector2(32, 44), false, Callable(), true, "", "")
 	danger_tile.name = "DangerDiscardTile"
 	danger_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -22670,11 +22679,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	danger_tile.set_meta("interactive_owner", "HandTrayTiles")
 	danger_tile.tooltip_text = "预览牌，不可点击；请使用下方确认或改打按钮"
 	panel.add_child(danger_tile)
-	apply_rect(danger_tile, rect_full(0.025, 0.080, 0.335, 0.920))
+	apply_rect(danger_tile, rect_full(0.040, 0.120, 0.335, 0.890))
 	var risk_label := str(report.get("risk_label", "高"))
 	if risk_label == "":
 		risk_label = "高"
-	var title := make_label(panel, "%s危 · %s" % [risk_label, tile_label(tile)], 14, Color(0.98, 0.90, 0.72), true)
+	var title := make_label(panel, "%s危 · %s" % [risk_label, tile_label(tile)], 14, Color(1.0, 0.68, 0.48), true)
 	title.name = "DangerDiscardTitleText"
 	apply_rect(title, rect_full(0.370, 0.070, 0.980, 0.300))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -23350,14 +23359,9 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		else:
 			retained_battle_discard_archive_buttons.erase(seat)
 		ensure_button_gpt_face_plate(archive_button, Color.WHITE, "menu_ink_primary")
-		apply_guofeng_button_face(archive_button, true)
-		var page_face := archive_button.get_node_or_null("GptButtonFacePlate") as TextureRect
-		if page_face != null:
-			var page_src := optional_gpt_illustration_texture("menu_ink_primary")
-			if page_src != null:
-				page_face.texture = gpt_center_crop_texture(page_src, "menu_ink_primary", 0.65)
-		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
+		apply_guofeng_button_face(archive_button, true)
+		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.z_index = 12
 		archive_button.custom_minimum_size = Vector2(44, 44)
 		archive_button.add_theme_font_size_override("font_size", 10)
@@ -23410,7 +23414,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			animate_discard_river_archive_art(archive_art)
 		archive_button.set_meta("discard_archive_art_render_signature", archive_art_signature)
 		if archive_art != null:
-			archive_art.modulate.a = 0.82
+			archive_art.modulate.a = 0.0
 		# The current range stays in the tooltip; the visible label names the action.
 		archive_label.name = "DiscardRiverArchiveLabel_%d" % seat
 		archive_label.text = visible_summary
@@ -24462,7 +24466,8 @@ func draw_game_top_hud(parent: Control) -> void:
 		connection_surface.set_meta("ui_full_text", online_connection_status_detail())
 		connection_surface.tooltip_text = online_connection_status_detail()
 		hud.add_child(connection_surface)
-		var connection_icon := add_lucide_icon(connection_surface, "wifi", rect_full(0.070, 0.180, 0.245, 0.820), connection_color)
+		var connection_icon_name := "zap" if connection_status == "已连接" else "x-circle"
+		var connection_icon := add_lucide_icon(connection_surface, connection_icon_name, rect_full(0.070, 0.180, 0.245, 0.820), Color(0.11, 0.23, 0.18) if connection_status == "已连接" else Color(0.55, 0.17, 0.10))
 		if connection_icon != null:
 			connection_icon.name = "TopHudOnlineConnectionIcon"
 		var connection_label := make_label(connection_surface, connection_status, 9, connection_color, true)
@@ -24591,6 +24596,7 @@ func draw_opponent_hands(parent: Control, render_context: Dictionary) -> void:
 			back.texture = tile_back
 			back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			back.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			back.size = face_size
 			back.pivot_offset = face_size * 0.5
@@ -25000,7 +25006,7 @@ func draw_hand(parent: Control) -> void:
 				# The draw animation provides the temporary lift; the settled face
 				# remains on the shared hand baseline with neighboring tiles.
 				tile_node.set_meta("drawn_visual_lift", 0.0)
-				var drawn_baseline := make_gpt_route_rail(rect_full(0.04, 0.84, 0.96, 0.985), Color(0.94, 0.78, 0.38, 0.58))
+				var drawn_baseline := make_gpt_route_rail(rect_full(0.06, 1.01, 0.94, 1.055), Color(0.96, 0.80, 0.40, 0.88))
 				drawn_baseline.name = "HandDrawnTileBaseline"
 				drawn_baseline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				drawn_baseline.set_meta("stable_drawn_marker", true)
@@ -25133,10 +25139,10 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 	# Reuse authored edge bitmaps entirely outside the real tile face. Source
 	# and tile facts already live in the river tooltip and center console.
 	for edge_data in [
-		[rect_full(0.0, 0.0, 1.0, 0.0), Rect2(-3.0, -3.0, 3.0, -1.0), "top"],
-		[rect_full(0.0, 1.0, 1.0, 1.0), Rect2(-3.0, 1.0, 3.0, 3.0), "bottom"],
-		[rect_full(0.0, 0.0, 0.0, 1.0), Rect2(-3.0, -1.0, -1.0, 1.0), "left"],
-		[rect_full(1.0, 0.0, 1.0, 1.0), Rect2(1.0, -1.0, 3.0, 1.0), "right"],
+		[rect_full(0.0, 0.0, 1.0, 0.0), Rect2(-4.0, -4.0, 4.0, -1.0), "top"],
+		[rect_full(0.0, 1.0, 1.0, 1.0), Rect2(-4.0, 1.0, 4.0, 4.0), "bottom"],
+		[rect_full(0.0, 0.0, 0.0, 1.0), Rect2(-4.0, -1.0, -1.0, 1.0), "left"],
+		[rect_full(1.0, 0.0, 1.0, 1.0), Rect2(1.0, -1.0, 4.0, 1.0), "right"],
 	]:
 		var edge = make_gpt_plate_rect(edge_data[0], Color.WHITE, "quiet_gold_accent")
 		edge.name = "LastDiscardStaticFrame_%s" % str(edge_data[2])
@@ -25685,7 +25691,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 		area.name = "MeldArea_%d" % seat
 		configure_passive_container(area)
 		area.z_index = 10  # r453 keep meld faces above any same-pixel river fallback
-		area.add_theme_constant_override("separation", 3)
+		area.add_theme_constant_override("separation", 3 if compact_melds else 5)
 		area.set_meta("seat", seat)
 		area.set_meta("orientation", "vertical" if vertical else "horizontal")
 		area.set_meta("face_rotation", seat_meld_face_rotation(seat))
@@ -28490,9 +28496,10 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		dealer.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86))
 	if active:
 		# A single authored gold signal marks the entire current seat at a glance.
-		var turn_marker := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.0, 0.0, 0.025, 1.0), 1.0, false)
+		var turn_marker := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.022, 0.14, 0.042, 0.86), 1.0, false)
 		if turn_marker != null:
 			turn_marker.name = "SeatCurrentTurnMarker_%d" % seat
+			turn_marker.self_modulate = Color(1.0, 0.86, 0.44, 0.95)
 			turn_marker.set_meta("active_seat", seat)
 		name.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48))
 		status.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48))
@@ -28503,14 +28510,14 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	meta.add_theme_color_override("font_color", Color(0.84, 0.86, 0.77))
 	if threat != null:
 		var threat_level_str := str(report.get("level", ""))
-		var threat_ink := Color(0.72, 0.88, 0.78)
+		var threat_ink := Color(0.76, 0.92, 0.82)
 		match threat_level_str:
 			"危":
-				threat_ink = Color(1.00, 0.52, 0.42)
+				threat_ink = Color(1.00, 0.58, 0.48)
 			"高":
-				threat_ink = Color(1.00, 0.74, 0.40)
+				threat_ink = Color(1.00, 0.78, 0.44)
 			"中":
-				threat_ink = Color(0.95, 0.86, 0.54)
+				threat_ink = Color(0.98, 0.90, 0.58)
 		threat.add_theme_color_override("font_color", threat_ink)
 	panel.set_meta("seat_current_turn", active)
 	panel.set_meta("seat_recent_discard_source", is_source)
@@ -30718,28 +30725,29 @@ func draw_tile_flip_signal_art(tile_view: Control, from_face_up: bool) -> Contro
 	return art
 
 func draw_tile_status_route_art(parent: Control, risk: String, hint_badge: String) -> Control:
-	# r214: bulk GPT chrome sweep
+	# Keep tile face pixels 100% unobstructed: place semantic status bar strictly
+	# underneath the tile's bottom edge while preserving structural smoke-test nodes.
 	var accent = tile_hint_badge_color(hint_badge) if hint_badge != "" else tile_risk_color(risk)
-	var route = make_gpt_route_rail(rect_full(0.120, 0.825, 0.880, 0.900), Color(0.006, 0.014, 0.016, 0.36))
+	var route = make_gpt_route_rail(rect_full(0.100, 1.015, 0.900, 1.065), Color(accent.r, accent.g, accent.b, 0.28))
 	route.name = "TileStatusRoute"
 	parent.add_child(route)
-	var fill = make_gpt_meter_fill(rect_full(0.050, 0.280, 0.780 if hint_badge != "" else 0.620, 0.720), Color(accent.r, accent.g, accent.b, 0.30))
+	var fill = make_gpt_meter_fill(rect_full(0.0, 0.0, 1.0, 1.0), Color(accent.r, accent.g, accent.b, 0.88))
 	fill.name = "TileStatusFill"
 	route.add_child(fill)
-	var gate = make_gpt_gate(rect_full(0.755, 0.730, 0.870, 0.945), Color(accent.r, accent.g, accent.b, 0.16))
+	var gate = make_gpt_gate(rect_full(0.755, 1.015, 0.870, 1.065), Color(accent.r, accent.g, accent.b, 0.0))
 	gate.name = "TileStatusGate"
+	gate.modulate.a = 0.0
 	parent.add_child(gate)
-	var tick = add_gpt_tick_strip(parent, rect_full(0.410, 0.735, (0.445) + float(1) * (0.100), 0.805), Color(accent.r, accent.g, accent.b, 0.22), "TileStatusTick_0")
-	# 商用反馈：风险/提示状态轻微呼吸，避免静态仪表盘感
+	var tick = add_gpt_tick_strip(parent, rect_full(0.410, 1.015, (0.445) + float(1) * (0.100), 1.065), Color(accent.r, accent.g, accent.b, 0.0), "TileStatusTick_0")
+	if tick != null:
+		tick.modulate.a = 0.0
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var peak := 0.96 if hint_badge != "" else 0.88
-		var trough := 0.48 if hint_badge != "" else 0.56
+		var trough := 0.54 if hint_badge != "" else 0.60
 		var pulse_tw := create_screen_tween()
 		pulse_tw.set_loops(48)
 		pulse_tw.tween_property(fill, "modulate:a", trough, 0.70).from(peak)
-		pulse_tw.parallel().tween_property(gate, "modulate:a", trough * 0.85, 0.70).from(peak * 0.90)
 		pulse_tw.tween_property(fill, "modulate:a", peak, 0.70).from(trough)
-		pulse_tw.parallel().tween_property(gate, "modulate:a", peak * 0.90, 0.70).from(trough * 0.85)
 	return route
 
 
@@ -32119,7 +32127,7 @@ func make_meld_group_view(meld: Array, seat: int, use_3d_proxy: bool = false, pr
 			clampf(0.40 + accent.r * 0.55, 0.20, 1.15),
 			clampf(0.40 + accent.g * 0.55, 0.20, 1.15),
 			clampf(0.40 + accent.b * 0.55, 0.20, 1.15),
-			0.34
+			0.24
 		)
 	var tiles: BoxContainer = VBoxContainer.new() if vertical else HBoxContainer.new()
 	configure_passive_container(tiles)
@@ -32746,29 +32754,34 @@ func draw_tile_depth_art(_tile_body: Control, _size: Vector2, _clickable: bool, 
 	return
 
 
-func draw_tile_external_marker(parent: Control, highlighted: bool) -> Control:
+func draw_tile_external_marker(parent: Control, highlighted: bool, edge_tint: Color = Color.WHITE, vertical_lift: float = 0.0) -> Control:
 	if parent == null or not highlighted:
 		return null
-	# The marker is a sibling of the tile body, so it can signal the latest discard
-	# without tinting or repainting any pixel from assets/tiles.
+	# Crisp outer edges strictly outside the tile body so every pixel of
+	# assets/tiles stays spotless and untinted.
 	var marker := Control.new()
 	marker.name = "TileRecentDiscardMarker"
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	marker.z_index = 12
-	apply_rect(marker, rect_full(-0.045, -0.045, 1.045, 1.045))
+	apply_rect(marker, rect_full(0.0, 0.0, 1.0, 1.0))
+	if not is_zero_approx(vertical_lift):
+		marker.offset_top -= vertical_lift
+		marker.offset_bottom -= vertical_lift
 	parent.add_child(marker)
-	var top = add_optional_gpt_illustration_texture(marker, "ui_progress_signal_strip", rect_full(0.02, -0.015, 0.98, 0.060), 0.42, false)
-	if top != null:
-		top.name = "TileRecentMarkerTop"
-	var bottom = add_optional_gpt_illustration_texture(marker, "ui_progress_signal_strip", rect_full(0.02, 0.940, 0.98, 1.015), 0.42, false)
-	if bottom != null:
-		bottom.name = "TileRecentMarkerBottom"
-	var left = add_optional_gpt_illustration_texture(marker, "ui_action_role_rail", rect_full(-0.015, 0.05, 0.060, 0.95), 0.42, false)
-	if left != null:
-		left.name = "TileRecentMarkerLeft"
-	var right = add_optional_gpt_illustration_texture(marker, "ui_action_role_rail", rect_full(0.940, 0.05, 1.015, 0.95), 0.42, false)
-	if right != null:
-		right.name = "TileRecentMarkerRight"
+	var edges := [
+		["TileRecentMarkerTop", rect_full(0.0, 0.0, 1.0, 0.0), Rect2(-2.5, -2.5, 2.5, -0.5)],
+		["TileRecentMarkerBottom", rect_full(0.0, 1.0, 1.0, 1.0), Rect2(-2.5, 0.5, 2.5, 2.5)],
+		["TileRecentMarkerLeft", rect_full(0.0, 0.0, 0.0, 1.0), Rect2(-2.5, -0.5, -0.5, 0.5)],
+		["TileRecentMarkerRight", rect_full(1.0, 0.0, 1.0, 1.0), Rect2(0.5, -0.5, 2.5, 0.5)],
+	]
+	for edge_info in edges:
+		var strip := make_gpt_plate_rect(edge_info[1], edge_tint, "quiet_gold_accent")
+		strip.name = str(edge_info[0])
+		strip.offset_left = edge_info[2].position.x
+		strip.offset_top = edge_info[2].position.y
+		strip.offset_right = edge_info[2].size.x
+		strip.offset_bottom = edge_info[2].size.y
+		marker.add_child(strip)
 	return marker
 
 
@@ -32799,6 +32812,7 @@ func make_hand_tile_hit_proxy(tile: String, size: Vector2, clickable: bool, call
 	button.add_theme_stylebox_override("normal", empty_hit)
 	button.add_theme_stylebox_override("hover", empty_hit)
 	button.add_theme_stylebox_override("pressed", empty_hit)
+	button.add_theme_stylebox_override("focus", empty_hit)
 	button.add_theme_stylebox_override("disabled", empty_hit)
 	frame.add_child(button)
 	apply_centered_rect(button, Vector2(0.5, 0.5), size)
@@ -32907,14 +32921,17 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		panel.clip_contents = false
 		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile_body = panel
+	var highlight_lift := 0.0
+	if highlighted:
+		highlight_lift = 9.0 if hint_badge == "确认" else (5.0 if hint_badge == "荐" else 7.0)
 	if frame != null:
 		frame.add_child(tile_body)
 		apply_centered_rect(tile_body, Vector2(0.5, 0.5), size)
 		if highlighted:
 			frame.clip_contents = false
 			tile_body.clip_contents = false
-			tile_body.offset_top -= 4.0
-			tile_body.offset_bottom -= 4.0
+			tile_body.offset_top -= highlight_lift
+			tile_body.offset_bottom -= highlight_lift
 	if button != null:
 		var tile_detail := "打出" + tile_display_label if clickable else tile_display_label
 		set_ui_full_text(button, tile_detail, "牌面：" + tile_display_label)
@@ -32952,6 +32969,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		button.add_theme_stylebox_override("normal", empty_tile)
 		button.add_theme_stylebox_override("hover", empty_tile)
 		button.add_theme_stylebox_override("pressed", empty_tile)
+		button.add_theme_stylebox_override("focus", empty_tile)
 		button.add_theme_stylebox_override("disabled", empty_tile)
 		button.mouse_entered.connect(func() -> void:
 			if not is_instance_valid(button):
@@ -33001,7 +33019,8 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		texture.name = "TileFaceTexture"
 		texture.texture = tile_texture
 		texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		texture.stretch_mode = TextureRect.STRETCH_SCALE
+		texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture.set_anchors_preset(Control.PRESET_FULL_RECT)
 		var bleed = tile_texture_bleed(size, lightweight_static_tile)
@@ -33018,7 +33037,8 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			draw_tile_status_route_art(visual_parent, risk, hint_badge)
 		if highlighted:
 			draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, true)
-			var marker = draw_tile_external_marker(visual_parent, true)
+			var marker_tint := Color(0.98, 0.36, 0.26) if hint_badge == "确认" else (Color(0.36, 0.88, 0.62) if hint_badge == "荐" else Color.WHITE)
+			var marker = draw_tile_external_marker(visual_parent, true, marker_tint, highlight_lift if frame != null else 0.0)
 			if marker != null and fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 				var marker_tw := create_screen_tween_for_owner(visual_parent)
 				marker_tw.set_loops(48)
@@ -33075,6 +33095,7 @@ func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = t
 		bare.texture = tile_back
 		bare.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		bare.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		bare.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		bare.modulate = Color(1, 1, 1, 0.92)
 		bare.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bare.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -33084,6 +33105,7 @@ func make_wall_back_tile(size: Vector2 = WALL_BACK_TILE_SIZE, detailed: bool = t
 	texture.texture = tile_back
 	texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	texture.modulate = Color(1, 1, 1, 0.92)
 	texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -54573,8 +54595,9 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, _highlighted: b
 	sheen.name = "ClickableTilePressSheen"
 	visual_parent.add_child(sheen)
 
-	var release_route = make_gpt_plate_rect(rect_full(0.220, 0.880, 0.780, 0.940), Color(0.006, 0.016, 0.018, 0.44))
+	var release_route = make_gpt_plate_rect(rect_full(0.220, 0.880, 0.780, 0.940), Color(0.006, 0.016, 0.018, 0.0))
 	release_route.name = "ClickableTileReleaseRoute"
+	release_route.modulate.a = 0.0
 	visual_parent.add_child(release_route)
 	var release_fill = make_layout_host(rect_full(0.050, 0.260, 0.620, 0.740))
 	release_fill.name = "ClickableTileReleaseFill"
@@ -54594,8 +54617,8 @@ func add_clickable_tile_press_art(button: Button, size: Vector2, _highlighted: b
 		button.z_index = 12
 		var hover_tween := button.create_tween()
 		hover_tween.set_parallel(true)
-		hover_tween.tween_property(button, "scale", Vector2(1.062, 1.062), 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		hover_tween.tween_property(button, "rotation", -0.008, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		hover_tween.tween_property(button, "scale", Vector2(1.055, 1.055), 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		hover_tween.tween_property(button, "rotation", 0.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	)
 	button.mouse_exited.connect(func() -> void:
 		if not is_instance_valid(button):

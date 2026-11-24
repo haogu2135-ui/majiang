@@ -70,9 +70,13 @@ func _notification(what: int) -> void:
 
 static func face_center_for_layout(index: int, capacity: int, is_horizontal: bool, available_size: Vector2, face_size: Vector2) -> Vector2:
 	var slots := float(maxi(1, capacity))
-	var pitch := minf(available_size.x / slots, face_size.x * 4.0 / 3.0) if is_horizontal else available_size.y / slots
-	var start := (available_size.x - pitch * slots) * 0.5 if is_horizontal else 0.0
-	return Vector2(start + (float(index) + 0.5) * pitch, available_size.y * 0.5) if is_horizontal else Vector2(available_size.x * 0.5, (float(index) + 0.5) * pitch)
+	if is_horizontal:
+		var pitch := minf(available_size.x / slots, face_size.x * 4.0 / 3.0)
+		var start := (available_size.x - pitch * slots) * 0.5
+		return Vector2(start + (float(index) + 0.5) * pitch, available_size.y * 0.5)
+	var v_pitch := minf(available_size.y / slots, face_size.y * 4.0 / 3.0)
+	var v_start := (available_size.y - v_pitch * slots) * 0.5
+	return Vector2(available_size.x * 0.5, v_start + (float(index) + 0.5) * v_pitch)
 
 
 func sync_wall_faces() -> void:
@@ -84,7 +88,8 @@ func sync_wall_faces() -> void:
 		var face := TextureRect.new()
 		face.name = "WallTileBack_%d" % wall_face_pool.size()
 		face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		face.stretch_mode = TextureRect.STRETCH_SCALE
+		face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		face.texture = back
 		add_child(face)
