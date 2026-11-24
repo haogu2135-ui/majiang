@@ -12777,9 +12777,11 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 	apply_rect(focus_marker, rect_full(0.0, 0.200, 0.0, 0.800))
 	focus_marker.offset_left = 8.0
 	focus_marker.offset_right = 20.0
+	button.resized.connect(Callable(self, "position_button_focus_marker_by_id").bind(button.get_instance_id(), focus_marker.get_instance_id()))
 	button.focus_entered.connect(sync_action_button_focus_art.bind(button, true))
 	button.focus_exited.connect(sync_action_button_focus_art.bind(button, false))
 	sync_action_button_focus_art(button, button.has_focus())
+	call_deferred("position_button_focus_marker_by_id", button.get_instance_id(), focus_marker.get_instance_id())
 	return art
 
 
@@ -12792,14 +12794,25 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		text_color = Color(0.85, 0.82, 0.66)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if focus_plate != null:
-		var focus_key := "menu_card_readable_gpt" if group != "" else "menu_ink_primary"
+		var focus_key := "button_face_jiangnan_gpt" if group != "" else "battle_ink_plaque_20261112"
 		var source := optional_gpt_illustration_texture(focus_key)
-		focus_plate.texture = gpt_center_crop_texture(source, focus_key, 0.65) if source != null else null
+		if source != null:
+			focus_plate.texture = source
+			if group != "":
+				configure_guofeng_button_slice(focus_plate, true, 96, 0.125)
+			else:
+				configure_guofeng_button_slice(focus_plate, true, 32, 0.25)
+		else:
+			var fallback_key := "menu_card_readable_gpt" if group != "" else "menu_ink_primary"
+			var fallback_source := optional_gpt_illustration_texture(fallback_key)
+			focus_plate.texture = gpt_center_crop_texture(fallback_source, fallback_key, 0.65) if fallback_source != null else null
+			configure_guofeng_button_slice(focus_plate, false)
 		focus_plate.modulate = Color(1.0, 1.0, 1.0, 1.0 if focused else 0.0)
 	var focus_marker := button.find_child("ActionButtonFocusMarker", true, false) as Label
 	if focus_marker != null:
 		focus_marker.visible = focused
 		style_guofeng_label(focus_marker, on_ink)
+		position_button_focus_marker(button, focus_marker)
 	var shortcut_label := button.find_child("ActionButtonShortcutHint", true, false) as Label
 	if shortcut_label != null:
 		style_guofeng_label(shortcut_label, on_ink)
@@ -12896,10 +12909,21 @@ func prepare_normal_action_groups() -> void:
 		previous_group = group
 		var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 		if face != null:
-			face.visible = group == "play"
 			if group == "play":
+				face.visible = true
 				button.set_meta("guofeng_button_face_key", "button_face_jiangnan_gpt")
 				face.texture = optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+				face.self_modulate = Color.WHITE
+				configure_guofeng_button_slice(face, false)
+			else:
+				var plaque_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+				if plaque_tex != null:
+					face.visible = true
+					face.texture = plaque_tex
+					face.self_modulate = Color.WHITE if group == "advice" else Color(0.86, 0.89, 0.85)
+					configure_guofeng_button_slice(face, true, 32, 0.25)
+				else:
+					face.visible = false
 		sync_action_button_focus_art(button, button.has_focus())
 	var separation := action_button_separation_for_count(buttons.size())
 	var lane := action_bar_layout_rect()
@@ -12979,8 +13003,14 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	if priority_header:
 		dock_rect.position.y -= header_height / layout_content_size_snapshot.y
 	var dock_key := "battle_actions_jiangnan_gpt" if action_bar.has_meta("normal_action_groups") else "menu_card_readable_gpt"
-	var dock := make_gpt_center_crop_plate_rect(dock_rect, Color.WHITE, dock_key, 0.65)
-	dock.self_modulate = Color.WHITE
+	var dock: TextureRect
+	if ended_action_mode and optional_gpt_illustration_texture("button_face_jiangnan_gpt") != null:
+		dock = make_gpt_plate_rect(dock_rect, Color.WHITE, "button_face_jiangnan_gpt")
+		dock.self_modulate = Color(0.96, 0.93, 0.86)
+		configure_guofeng_button_slice(dock, true, 96, 0.125)
+	else:
+		dock = make_gpt_center_crop_plate_rect(dock_rect, Color.WHITE, dock_key, 0.65)
+		dock.self_modulate = Color.WHITE
 	dock.name = "ActionButtonDock"
 	if ended_action_mode:
 		dock.z_index = ROUND_SUMMARY_PANEL_Z_INDEX
@@ -27963,13 +27993,15 @@ func draw_rules_guide_art(parent: Control, viewport_snapshot: Vector2 = Vector2.
 		var node := make_layout_host(rect_full(float(i) / 6.0, 0.0, float(i + 1) / 6.0 - 0.008, 1.0))
 		node.name = "RulesGuideStep_%d" % i
 		art.add_child(node)
-		var plate := add_optional_gpt_illustration_texture(node, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+		var plate := add_optional_gpt_illustration_texture(node, "battle_ink_plaque_20261112" if i == 0 else "button_face_jiangnan_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 		if plate != null:
 			plate.name = "RulesGuideStepActivePlate_%d" % i
-			var step_source := optional_gpt_illustration_texture("menu_card_readable_gpt")
-			if step_source != null:
-				plate.texture = gpt_aspect_crop_texture(step_source, "menu_card_readable_gpt", 3.46, 0.65)
-			plate.self_modulate = Color.WHITE if i == 0 else Color(0.88, 0.82, 0.70)
+			if i == 0:
+				configure_guofeng_button_slice(plate, true, 32, 0.25)
+				plate.self_modulate = Color.WHITE
+			else:
+				configure_guofeng_button_slice(plate, true, 96, 0.125)
+				plate.self_modulate = Color(0.95, 0.91, 0.84)
 		var label := make_label(node, RULES_SECTION_NAMES[i], 12, Color.WHITE, true)
 		label.name = "RulesGuideStepLabel_%d" % i
 		label.set_meta("guide_name", RULES_SECTION_NAMES[i])
@@ -29189,8 +29221,8 @@ func draw_settings_overlay(parent: Control) -> void:
 			focus_settings_section(settings_content_parent, settings_large_text_scroll, section_name)
 		)
 		ensure_button_gpt_face_plate(section_nav_button, Color(0.98, 0.92, 0.72, 0.88), "action_gpt_dock_banner_bright")
-		apply_guofeng_button_face(section_nav_button, section_name == active_settings_section)
 		section_nav_button.name = "SettingsSectionNavButton_%s" % section_name
+		apply_guofeng_button_face(section_nav_button, section_name == active_settings_section)
 		section_nav_button.custom_minimum_size = Vector2(82, UI_MIN_TOUCH_TARGET)
 		section_nav_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		section_nav_button.tooltip_text = "显示%s设置" % section_name
@@ -29203,7 +29235,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		mark_ui_optimization(section_nav_button, "F-713")
 		settings_section_navigation.add_child(section_nav_button)
 		if section_name == active_settings_section:
-			var active_marker := make_gpt_tick_strip(rect_full(0.080, 0.875, 0.920, 0.985), Color(0.96, 0.78, 0.36, 0.82))
+			var active_marker := make_gpt_tick_strip(rect_full(0.220, 0.885, 0.780, 0.965), Color(0.96, 0.78, 0.36, 0.82))
 			active_marker.name = "SettingsSectionActiveMarker"
 			active_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			active_marker.set_meta("marker_owner", section_name)
@@ -34927,9 +34959,11 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 		marker.offset_right = 22.0
 		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var focus_marker := marker
+		button.resized.connect(Callable(self, "position_button_focus_marker_by_id").bind(button.get_instance_id(), focus_marker.get_instance_id()))
 		button.focus_entered.connect(func() -> void:
 			if is_instance_valid(focus_marker):
 				focus_marker.visible = true
+				position_button_focus_marker(button, focus_marker)
 		)
 		button.focus_exited.connect(func() -> void:
 			if is_instance_valid(focus_marker):
@@ -34940,6 +34974,8 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 		marker.add_theme_color_override("font_color", marker_color)
 	style_guofeng_label(marker, ink_face)
 	marker.visible = button.has_focus()
+	position_button_focus_marker(button, marker)
+	call_deferred("position_button_focus_marker_by_id", button.get_instance_id(), marker.get_instance_id())
 
 
 func make_guofeng_secondary_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
@@ -35860,7 +35896,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	caption.add_theme_font_override("font", ui_cjk_font())
 	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
 	caption.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-	apply_rect(caption, rect_full(0.0, 0.0, 1.0, 0.267))
+	apply_rect(caption, rect_full(0.0, 0.0, 1.0, 0.240))
 	row.add_child(caption)
 	var edit = LineEdit.new()
 	edit.text = value
@@ -35894,7 +35930,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	mark_ui_optimization(edit, "F-392")
 	if value.strip_edges() == "":
 		edit.placeholder_text = "请输入%s" % label_text
-	apply_rect(edit, rect_full(0.0, 0.267, 1.0, 1.0))
+	apply_rect(edit, rect_full(0.0, 0.290, 1.0, 1.0))
 	var input_art := add_optional_gpt_illustration_texture(edit, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if input_art != null:
 		input_art.name = "LobbyFieldPaperFace"
@@ -35902,7 +35938,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 		input_art.show_behind_parent = true
 	var editing := make_label(row, "编辑中", 12, Color.WHITE, false)
 	editing.name = "LobbyFieldEditingIndicator"
-	apply_rect(editing, rect_full(0.65, 0.0, 1.0, 0.267))
+	apply_rect(editing, rect_full(0.65, 0.0, 1.0, 0.240))
 	editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(editing)
 	editing.visible = false
@@ -36232,12 +36268,12 @@ func _show_online_lobby_impl() -> void:
 	server_caption.name = "OnlineLobbyServerCaption"
 	style_guofeng_label(server_caption)
 	server_caption.add_theme_color_override("font_color", Color(0.24, 0.36, 0.30))
-	apply_rect(server_caption, rect_full(0.600, 0.022, 0.705, 0.048))
+	apply_rect(server_caption, rect_full(0.605, 0.022, 0.705, 0.048))
 	server_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.600, 0.046, 0.772, 0.106), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.605, 0.046, 0.772, 0.106), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
@@ -36465,7 +36501,10 @@ func _show_online_lobby_impl() -> void:
 	status_label.name = "OnlineLobbyStatusLabel"
 	var status_left := lobby_form_left + 0.020 if room_first_layout else (0.125 if wide_lobby_layout else 0.045)
 	var status_right := lobby_form_right - 0.020 if room_first_layout else (0.460 if wide_lobby_layout else 0.480)
-	apply_rect(status_label, rect_full(status_left, 0.914 if compact_lobby_form else 0.896, status_right, 0.954 if compact_lobby_form else 0.936))
+	var status_top := 0.924 if room_first_layout else (0.914 if compact_lobby_form else 0.896)
+	var status_bottom := 0.968 if room_first_layout else (0.954 if compact_lobby_form else 0.936)
+	apply_rect(status_label, rect_full(status_left, status_top, status_right, status_bottom))
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
 	status_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -37616,14 +37655,21 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		step.set_meta("active", active)
 		var plate := step_ref.get("plate", null) as TextureRect
 		if plate != null:
-			var plate_key := "menu_ink_primary" if active else "menu_card_readable_gpt"
+			var plate_key := "battle_ink_plaque_20261112" if active else "button_face_jiangnan_gpt"
 			var step_source := optional_gpt_illustration_texture(plate_key)
 			if step_source != null:
-				plate.texture = gpt_aspect_crop_texture(step_source, plate_key, 3.46, 0.65)
+				plate.texture = step_source
+				if active:
+					configure_guofeng_button_slice(plate, true, 32, 0.25)
+				else:
+					configure_guofeng_button_slice(plate, true, 96, 0.125)
 			else:
-				plate.texture = optional_gpt_illustration_texture(plate_key)
+				var fallback_key := "menu_ink_primary" if active else "menu_card_readable_gpt"
+				var fallback_src := optional_gpt_illustration_texture(fallback_key)
+				plate.texture = gpt_aspect_crop_texture(fallback_src, fallback_key, 3.46, 0.65) if fallback_src != null else null
+				configure_guofeng_button_slice(plate, false)
 			plate.modulate = Color.WHITE
-			plate.self_modulate = Color.WHITE if active else Color(0.88, 0.82, 0.70)
+			plate.self_modulate = Color.WHITE if active else Color(0.95, 0.91, 0.84)
 		var icon := step_ref.get("icon", null) as CanvasItem
 		if icon != null:
 			icon.modulate = Color(1.0, 1.0, 1.0, 1.0 if active else 0.48)
@@ -38262,11 +38308,14 @@ func _show_shop_screen_impl() -> void:
 		apply_guofeng_button_face(buy_btn, can_afford)
 		var buy_face := buy_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
 		if buy_face != null:
-			var face_k := "menu_ink_primary" if can_afford else "button_face_jiangnan_gpt"
+			var face_k := "battle_ink_plaque_20261112" if can_afford else "button_face_jiangnan_gpt"
 			var src := optional_gpt_illustration_texture(face_k)
 			if src != null:
-				buy_face.texture = gpt_center_crop_texture(src, face_k, 0.65) if can_afford else src
-				configure_guofeng_button_slice(buy_face, not can_afford)
+				buy_face.texture = src
+				if can_afford:
+					configure_guofeng_button_slice(buy_face, true, 32, 0.25)
+				else:
+					configure_guofeng_button_slice(buy_face, true, 96, 0.125)
 		buy_btn.tooltip_text = "购买%s，花费%d玉符" % [str(item_info.get("name", item_id)), cost] if can_afford else "缺少%d玉符：需要%d玉符，当前%d玉符" % [maxi(0, cost - int(currency.get("gems", 0))), cost, int(currency.get("gems", 0))]
 		buy_btn.set_meta("disabled_reason", "" if can_afford else buy_btn.tooltip_text)
 		set_ui_full_text(buy_btn, buy_btn.tooltip_text, "商品%s：%s" % [str(item_info.get("name", item_id)), buy_btn.tooltip_text])

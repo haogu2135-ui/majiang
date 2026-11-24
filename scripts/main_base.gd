@@ -3181,6 +3181,32 @@ func style_guofeng_label(label: Label, ink_face: bool = false) -> void:
 	label.set_meta("guofeng_text_surface", "ink" if ink_face else "paper")
 
 
+func position_button_focus_marker(button: Button, marker: Label) -> void:
+	if button == null or marker == null or not is_instance_valid(button) or not is_instance_valid(marker):
+		return
+	marker.anchor_left = 0.0
+	marker.anchor_right = 0.0
+	var clean_text := button.text.strip_edges()
+	if clean_text == "" or button.size.x <= 1.0:
+		marker.offset_left = 8.0
+		marker.offset_right = 20.0
+		return
+	var font := button.get_theme_font("font")
+	var font_size := button.get_theme_font_size("font_size")
+	var text_width := font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x if font != null else 0.0
+	var text_left := (button.size.x - text_width) * 0.5
+	var left := clampf(text_left - 16.0, 6.0, maxf(6.0, button.size.x - 18.0))
+	marker.offset_left = left
+	marker.offset_right = left + 12.0
+
+
+func position_button_focus_marker_by_id(button_id: int, marker_id: int) -> void:
+	var button := node_from_instance_id(button_id) as Button
+	var marker := node_from_instance_id(marker_id) as Label
+	if button != null and marker != null:
+		position_button_focus_marker(button, marker)
+
+
 func sync_guofeng_button_slice(plate_id: int) -> void:
 	var plate := node_from_instance_id(plate_id) as TextureRect
 	if plate == null:
@@ -3203,11 +3229,11 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 		edges = NinePatchRect.new()
 		edges.name = "AuthoredBitmapEdges"
 		edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		edges.scale = Vector2(bitmap_scale, bitmap_scale)
-		for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-			edges.set_patch_margin(side, source_margin)
 		plate.add_child(edges)
 		plate.resized.connect(Callable(self, "sync_guofeng_button_slice").bind(plate.get_instance_id()))
+	edges.scale = Vector2(bitmap_scale, bitmap_scale)
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		edges.set_patch_margin(side, source_margin)
 	edges.texture = source
 	edges.region_rect = Rect2(Vector2.ZERO, source.get_size())
 	edges.visible = true
@@ -3220,6 +3246,13 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
 	var text_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
+	var is_raw_ink_contract := button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")
+	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and str(button.get_meta("action_role", "")) == ""
+	var use_paper_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
+		button.name.begins_with("SettingRowButton_")
+		or button.name.begins_with("SettingsSectionNavButton_")
+		or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
+	)
 	var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if face == null:
 		face = add_optional_gpt_illustration_texture(button, face_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
@@ -3228,22 +3261,22 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 			face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			face.show_behind_parent = true
 	if face != null:
-		var raw_texture := optional_gpt_illustration_texture(face_key)
-		if raw_texture != null:
-			if not ink_face or (button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")):
-				face.texture = raw_texture
-			else:
-				face.texture = gpt_center_crop_texture(raw_texture, face_key, 0.65)
+		var plaque_texture := optional_gpt_illustration_texture("battle_ink_plaque_20261112") if use_framed_ink_slice else null
+		if plaque_texture != null:
+			face.texture = plaque_texture
+			configure_guofeng_button_slice(face, true, 32, 0.25)
 		else:
-			face.texture = null
+			var raw_texture := optional_gpt_illustration_texture(face_key)
+			if raw_texture != null:
+				if not ink_face or is_raw_ink_contract:
+					face.texture = raw_texture
+				else:
+					face.texture = gpt_center_crop_texture(raw_texture, face_key, 0.65)
+			else:
+				face.texture = null
+			configure_guofeng_button_slice(face, use_paper_nine_slice)
 		face.modulate = Color.WHITE
 		face.self_modulate = Color.WHITE
-		var use_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
-			button.name.begins_with("SettingRowButton_")
-			or button.name.begins_with("SettingsSectionNavButton_")
-			or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
-		)
-		configure_guofeng_button_slice(face, use_nine_slice)
 	button.set_meta("guofeng_button_font_color", text_color)
 	button.set_meta("guofeng_button_face_key", face_key)
 	var empty_style := StyleBoxEmpty.new()
@@ -3256,20 +3289,20 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	button.add_theme_constant_override("shadow_offset_y", 0)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if focus_plate != null:
-		var raw_focus := optional_gpt_illustration_texture(face_key)
-		if raw_focus != null:
-			if not ink_face or (button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")):
-				focus_plate.texture = raw_focus
-			else:
-				focus_plate.texture = gpt_center_crop_texture(raw_focus, face_key, 0.65)
+		var focus_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112") if use_framed_ink_slice else null
+		if focus_plaque != null:
+			focus_plate.texture = focus_plaque
+			configure_guofeng_button_slice(focus_plate, true, 32, 0.25)
 		else:
-			focus_plate.texture = null
-		var use_focus_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
-			button.name.begins_with("SettingRowButton_")
-			or button.name.begins_with("SettingsSectionNavButton_")
-			or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
-		)
-		configure_guofeng_button_slice(focus_plate, use_focus_nine_slice)
+			var raw_focus := optional_gpt_illustration_texture(face_key)
+			if raw_focus != null:
+				if not ink_face or is_raw_ink_contract:
+					focus_plate.texture = raw_focus
+				else:
+					focus_plate.texture = gpt_center_crop_texture(raw_focus, face_key, 0.65)
+			else:
+				focus_plate.texture = null
+			configure_guofeng_button_slice(focus_plate, use_paper_nine_slice)
 	var press_sheen := button.get_node_or_null("ButtonPressSheen") as Control
 	if press_sheen != null:
 		button.remove_child(press_sheen)
