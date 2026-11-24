@@ -12767,7 +12767,7 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.550, 0.060, 0.880, 0.360))
+		apply_rect(shortcut_label, rect_full(0.480, 0.080, 0.840, 0.380))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var focus_marker := make_label(art, "•", 14, Color.WHITE, false)
 	focus_marker.name = "ActionButtonFocusMarker"
@@ -27030,26 +27030,29 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	summary_panel.add_child(occupancy_chip)
 	var occupancy_label = make_label(occupancy_chip, "入席 %d/4" % min(4, player_count), 11, Color(0.94, 0.98, 0.82), true)
 	occupancy_label.name = "OnlineLobbyRoomSummaryOccupancyLabel"
-	apply_rect(occupancy_label, rect_full(0.220, 0.0, 0.940, 1.0))
+	occupancy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(occupancy_label, rect_full(0.220, 0.0, 0.960, 1.0))
 	configure_clipped_label(occupancy_label)
-	add_lucide_icon(occupancy_chip, "users", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.16, 0.34, 0.26, 0.92))
+	add_lucide_icon(occupancy_chip, "users", rect_full(0.040, 0.24, 0.180, 0.76), Color(0.16, 0.34, 0.26, 0.92))
 	var ready_chip = make_layout_host(rect_full(0.34, 0.45, 0.66, 1.0))
 	ready_chip.name = "OnlineLobbyRoomSummaryReady"
 	summary_panel.add_child(ready_chip)
 	var ready_label = make_label(ready_chip, "已备 %d" % ready_count, 11, Color(0.96, 0.92, 0.72), true)
 	ready_label.name = "OnlineLobbyRoomSummaryReadyLabel"
-	apply_rect(ready_label, rect_full(0.220, 0.0, 0.940, 1.0))
+	ready_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(ready_label, rect_full(0.220, 0.0, 0.960, 1.0))
 	configure_clipped_label(ready_label)
-	add_lucide_icon(ready_chip, "check-circle-2", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.56, 0.36, 0.12, 0.94))
+	add_lucide_icon(ready_chip, "check", rect_full(0.040, 0.24, 0.180, 0.76), Color(0.56, 0.36, 0.12, 0.94))
 	var state_chip = make_layout_host(rect_full(0.68, 0.45, 1.0, 1.0))
 	state_chip.name = "OnlineLobbyRoomSummaryState"
 	summary_panel.add_child(state_chip)
 	var state_label = make_label(state_chip, lobby_connection_state_text(), 11, Color(0.86, 0.94, 0.92), true)
 	state_label.name = "OnlineLobbyRoomSummaryStateLabel"
-	apply_rect(state_label, rect_full(0.220, 0.0, 0.940, 1.0))
+	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(state_label, rect_full(0.220, 0.0, 0.960, 1.0))
 	configure_clipped_label(state_label)
 	set_ui_full_text(state_label, state_label.text, "房间同步状态")
-	add_lucide_icon(state_chip, "wifi" if lobby_connection_state_text() == "已连接" else "wifi-off", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.14, 0.44, 0.26, 0.94) if lobby_connection_state_text() == "已连接" else Color(0.56, 0.22, 0.16, 0.92))
+	add_lucide_icon(state_chip, "zap" if lobby_connection_state_text() == "已连接" else "x-circle", rect_full(0.040, 0.24, 0.180, 0.76), Color(0.14, 0.44, 0.26, 0.94) if lobby_connection_state_text() == "已连接" else Color(0.56, 0.22, 0.16, 0.92))
 	state_chip.set_meta("state_encoding", "icon_plus_text_not_color_only")
 	mark_ui_optimization(state_label, "F-545")
 	style_guofeng_reading_tree(art)
@@ -29588,8 +29591,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	var chip_plate := add_optional_gpt_illustration_texture(chip, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if chip_plate != null:
 		chip_plate.name = "StatsSummaryChipPlate_%s" % chip_id
-		chip_plate.self_modulate = Color(0.95, 0.92, 0.85)
-		configure_guofeng_button_slice(chip_plate, true, 64, 0.16)
+		chip_plate.self_modulate = Color(0.96, 0.94, 0.88)
 	var display_value := value_text
 	var unit_text := ""
 	for suffix in ["番/局", "分/局", "%", "局", "分"]:
@@ -32634,19 +32636,19 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		# The action keeps a constant physical width; labels use the remaining
 		# reading column. This also distinguishes binary controls from page tabs.
 		apply_rect(button, rect_full(1.0, 0.5, 1.0, 0.5))
-		button.offset_left = -128.0
-		button.offset_right = -16.0
+		button.offset_left = -112.0
+		button.offset_right = 0.0
 		button.offset_top = -23.0
 		button.offset_bottom = 23.0
 		for setting_label: Label in [title_label, status_label]:
 			setting_label.anchor_right = 1.0
-			setting_label.offset_right = -144.0
+			setting_label.offset_right = -128.0
 		if not consequence_row and parent is GridContainer and (parent as GridContainer).columns == 1:
 			# Keep title, current state and action on one scan line. The state is
 			# adjacent to its control instead of leaving an unexplained empty lane.
-			apply_rect(title_label, rect_full(0.015, 0.0, 0.405, 1.0))
+			apply_rect(title_label, rect_full(0.0, 0.0, 0.405, 1.0))
 			apply_rect(status_label, rect_full(0.420, 0.0, 1.0, 1.0))
-			status_label.offset_right = -144.0
+			status_label.offset_right = -128.0
 			status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(button)
 	apply_guofeng_button_face(button, str(button.get_meta("setting_state", "")) == "on" or (title == "本地进度" and reset_progress_confirming))
@@ -38301,12 +38303,12 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else shop_ink
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.48, 0.44, 0.38)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.180, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.230, 0.290, 0.335, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.295, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
+		apply_rect(command_label, rect_full(0.345, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
@@ -55809,8 +55811,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var section_plate := add_optional_gpt_illustration_texture(section, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if section_plate != null:
 		section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
-		section_plate.self_modulate = Color(0.96, 0.94, 0.88, 0.92)
-		configure_guofeng_button_slice(section_plate, true, 64, 0.16)
+		section_plate.self_modulate = Color(0.96, 0.94, 0.88)
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045

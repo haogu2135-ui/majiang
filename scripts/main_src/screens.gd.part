@@ -3413,12 +3413,12 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else shop_ink
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.48, 0.44, 0.38)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.180, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.230, 0.290, 0.335, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.295, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
+		apply_rect(command_label, rect_full(0.345, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
