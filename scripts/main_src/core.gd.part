@@ -5069,10 +5069,10 @@ func ended_action_button_widths(count: int) -> Array[float]:
 			var slot_w := clampf(secondary_budget * (weight / maxf(0.1, total_weight)), 50.0, 140.0)
 			secondary_widths.append(slot_w)
 			used_secondary += slot_w
-		var used = primary + used_secondary + separation * float(secondary_count)
+		var used: float = primary + used_secondary + separation * float(secondary_count)
 		if used > available:
-			var overflow := used - available
-			var shrink_each := overflow / float(secondary_count)
+			var overflow: float = used - available
+			var shrink_each: float = overflow / float(secondary_count)
 			used_secondary = 0.0
 			for j in range(secondary_widths.size()):
 				secondary_widths[j] = maxf(50.0, secondary_widths[j] - shrink_each)

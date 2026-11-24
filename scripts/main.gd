@@ -12588,7 +12588,7 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 
 
 func draw_achievements_dashboard_art(parent: Control) -> Control:
-	var art := make_layout_host(rect_full(0.055, 0.120, 0.925, 0.185))
+	var art := make_layout_host(rect_full(0.055, 0.120, 0.940, 0.185))
 	art.name = "AchievementsDashboardArt"
 	parent.add_child(art)
 	var total := achievements.size()
@@ -12767,13 +12767,16 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.400, 0.0, 0.940, 0.340))
+		apply_rect(shortcut_label, rect_full(0.550, 0.060, 0.880, 0.360))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var focus_marker := make_label(art, "•", 14, Color.WHITE, false)
 	focus_marker.name = "ActionButtonFocusMarker"
 	focus_marker.add_theme_font_size_override("font_size", 14)
+	focus_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	focus_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	apply_rect(focus_marker, rect_full(0.040, 0.250, 0.220, 0.750))
+	apply_rect(focus_marker, rect_full(0.0, 0.200, 0.0, 0.800))
+	focus_marker.offset_left = 8.0
+	focus_marker.offset_right = 20.0
 	button.focus_entered.connect(sync_action_button_focus_art.bind(button, true))
 	button.focus_exited.connect(sync_action_button_focus_art.bind(button, false))
 	sync_action_button_focus_art(button, button.has_focus())
@@ -12979,6 +12982,8 @@ func draw_action_dock(parent: Control, disconnected: bool = false, pending_claim
 	var dock := make_gpt_center_crop_plate_rect(dock_rect, Color.WHITE, dock_key, 0.65)
 	dock.self_modulate = Color.WHITE
 	dock.name = "ActionButtonDock"
+	if ended_action_mode:
+		dock.z_index = ROUND_SUMMARY_PANEL_Z_INDEX
 	dock.set_meta("guofeng_surface_key", dock_key)
 	parent.add_child(dock)
 	# Action buttons have a small press/focus lift. Keep the dock as a visual host
@@ -21602,7 +21607,7 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_layout_host(rect_full(0.600, 0.000, 0.900, 0.140))
+	var simple_seal = make_layout_host(rect_full(0.580, 0.040, 0.920, 0.185))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
 	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.085), 10, 18)
@@ -26818,7 +26823,8 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.set_meta("full_name_route", "OnlineLobbyRosterTouchTarget_%d" % i)
 		set_ui_full_text(name, online_lobby_slot_name(entry), "第%d席完整昵称" % (i + 1))
 		mark_ui_optimization(name, "F-072")
-		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.635, 0.205, 0.695, 0.795), Color(0.76, 0.90, 0.70, 0.92 if active else 0.54))
+		var state_icon_tint := Color(0.14, 0.44, 0.26, 0.96) if active and bool(entry.get("ready", false)) else (Color(0.24, 0.36, 0.30, 0.90) if active else Color(0.40, 0.44, 0.40, 0.76))
+		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.635, 0.205, 0.695, 0.795), state_icon_tint)
 		if state_icon != null:
 			state_icon.name = "OnlineLobbyRosterStateIcon_%d" % i
 			state_icon.set_meta("column_owner", "ready")
@@ -27026,7 +27032,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	occupancy_label.name = "OnlineLobbyRoomSummaryOccupancyLabel"
 	apply_rect(occupancy_label, rect_full(0.220, 0.0, 0.940, 1.0))
 	configure_clipped_label(occupancy_label)
-	add_lucide_icon(occupancy_chip, "users", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.86, 0.94, 0.80, 0.82))
+	add_lucide_icon(occupancy_chip, "users", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.16, 0.34, 0.26, 0.92))
 	var ready_chip = make_layout_host(rect_full(0.34, 0.45, 0.66, 1.0))
 	ready_chip.name = "OnlineLobbyRoomSummaryReady"
 	summary_panel.add_child(ready_chip)
@@ -27034,7 +27040,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	ready_label.name = "OnlineLobbyRoomSummaryReadyLabel"
 	apply_rect(ready_label, rect_full(0.220, 0.0, 0.940, 1.0))
 	configure_clipped_label(ready_label)
-	add_lucide_icon(ready_chip, "check-circle-2", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.96, 0.88, 0.60, 0.84))
+	add_lucide_icon(ready_chip, "check-circle-2", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.56, 0.36, 0.12, 0.94))
 	var state_chip = make_layout_host(rect_full(0.68, 0.45, 1.0, 1.0))
 	state_chip.name = "OnlineLobbyRoomSummaryState"
 	summary_panel.add_child(state_chip)
@@ -27043,7 +27049,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	apply_rect(state_label, rect_full(0.220, 0.0, 0.940, 1.0))
 	configure_clipped_label(state_label)
 	set_ui_full_text(state_label, state_label.text, "房间同步状态")
-	add_lucide_icon(state_chip, "wifi" if lobby_connection_state_text() == "已连接" else "wifi-off", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.86, 0.94, 0.92, 0.86))
+	add_lucide_icon(state_chip, "wifi" if lobby_connection_state_text() == "已连接" else "wifi-off", rect_full(0.045, 0.24, 0.190, 0.76), Color(0.14, 0.44, 0.26, 0.94) if lobby_connection_state_text() == "已连接" else Color(0.56, 0.22, 0.16, 0.92))
 	state_chip.set_meta("state_encoding", "icon_plus_text_not_color_only")
 	mark_ui_optimization(state_label, "F-545")
 	style_guofeng_reading_tree(art)
@@ -27114,7 +27120,7 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	if root_slot:
 		var content_size := safe_content_pixel_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], effective_viewport_size())
-		var timer_top := 0.108 + 52.0 / content_size.y
+		var timer_top := 0.108 + 56.0 / content_size.y
 		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
 	var timer := make_gpt_center_crop_plate_rect(timer_rect, Color.WHITE, "menu_card_readable_gpt", 1.0)
@@ -27148,8 +27154,8 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	set_ui_full_text(warning, "到0秒将自动选择过；可用吃碰杠胡按钮响应", "不响应的默认后果")
 	mark_ui_optimization(warning, "F-065")
 	if root_slot:
-		apply_rect(timer_label, rect_full(0.02, 0.00, 0.98, 0.50))
-		apply_rect(warning, rect_full(0.02, 0.50, 0.98, 1.00))
+		apply_rect(timer_label, rect_full(0.06, 0.04, 0.94, 0.50))
+		apply_rect(warning, rect_full(0.06, 0.50, 0.94, 0.96))
 		warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	return timer
 
@@ -27333,12 +27339,12 @@ func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	var small_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(13)))
 	var row_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(15))) + 12.0
 	var content_top := 12.0 + title_height + 8.0
-	var left_width := floorf((panel_size.x - 64.0) * 0.50)
-	var right_left := 20.0 + left_width + 24.0
+	var left_width := floorf((panel_size.x - 72.0) * 0.50)
+	var right_left := 20.0 + left_width + 32.0
 	var right_width := panel_size.x - right_left - 20.0
 	var winner_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(18)), ui_heading_font().get_height(accessibility_font_size(18))))
 	var score_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(22)), ui_heading_font().get_height(accessibility_font_size(22))))
-	var yaku_top := winner_height + score_height + 8.0
+	var yaku_top := maxf(62.0, winner_height + score_height + 8.0)
 	var yaku_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(13))) * 2.0 + 8.0
 	var detail_height := yaku_top + yaku_height + small_height + 6.0
 	var body_top := content_top + detail_height + 8.0
@@ -27416,8 +27422,8 @@ func draw_round_summary(parent: Control) -> void:
 	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 16.0
 	var body_min_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(14))) * 2.0 + 4.0
 	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 20.0)
-	var preferred_height := 340.0 if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.58
-	var panel_height_px := minf(maxf(maxf(320.0, minimum_height), preferred_height), minf(480.0, panel_bottom_px - 12.0))
+	var preferred_height := 278.0 if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.58
+	var panel_height_px := minf(maxf(maxf(268.0, minimum_height), preferred_height), minf(480.0, panel_bottom_px - 12.0))
 	var panel_left := (content_size.x - panel_width_px) * 0.5 / content_size.x
 	var panel_top := (panel_bottom_px - panel_height_px) / content_size.y
 	var panel_right := 1.0 - panel_left
@@ -27642,11 +27648,11 @@ func draw_round_summary_rank_header(parent: Control, _compact_summary: bool) -> 
 	parent.add_child(header)
 	place_round_summary_control(header, layout["rank_header"])
 	var columns := [
-		["名次", 0.0, 0.10, HORIZONTAL_ALIGNMENT_LEFT],
-		["玩家", 0.12, 0.40, HORIZONTAL_ALIGNMENT_LEFT],
-		["总分", 0.42, 0.62, HORIZONTAL_ALIGNMENT_RIGHT],
-		["本局", 0.64, 0.86, HORIZONTAL_ALIGNMENT_RIGHT],
-		["花数", 0.88, 1.0, HORIZONTAL_ALIGNMENT_RIGHT],
+		["名次", 0.0, 0.11, HORIZONTAL_ALIGNMENT_LEFT],
+		["玩家", 0.12, 0.38, HORIZONTAL_ALIGNMENT_LEFT],
+		["总分", 0.39, 0.59, HORIZONTAL_ALIGNMENT_RIGHT],
+		["本局", 0.61, 0.83, HORIZONTAL_ALIGNMENT_RIGHT],
+		["花数", 0.85, 1.0, HORIZONTAL_ALIGNMENT_RIGHT],
 	]
 	for column in columns:
 		var label := make_label(header, str(column[0]), 12, Color.WHITE, false)
@@ -27668,11 +27674,11 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	place_round_summary_control(row, Rect2(header_rect.position.x, float(layout["rank_top"]) + float(rank - 1) * (row_height + 4.0), header_rect.size.x, row_height))
 	var delta := round_summary_score_delta(seat)
 	var columns := [
-		["RoundSummaryRankLabel", str(rank), 0.0, 0.10, HORIZONTAL_ALIGNMENT_LEFT, 15],
-		["RoundSummaryPlayerLabel", str(players[seat]["name"]), 0.12, 0.40, HORIZONTAL_ALIGNMENT_LEFT, 15],
-		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.42, 0.62, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryDeltaLabel", "%+d" % delta, 0.64, 0.86, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.88, 1.0, HORIZONTAL_ALIGNMENT_RIGHT, 13],
+		["RoundSummaryRankLabel", str(rank), 0.0, 0.11, HORIZONTAL_ALIGNMENT_LEFT, 15],
+		["RoundSummaryPlayerLabel", str(players[seat]["name"]), 0.12, 0.38, HORIZONTAL_ALIGNMENT_LEFT, 15],
+		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.39, 0.59, HORIZONTAL_ALIGNMENT_RIGHT, 15],
+		["RoundSummaryDeltaLabel", "%+d" % delta, 0.61, 0.83, HORIZONTAL_ALIGNMENT_RIGHT, 15],
+		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.85, 1.0, HORIZONTAL_ALIGNMENT_RIGHT, 13],
 	]
 	for column in columns:
 		var label := make_label(row, str(column[1]), int(column[5]), Color.WHITE, false)
@@ -27968,7 +27974,7 @@ func draw_rules_guide_art(parent: Control, viewport_snapshot: Vector2 = Vector2.
 		style_guofeng_label(label)
 		var state := make_label(node, "当前" if i == 0 else "待读", 12, Color.WHITE, false)
 		state.name = "RulesGuideStepState_%d" % i
-		apply_rect(state, rect_full(0.15, 0.0, 0.97, 0.0))
+		apply_rect(state, rect_full(0.14, 0.0, 0.86, 0.0))
 		style_guofeng_label(state)
 		var line_height := maxf(label.get_minimum_size().y, state.get_minimum_size().y)
 		var chapter_height := maxf(UI_MIN_TOUCH_TARGET, line_height * 2.0 + 6.0)
@@ -28460,6 +28466,17 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	else:
 		status.add_theme_color_override("font_color", Color(0.86, 0.88, 0.78))
 	meta.add_theme_color_override("font_color", Color(0.84, 0.86, 0.77))
+	if threat != null:
+		var threat_level_str := str(report.get("level", ""))
+		var threat_ink := Color(0.72, 0.88, 0.78)
+		match threat_level_str:
+			"危":
+				threat_ink = Color(1.00, 0.52, 0.42)
+			"高":
+				threat_ink = Color(1.00, 0.74, 0.40)
+			"中":
+				threat_ink = Color(0.95, 0.86, 0.54)
+		threat.add_theme_color_override("font_color", threat_ink)
 	panel.set_meta("seat_current_turn", active)
 	panel.set_meta("seat_recent_discard_source", is_source)
 	if mode == "online_game" and int(online_game.get("youSeat", -1)) == seat:
@@ -28858,11 +28875,9 @@ func draw_settings_overlay(parent: Control) -> void:
 	# native controls, while focus and input only visit the selected category.
 	var audio_section_rect = rect_full(0.040, 0.290, 0.960, 0.875)
 	if not compact_settings and not large_text_enabled:
-		audio_section_rect = rect_full(0.080, 0.290, 0.920, 0.910)
+		audio_section_rect = rect_full(0.040, 0.275, 0.965, 0.915)
 	var play_section_rect = audio_section_rect
 	var maint_section_rect = audio_section_rect
-	if not compact_settings and not large_text_enabled:
-		audio_section_rect = rect_full(0.100, 0.290, 0.900, 0.910)
 	var settings_content_parent: Control = null
 	var settings_grid_compact := compact_settings or large_text_enabled
 	var settings_large_text_scroll: ScrollContainer = null
@@ -28996,7 +29011,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_setting_label.add_theme_constant_override("outline_size", 0)
 	rule_setting_label.add_theme_constant_override("shadow_offset_x", 0)
 	rule_setting_label.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(rule_setting_label, rect_full(0.550, 0.040, 0.675, 0.115))
+	apply_rect(rule_setting_label, rect_full(0.550, 0.045, 0.675, 0.135))
 	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_setting_label)
 	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
@@ -29006,7 +29021,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_setting_button.custom_minimum_size = Vector2(80, UI_MIN_TOUCH_TARGET)
 	style_guofeng_secondary_action(rule_setting_button, false)
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
-	apply_rect(rule_setting_button, rect_full(0.685, 0.035, 0.815, 0.125))
+	apply_rect(rule_setting_button, rect_full(0.685, 0.045, 0.815, 0.135))
 	panel.add_child(rule_setting_button)
 	var active_rule_profile := rule_profile(rule_variant)
 	var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
@@ -29021,7 +29036,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_variant_status.add_theme_constant_override("outline_size", 0)
 	rule_variant_status.add_theme_constant_override("shadow_offset_x", 0)
 	rule_variant_status.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(rule_variant_status, rect_full(0.550, 0.130 if compact_settings else 0.125, 0.815, 0.170 if compact_settings else 0.165))
+	apply_rect(rule_variant_status, rect_full(0.480, 0.140, 0.815, 0.172))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
 	mark_ui_optimization(rule_variant_status, "F-080")
 	rule_variant_status.set_meta("status_summary_contract", "当前档案 · 关键规则差异")
@@ -29306,7 +29321,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.535, 0.175, 0.925, 0.235))
+	apply_rect(art, rect_full(0.540, 0.178, 0.965, 0.238))
 	parent.add_child(art)
 	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
 	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
@@ -29314,7 +29329,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
-	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	summary.add_theme_constant_override("outline_size", 0)
 	summary.add_theme_constant_override("shadow_offset_x", 0)
 	summary.add_theme_constant_override("shadow_offset_y", 0)
@@ -29570,10 +29585,11 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	chip.set_meta("viewport_snapshot", chip_viewport)
 	chip.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_chip")
 	parent.add_child(chip)
-	var chip_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
-	chip_plate.name = "StatsSummaryChipPlate_%s" % chip_id
-	chip_plate.self_modulate = Color(0.90, 0.86, 0.76)
-	chip.add_child(chip_plate)
+	var chip_plate := add_optional_gpt_illustration_texture(chip, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if chip_plate != null:
+		chip_plate.name = "StatsSummaryChipPlate_%s" % chip_id
+		chip_plate.self_modulate = Color(0.95, 0.92, 0.85)
+		configure_guofeng_button_slice(chip_plate, true, 64, 0.16)
 	var display_value := value_text
 	var unit_text := ""
 	for suffix in ["番/局", "分/局", "%", "局", "分"]:
@@ -29595,6 +29611,8 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	apply_rect(value, rect_full(0.08, 0.42, 0.94, 0.90))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(value)
+	if value_text.begins_with("-"):
+		value.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	var unit := make_label(chip, unit_text, 12, Color.WHITE, false)
 	unit.name = "StatsSummaryUnit_%s" % chip_id
 	apply_rect(unit, rect_full(0.70, 0.50, 0.94, 0.90))
@@ -29608,7 +29626,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 func draw_stats_dashboard_art(parent: Control, viewport_snapshot: Vector2 = Vector2.ZERO) -> Control:
 	var dashboard_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var source: Dictionary = parent.get_meta("stats_source", game_stats)
-	var dash := make_layout_host(rect_full(0.08, 0.135, 0.92, 0.285))
+	var dash := make_layout_host(rect_full(0.055, 0.135, 0.945, 0.285))
 	dash.name = "StatsDashboardArt"
 	dash.set_meta("viewport_snapshot", dashboard_viewport)
 	dash.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
@@ -29617,9 +29635,9 @@ func draw_stats_dashboard_art(parent: Control, viewport_snapshot: Vector2 = Vect
 	var wins := clampi(int(source.get("wins", source.get("games_won", 0))), 0, games)
 	var rate := 0.0 if games == 0 else float(wins) / float(games)
 	var total_score := int(source.get("score", source.get("total_score", 0)))
-	make_stats_summary_chip(dash, "winrate", "胜率", "%.1f%%" % (rate * 100.0), rect_full(0.0, 0.0, 0.29, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "games", "总场次", "%d局" % games, rect_full(0.34, 0.0, 0.62, 1.0), Color.WHITE, dashboard_viewport)
-	make_stats_summary_chip(dash, "best", "累计净分", "%+d分" % total_score, rect_full(0.67, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "winrate", "胜率", "%.1f%%" % (rate * 100.0), rect_full(0.0, 0.0, 0.315, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "games", "总场次", "%d局" % games, rect_full(0.3425, 0.0, 0.6575, 1.0), Color.WHITE, dashboard_viewport)
+	make_stats_summary_chip(dash, "best", "累计净分", "%+d分" % total_score, rect_full(0.685, 0.0, 1.0, 1.0), Color.WHITE, dashboard_viewport)
 	return dash
 
 
@@ -30243,8 +30261,8 @@ func draw_table_log(parent: Control) -> void:
 	var ledger_count = make_label(ledger_panel, "%d条" % table_logs.size(), ledger_count_base, Color(0.72, 0.66, 0.48), false)
 	style_guofeng_label(ledger_count)
 	ledger_count.name = "TableLogLedgerCount"
-	apply_rect(ledger_count, rect_full(0.455 if compact_log else 0.520, 0.040, 0.650, 0.220))
-	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	apply_rect(ledger_count, rect_full(0.380 if compact_log else 0.420, 0.040, 0.630, 0.220))
+	ledger_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var ledger_count_size := accessibility_font_size(ledger_count_base)
 	fit_label_font_size(ledger_count, maxf(1.0, ledger_count.size.x), ledger_count_size, ledger_count_size)
 	for header_label in [ledger_title, ledger_count]:
@@ -30286,10 +30304,12 @@ func draw_table_log(parent: Control) -> void:
 		var row_panel = make_layout_host(rect_full(0.075, row_top, 0.650, row_bottom))
 		row_panel.name = "TableLogLedgerRow_%d" % log_i
 		ledger_panel.add_child(row_panel)
-		var row_mark = make_label(row_panel, row_tag.substr(0, 1), 9, Color(0.11, 0.23, 0.18), false)
+		var row_mark = make_label(row_panel, row_tag.substr(0, 1), 11, Color(0.11, 0.23, 0.18), true)
 		row_mark.name = "TableLogLedgerTag_%d" % log_i
 		style_guofeng_label(row_mark)
-		apply_rect(row_mark, rect_full(0.025, 0.0, 0.120, 1.0))
+		var tag_color := table_log_tag_color(row_tag)
+		row_mark.add_theme_color_override("font_color", Color(tag_color.r * 0.62, tag_color.g * 0.45, tag_color.b * 0.45, 1.0))
+		apply_rect(row_mark, rect_full(0.025, 0.0, 0.130, 1.0))
 		var row_body = make_label(row_panel, table_log_display_text(log_text), ledger_body_base, Color(0.80, 0.76, 0.60), false)
 		style_guofeng_label(row_body)
 		row_body.name = "TableLogLedgerBody_%d" % log_i
@@ -30340,7 +30360,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 	panel.set_meta("layout_role", "table_log_archive")
 	panel.set_meta("reading_order", "title_then_count_then_close_then_records_then_round_history")
 	parent.add_child(panel)
-	var texture = add_illustration_texture(panel, "table_log_scroll", rect_full(0.010, 0.025, 0.990, 0.975), 0.075, false)
+	var texture = add_optional_gpt_illustration_texture(panel, "table_log_gpt_scroll", rect_full(0.010, 0.025, 0.990, 0.975), 0.12, false)
 	if texture != null:
 		texture.name = "TableLogArchiveTexture"
 		panel.move_child(texture, 0)
@@ -30424,7 +30444,7 @@ func draw_table_log_archive_panel(parent: Control) -> void:
 			var full_text := table_log_display_text(str(table_logs[log_i]))
 			var row := make_label(list, "%02d  %s" % [log_i + 1, full_text], 13, Color(0.84, 0.88, 0.80), false)
 			row.name = "TableLogArchiveRow_%d" % log_i
-			var row_width := maxf(260.0, archive_viewport_size.x * 0.820)
+			var row_width := maxf(220.0, archive_viewport_size.x * 0.520)
 			var row_height := estimate_wrapped_text_height(row.text, row_width, accessibility_font_size(13), 5.0)
 			row.custom_minimum_size = Vector2(0, row_height)
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -31515,7 +31535,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 	winner_label.name = "WinDetailWinnerLabel"
 	style_guofeng_label(winner_label)
 	winner_label.add_theme_font_override("font", ui_heading_font())
-	place_round_summary_control(winner_label, Rect2(0.0, 0.0, detail_rect.size.x - 62.0, float(layout["winner_height"])))
+	place_round_summary_control(winner_label, Rect2(54.0, 0.0, maxf(120.0, detail_rect.size.x - 54.0), float(layout["winner_height"])))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var fan := int(score_data.get("fan", 0))
 	var points := int(score_data.get("points", 0))
@@ -31527,7 +31547,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 	score_label.add_theme_font_override("font", ui_heading_font())
 	if delta > 0:
 		score_label.add_theme_color_override("font_color", Color(0.48, 0.14, 0.10))
-	place_round_summary_control(score_label, Rect2(0.0, float(layout["winner_height"]) + 4.0, detail_rect.size.x - 62.0, float(layout["score_height"])))
+	place_round_summary_control(score_label, Rect2(54.0, float(layout["winner_height"]) + 4.0, maxf(120.0, detail_rect.size.x - 54.0), float(layout["score_height"])))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points, win_detail_viewport)
 	var reasons: Array = score_data.get("reasons", [])
@@ -31589,7 +31609,7 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	showcase.set_meta("viewport_snapshot", showcase_viewport)
 	showcase.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(showcase)
-	place_round_summary_control(showcase, Rect2(maxf(0.0, parent.size.x - 46.0), 0.0, 42.0, 58.0))
+	place_round_summary_control(showcase, Rect2(0.0, 0.0, 42.0, 58.0))
 	if win_tile != "":
 		var tile := make_tile_view(win_tile, Vector2(42.0, 58.0), false, Callable(), true)
 		tile.name = "WinDetailTile"
@@ -31620,7 +31640,7 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 	row.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_row")
 	var row_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
 	row_plate.name = "AchievementRowGptPlate"
-	row_plate.self_modulate = Color(0.92, 0.88, 0.78) if unlocked else Color(0.86, 0.82, 0.72)
+	row_plate.self_modulate = Color(0.95, 0.92, 0.84) if unlocked else Color(0.86, 0.83, 0.75)
 	row.add_child(row_plate)
 	var medal_tex := achievement_medallion_texture(key, unlocked)
 	if medal_tex != null:
@@ -31657,23 +31677,27 @@ func make_achievement_row(key: String, index: int, viewport_snapshot: Vector2 = 
 	set_ui_full_text(goal_label, achievement_goal_text(key), "成就目标：" + achievement_goal_text(key))
 	goal_label.set_meta("achievement_field", "goal")
 	style_guofeng_label(goal_label)
+	goal_label.add_theme_color_override("font_color", Color(0.18, 0.24, 0.21))
 	configure_wrapped_label(goal_label, maxf(180.0, row_viewport_size.x * 0.56), 0.0, 2.0)
 	var progress_text = make_label(row, achievement_progress_text(key), 13, Color(0.98, 0.88, 0.56, 0.98) if unlocked else Color(0.86, 0.96, 0.92, 0.98), true)
 	progress_text.name = "AchievementRowProgressText_%s" % key
 	apply_rect(progress_text, rect_full(0.760, 0.540, 0.965, 0.880))
 	progress_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(progress_text)
+	progress_text.add_theme_color_override("font_color", Color(0.18, 0.24, 0.21))
 	progress_text.clip_text = true
 	progress_text.clip_contents = false
 	progress_text.autowrap_mode = TextServer.AUTOWRAP_OFF
 	progress_text.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	set_ui_full_text(progress_text, progress_text.text, "成就进度：" + achievement_display_name(key))
 	mark_ui_optimization(progress_text, "F-530")
-	var state_label = make_label(row, achievement_state_text(key), 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
+	var state_label = make_label(row, achievement_state_text(key), 14 if unlocked else 13, Color(1.00, 0.90, 0.58) if unlocked else Color(0.92, 1.00, 0.96), true)
 	state_label.name = "AchievementRowState_%s" % key
 	apply_rect(state_label, rect_full(0.760, 0.120, 0.965, 0.490))
 	state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(state_label)
+	if unlocked:
+		state_label.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	configure_clipped_label(state_label)
 	set_ui_full_text(state_label, achievement_state_text(key) + " · " + achievement_progress_text(key), "成就状态：" + achievement_display_name(key))
 	mark_ui_optimization(state_label, "F-477")
@@ -31740,8 +31764,8 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 	var empty_style := StyleBoxEmpty.new()
 	empty_style.set_content_margin(SIDE_LEFT, 4 if has_pending_claim_window() else 8)
 	empty_style.set_content_margin(SIDE_RIGHT, 4 if has_pending_claim_window() else 8)
-	empty_style.set_content_margin(SIDE_TOP, 14 if shortcut_hint != "" else 4)
-	empty_style.set_content_margin(SIDE_BOTTOM, 0 if shortcut_hint != "" else 4)
+	empty_style.set_content_margin(SIDE_TOP, 6 if shortcut_hint != "" else 4)
+	empty_style.set_content_margin(SIDE_BOTTOM, 4)
 	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		button.add_theme_stylebox_override(state, empty_style)
 	configure_action_button_size(button, ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT, 19)
@@ -32620,7 +32644,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		if not consequence_row and parent is GridContainer and (parent as GridContainer).columns == 1:
 			# Keep title, current state and action on one scan line. The state is
 			# adjacent to its control instead of leaving an unexplained empty lane.
-			apply_rect(title_label, rect_full(0.052, 0.0, 0.405, 1.0))
+			apply_rect(title_label, rect_full(0.015, 0.0, 0.405, 1.0))
 			apply_rect(status_label, rect_full(0.420, 0.0, 1.0, 1.0))
 			status_label.offset_right = -144.0
 			status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -32672,9 +32696,9 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	grid.add_theme_constant_override("h_separation", 16)
 	grid.add_theme_constant_override("v_separation", 8)
 	section.add_child(grid)
-	apply_rect(section_title, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(section_title, rect_full(0.0, 0.0, 1.0, 0.0))
 	section_title.offset_bottom = section_title.get_combined_minimum_size().y
-	apply_rect(grid, rect_full(0.035, 0.0, 0.995, 0.0))
+	apply_rect(grid, rect_full(0.0, 0.0, 1.0, 0.0))
 	grid.offset_top = section_title.get_combined_minimum_size().y + 10.0
 
 	return grid
@@ -34873,7 +34897,7 @@ func make_guofeng_lobby_action_button(text: String, color: Color, callback: Call
 
 func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> void:
 	apply_guofeng_button_face(button, ink_face)
-	button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.38, 0.40, 0.34))
+	button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.26, 0.31, 0.27))
 	var is_back := str(button.get_meta("ui_navigation_role", "")) == "page_back" or "back" in button.name.to_lower() or "close" in button.name.to_lower() or button.text.strip_edges() == "关闭"
 	if not ink_face and is_back:
 		var old_focus_face := button.get_node_or_null("ButtonFocusPlate")
@@ -34889,13 +34913,16 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 			button.remove_child(old_marker)
 			old_marker.queue_free()
 		return
-	var marker_glyph := "▸"
+	var marker_glyph := "•" if is_back else "▸"
 	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
 	var marker := button.get_node_or_null("GuofengActionFocusMarker") as Label
 	if marker == null:
 		marker = make_label(button, marker_glyph, 12, marker_color, true)
 		marker.name = "GuofengActionFocusMarker"
-		apply_rect(marker, rect_full(0.04, 0.0, 0.16, 1.0))
+		apply_rect(marker, rect_full(0.0, 0.0, 0.0, 1.0))
+		marker.offset_left = 10.0
+		marker.offset_right = 22.0
+		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		var focus_marker := marker
 		button.focus_entered.connect(func() -> void:
 			if is_instance_valid(focus_marker):
@@ -34925,7 +34952,8 @@ func make_guofeng_secondary_badge(parent: Control, rect: Rect2, text: String, fo
 func style_guofeng_reading_tree(owner: Node) -> void:
 	for child in owner.get_children():
 		if child is Label:
-			style_guofeng_label(child as Label, str(child.get_meta("guofeng_text_surface", "paper")) == "ink")
+			if not bool(child.get_meta("preserve_semantic_color", false)):
+				style_guofeng_label(child as Label, str(child.get_meta("guofeng_text_surface", "paper")) == "ink")
 		elif child is RichTextLabel:
 			(child as RichTextLabel).add_theme_color_override("default_color", Color(0.11, 0.23, 0.18))
 			for key in ["outline_size", "shadow_offset_x", "shadow_offset_y"]:
@@ -34975,7 +35003,7 @@ func _show_achievements_screen_impl() -> void:
 	clear_screen()
 	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
-	var panel_height = max(1.0, content_size.y * 0.96)
+	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
 	var achievement_scroll_top := 0.265
 	var achievement_scroll_max_bottom := 0.955
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
@@ -34983,12 +35011,12 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_row_gap := 12.0 if wide_achievement_gallery else 8.0
 	var max_scroll_height = panel_height * (achievement_scroll_max_bottom - achievement_scroll_top)
 	var visible_row_count = int(clamp(floor((max_scroll_height + achievement_row_gap) / (achievement_row_height + achievement_row_gap)), 3.0, float(max(3, achievements.size()))))
-	var complete_scroll_height = max_scroll_height
+	var complete_scroll_height = float(visible_row_count) * achievement_row_height + float(maxi(0, visible_row_count - 1)) * achievement_row_gap
 	var achievement_scroll_bottom = min(achievement_scroll_max_bottom, achievement_scroll_top + complete_scroll_height / panel_height)
 	var panel := make_guofeng_secondary_page("AchievementGalleryFrontPanel", "Achievements", achievement_viewport_size)
 
 	var title = make_heading(panel, "成就图鉴", 30, Color(1.0, 0.94, 0.62), true)
-	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	apply_rect(title, rect_full(0.055, 0.028, 0.42, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, title.text, "成就图鉴页面标题")
 	mark_ui_optimization(title, "F-469")
@@ -35025,8 +35053,9 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.name = "AchievementsScrollBar"
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.946, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color.WHITE, "menu_card_readable_gpt")
+	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.950, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color.WHITE, "menu_card_readable_gpt")
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
+	achievements_scroll_gutter.self_modulate = Color(0.86, 0.82, 0.72, 0.78)
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(achievements_scroll_gutter)
 	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.050), Color(0.11, 0.23, 0.18))
@@ -35061,7 +35090,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.86, 0.92, 0.78), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.925, 0.250))
+	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.940, 0.250))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(achievements_browse_status)
 	configure_clipped_label(achievements_browse_status)
@@ -35843,6 +35872,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.add_theme_stylebox_override("read_only", input_styles["read_only"])
 	for style_name in ["normal", "focus", "read_only"]:
 		var field_style := input_styles[style_name].duplicate() as StyleBox
+		field_style.content_margin_left = maxf(field_style.content_margin_left, 12.0)
 		field_style.content_margin_right = maxf(field_style.content_margin_right, float(UI_MIN_TOUCH_TARGET) + 8.0)
 		edit.add_theme_stylebox_override(style_name, field_style)
 	edit.set_meta("clear_proxy_right_inset_px", float(UI_MIN_TOUCH_TARGET) + 8.0)
@@ -36130,7 +36160,7 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	var lane_gap := 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
 	var form_top := form.position.y
-	var form_height := form.size.y
+	var form_height := minf(form.size.y, maxf(form.get_combined_minimum_size().y, 120.0))
 	form.anchor_top = 0.0
 	form.anchor_bottom = 0.0
 	form.offset_top = form_top
@@ -36199,18 +36229,19 @@ func _show_online_lobby_impl() -> void:
 	server_caption.name = "OnlineLobbyServerCaption"
 	style_guofeng_label(server_caption)
 	server_caption.add_theme_color_override("font_color", Color(0.24, 0.36, 0.30))
-	apply_rect(server_caption, rect_full(0.600, 0.012, 0.705, 0.040))
+	apply_rect(server_caption, rect_full(0.600, 0.022, 0.705, 0.048))
 	server_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.600, 0.040, 0.785, 0.105), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.600, 0.046, 0.772, 0.106), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
 	if server_badge_label != null:
 		server_badge_label.name = "OnlineLobbyServerEndpointLabel"
-		apply_rect(server_badge_label, rect_full(0.055, 0.04, 0.945, 0.96))
+		apply_rect(server_badge_label, rect_full(0.0, 0.04, 0.96, 0.96))
+		server_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		server_badge_label.tooltip_text = "完整服务器地址：%s" % endpoint_text
 		configure_clipped_label(server_badge_label)
 		set_ui_full_text(server_badge_label, endpoint_text, "服务器地址")
@@ -36230,7 +36261,7 @@ func _show_online_lobby_impl() -> void:
 	endpoint_copy_button.set_meta("summary_route", "endpoint_copy")
 	set_ui_full_text(endpoint_copy_button, endpoint_copy_button.tooltip_text, "复制服务器地址")
 	style_guofeng_secondary_action(endpoint_copy_button, false)
-	apply_rect(endpoint_copy_button, rect_full(0.790, 0.040, 0.835, 0.105))
+	apply_rect(endpoint_copy_button, rect_full(0.775, 0.044, 0.832, 0.104))
 	panel.add_child(endpoint_copy_button)
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
@@ -36315,7 +36346,7 @@ func _show_online_lobby_impl() -> void:
 	form.anchor_top = 0.125 if compact_lobby_form else 0.133
 	form.anchor_right = 0.94
 	form.anchor_bottom = 0.630
-	form.add_theme_constant_override("separation", 0)
+	form.add_theme_constant_override("separation", 8)
 	form_panel.add_child(form)
 	online_name_edit = add_lobby_line_edit(form, "昵称", online_player_name, ONLINE_NAME_MAX_LENGTH)
 	online_name_edit.name = "OnlineLobbyNameEdit"
@@ -36440,10 +36471,10 @@ func _show_online_lobby_impl() -> void:
 
 	# 房间状态面板
 	var compact_large_roster := compact_lobby_form and large_text_enabled
-	var log_panel := make_layout_host(rect_full(lobby_log_left, 0.170 if room_first_layout else 0.215, lobby_log_right, 0.925 if compact_large_roster or room_first_layout else 0.87))
+	var log_panel := make_layout_host(rect_full(lobby_log_left, 0.170 if room_first_layout else 0.215, lobby_log_right, 0.915 if room_first_layout else (0.925 if compact_large_roster else 0.87)))
 	if room_first_layout:
-		apply_rect(start_reason_backplate, rect_full(lobby_log_left, 0.940, lobby_log_right, 0.992))
-		apply_rect(start_reason, rect_full(lobby_log_left + 0.015, 0.944, lobby_log_right - 0.015, 0.990))
+		apply_rect(start_reason_backplate, rect_full(lobby_log_left, 0.920, lobby_log_right, 0.972))
+		apply_rect(start_reason, rect_full(lobby_log_left + 0.015, 0.924, lobby_log_right - 0.015, 0.968))
 	if compact_large_roster:
 		apply_rect(start_reason_backplate, rect_full(0.505, 0.940, 0.975, 0.992))
 		apply_rect(start_reason, rect_full(0.520, 0.944, 0.965, 0.990))
@@ -36487,7 +36518,7 @@ func _show_online_lobby_impl() -> void:
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
 	style_guofeng_secondary_action(lobby_chat_button, false)
 	# Reserve a full touch lane between the room title and the room summary.
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.015, 0.640, 0.135))
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.020, 0.635, 0.104))
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
@@ -36502,7 +36533,7 @@ func _show_online_lobby_impl() -> void:
 		room_badge_label.name = "OnlineLobbyRoomBadgeLabel"
 		apply_rect(room_badge_label, rect_full(0.015, 0.040, 0.895 if compact_room_badge else 0.780, 0.960))
 		room_badge_label.tooltip_text = room_badge_full_text
-	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.92, 0.88, 0.64, 0.92))
+	var room_badge_info_icon := add_lucide_icon(room_badge, "info", rect_full(0.910 if compact_room_badge else 0.800, 0.205, 0.980 if compact_room_badge else 0.955, 0.795), Color(0.24, 0.36, 0.30, 0.92))
 	if room_badge_info_icon != null:
 		room_badge_info_icon.name = "OnlineLobbyRoomBadgeViewIcon"
 		room_badge.move_child(room_badge_info_icon, room_badge_label.get_index() if room_badge_label != null else room_badge.get_child_count() - 1)
@@ -36618,13 +36649,13 @@ func online_connection_state_icon(state: String) -> String:
 func online_connection_state_tint(state: String) -> Color:
 	match state:
 		"已连接":
-			return Color(0.46, 0.92, 0.64, 0.98)
+			return Color(0.14, 0.48, 0.28, 0.98)
 		"连接中":
-			return Color(0.98, 0.78, 0.34, 0.98)
+			return Color(0.62, 0.38, 0.08, 0.98)
 		"异常":
-			return Color(1.00, 0.50, 0.38, 0.98)
+			return Color(0.68, 0.16, 0.12, 0.98)
 		_:
-			return Color(0.84, 0.66, 0.56, 0.98)
+			return Color(0.42, 0.34, 0.26, 0.96)
 
 
 func online_lobby_start_gate(connection_state_override: String = "") -> Dictionary:
@@ -37218,8 +37249,8 @@ func _show_rules_screen_impl() -> void:
 	content_scroll.name = "RulesContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
 	var compact_rules_scroll := rules_viewport_size.y <= 560.0
-	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.982
-	content_scroll.anchor_left = 0.058
+	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.945
+	content_scroll.anchor_left = 0.040
 	content_scroll.anchor_top = rules_content_top
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
 	# wider visual thumb overlap the last glyph column.
@@ -37243,7 +37274,7 @@ func _show_rules_screen_impl() -> void:
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * rules_viewport_size.x)
-	var rules_thumb_visual_width_px := 24.0
+	var rules_thumb_visual_width_px := 10.0
 	var thumb_span_frac := minf(rules_thumb_visual_width_px / gutter_span_px, 0.90)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
@@ -37940,11 +37971,10 @@ func _show_shop_screen_impl() -> void:
 		tw.tween_property(panel, "modulate:a", 1.0, 0.26).from(0.0).set_ease(Tween.EASE_OUT)
 		tw.tween_property(panel, "offset_left", 0.0, 0.26).from(22.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	# 标题 - 带图标
-	add_lucide_icon(panel, "shopping-bag", rect_full(0.03, 0.030, 0.06, 0.090), shop_ink)
+	# 标题 - 与商品卡片左沿齐平
 	var title = make_heading(panel, "云桌宝阁", commercial_ui_font_size(30, 4), shop_ink, true)
 	title.name = "ShopTitle"
-	apply_rect(title, rect_full(0.07, 0.028, 0.40, 0.095))
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_color_override("font_color", shop_ink)
 	title.add_theme_constant_override("outline_size", 0)
@@ -38271,12 +38301,12 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else shop_ink
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.48, 0.44, 0.38)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
-		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.190, 0.88))
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.180, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
+		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.200, 0.220, 0.980, 0.780))
+		apply_rect(command_label, rect_full(0.295, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
@@ -38338,16 +38368,16 @@ func _show_shop_screen_impl() -> void:
 		# view when the list is scrolled to its measured end.
 		var shop_end_marker := make_label(panel, "已展示全部商品", 11, Color(0.76, 0.84, 0.74), true)
 		shop_end_marker.name = "ShopItemsEndMarker"
-		apply_rect(shop_end_marker, rect_full(0.055, scroll.anchor_bottom, 0.620, scroll.anchor_bottom))
-		shop_end_marker.offset_top = 8.0
-		shop_end_marker.offset_bottom = 8.0 + shop_end_marker.get_combined_minimum_size().y
+		apply_rect(shop_end_marker, rect_full(0.040, scroll.anchor_bottom, 0.620, scroll.anchor_bottom))
+		shop_end_marker.offset_top = 4.0
+		shop_end_marker.offset_bottom = 4.0 + shop_end_marker.get_combined_minimum_size().y
 		shop_end_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		shop_end_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		set_ui_full_text(shop_end_marker, "商品列表已到末尾 · 共%d项" % ITEM_TYPES.size(), "商品列表结束位置")
 		shop_end_marker.set_meta("shop_list_end", true)
 		shop_end_marker.set_meta("range_contract", "visible_end_before_footer")
 		shop_end_marker.set_meta("footer_clearance_min_px", 8.0)
-		shop_end_marker.set_meta("footer_top_normalized", 0.790)
+		shop_end_marker.set_meta("footer_top_normalized", 0.812)
 		shop_end_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		shop_end_marker.visible = false
 		mark_ui_optimization(shop_end_marker, "F-399")
@@ -38364,7 +38394,7 @@ func _show_shop_screen_impl() -> void:
 		min_cost = min(min_cost, cost)
 		if int(currency.get("gems", 0)) >= cost:
 			affordable_items += 1
-	var shop_footer := make_layout_host(rect_full(0.055, 0.790, 0.945, 0.975))
+	var shop_footer := make_layout_host(rect_full(0.040, 0.812, 0.930, 0.978))
 	shop_footer.name = "ShopCabinetFooterPanel"
 	shop_footer.set_meta("list_footer_gap_px", 8.0)
 	shop_footer.set_meta("footer_clearance_contract", "end_marker_bottom_to_footer_top_at_least_8px")
@@ -38372,7 +38402,7 @@ func _show_shop_screen_impl() -> void:
 	panel.add_child(shop_footer)
 	var footer_title = make_label(shop_footer, "宝阁说明", commercial_ui_font_size(17, 3), shop_ink, true)
 	footer_title.name = "ShopCabinetFooterTitle"
-	apply_rect(footer_title, rect_full(0.035, 0.020, 0.200, 0.330))
+	apply_rect(footer_title, rect_full(0.000, 0.040, 0.220, 0.350))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
 	var footer_body_text := "500铜钱可兑换5玉符；铜钱可通过对局、签到与任务获得。"
@@ -38380,14 +38410,14 @@ func _show_shop_screen_impl() -> void:
 		footer_body_text = "当前玉符 %d；还差 %d 玉符可购买。500铜钱可兑换5玉符。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
-	apply_rect(footer_body, rect_full(0.035, 0.380, 0.630, 0.970))
+	apply_rect(footer_body, rect_full(0.000, 0.400, 0.630, 0.960))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_wrapped_label(footer_body, 0.0, 0.0, 2.0)
 	footer_body.set_meta("compact_fit_policy", "wrap_complete_copy_before_inventory_badges")
 	var inventory_text := "库存 %d件" % total_inventory
 	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 2), shop_ink, true)
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
-	apply_rect(footer_inventory, rect_full(0.650, 0.175, 0.790, 0.775))
+	apply_rect(footer_inventory, rect_full(0.650, 0.175, 0.800, 0.775))
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_text := "确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符"
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
@@ -38401,7 +38431,7 @@ func _show_shop_screen_impl() -> void:
 	footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
 	footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
 	footer_state.set_meta("native_target_contract", "44px_currency_recovery_cta")
-	apply_rect(footer_state, rect_full(0.810, 0.175, 0.965, 0.775))
+	apply_rect(footer_state, rect_full(0.820, 0.175, 1.000, 0.775))
 	footer_state.set_meta("affordable_items", affordable_items)
 	footer_state.set_meta("total_inventory", total_inventory)
 	footer_state.set_meta("shop_state", "has_affordable" if affordable_items > 0 else "insufficient_gems")
@@ -38766,16 +38796,16 @@ func _show_stats_screen_impl() -> void:
 	var stats_viewport_size := effective_viewport_size()
 	var stats_content_size := safe_content_pixel_size()
 	var content_size = stats_content_size
-	var panel_height = max(1.0, content_size.y * 0.96)
+	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(stats_viewport_size) else 0.96))
 	var stats_row_count := 6
 	var stats_content_top := 0.340
-	var stats_content_max_bottom := 0.920
+	var stats_content_max_bottom := 0.935
 	var stats_available_height = panel_height * (stats_content_max_bottom - stats_content_top)
 	var wide_stats_layout := stats_viewport_size.x >= 1600.0
 	var stats_row_gap = 14.0 if wide_stats_layout else clamp(panel_height * 0.010, 5.0, 10.0)
 	var stats_row_height_cap := 104.0 if wide_stats_layout else 52.0
 	var stats_row_height = clamp(floor((stats_available_height - stats_row_gap * float(stats_row_count - 1)) / float(stats_row_count)), 42.0, stats_row_height_cap)
-	var stats_content_height = stats_row_height * float(stats_row_count) + stats_row_gap * float(stats_row_count - 1)
+	var stats_content_height = stats_row_height * float(stats_row_count) + stats_row_gap * float(stats_row_count - 1) + 6.0
 	var stats_content_bottom = min(stats_content_max_bottom, stats_content_top + stats_content_height / panel_height)
 	var panel := make_guofeng_secondary_page("StatsConsoleFrontPanel", "Stats", stats_viewport_size)
 	panel.set_meta("content_size_snapshot", stats_content_size)
@@ -38849,9 +38879,9 @@ func _show_stats_screen_impl() -> void:
 	# 统计数据
 	var content_scroll := ScrollContainer.new()
 	content_scroll.name = "StatsRows"
-	content_scroll.anchor_left = 0.08
+	content_scroll.anchor_left = 0.055
 	content_scroll.anchor_top = stats_content_top
-	content_scroll.anchor_right = 0.92
+	content_scroll.anchor_right = 0.945
 	content_scroll.anchor_bottom = stats_content_bottom
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -38865,7 +38895,7 @@ func _show_stats_screen_impl() -> void:
 	panel.add_child(content_scroll)
 	var stats_scroll_status := make_label(panel, "", 10, Color(0.72, 0.84, 0.76), true)
 	stats_scroll_status.name = "StatsRowsScrollStatus"
-	apply_rect(stats_scroll_status, rect_full(0.080, 0.300, 0.920, 0.330))
+	apply_rect(stats_scroll_status, rect_full(0.055, 0.300, 0.945, 0.330))
 	stats_scroll_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	stats_scroll_status.tooltip_text = "统计行滚动位置"
 	stats_scroll_status.set_meta("ui_scroll_role", "stats_rows_status")
@@ -40024,22 +40054,21 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var daily_login_viewport_size := effective_viewport_size()
 	var panel := make_guofeng_secondary_page("DailyLoginPanel", "DailyLogin", daily_login_viewport_size)
 
-	# 标题 - 使用Lucide图标
-	var title = make_heading(panel, "每日签到", 32, Color(1.0, 0.94, 0.62), true)
-	apply_rect(title, rect_full(0.08, 0.04, 0.70, 0.12))
+	# 标题 - 统一二级页规范
+	var title = make_heading(panel, "每日签到", 30, Color(1.0, 0.94, 0.62), true)
+	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	var back = make_small_button("返回", Color(0.36, 0.26, 0.16), func() -> void:
 		show_menu(true)
 	)
 	back.name = "DailyLoginBackButton"
-	back.custom_minimum_size = Vector2(100, 46)
-	back.add_theme_font_size_override("font_size", accessibility_font_size(15))
+	back.custom_minimum_size = Vector2(100, 48)
 	set_ui_full_text(back, "返回主菜单 · Esc关闭每日签到", "返回主菜单")
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	apply_rect(back, rect_full(0.81, 0.04, 0.94, 0.13))
+	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
 
 	# 连续签到天数 - 更醒目
 	var days = maxi(0, int(login_result.get("consecutive_days", 1)))
@@ -40106,14 +40135,18 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			border_color = Color(0.52, 0.58, 0.48, 0.68)
 			text_color = Color(0.92, 0.94, 0.86, 0.98)
 
-		var indicator = make_gpt_center_crop_plate_rect(indicator_rect, Color.WHITE, "menu_ink_primary" if is_current else "menu_card_readable_gpt", 0.65)
-		indicator.name = "DailyLoginDayNode_%d" % day_num
-		if is_claimed:
-			indicator.self_modulate = Color(0.90, 0.86, 0.76)
-		elif is_current:
+		var indicator: Control
+		if is_current:
+			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, "battle_ink_plaque_20261112")
 			indicator.self_modulate = Color.WHITE
+			configure_guofeng_button_slice(indicator as TextureRect, true, 32, 0.25)
+		elif is_milestone and not is_claimed:
+			indicator = make_gpt_center_crop_plate_rect(indicator_rect, Color.WHITE, "quiet_gold_accent", 0.65)
+			indicator.self_modulate = Color(0.96, 0.92, 0.80)
 		else:
-			indicator.self_modulate = Color(0.85, 0.81, 0.71)
+			indicator = make_gpt_center_crop_plate_rect(indicator_rect, Color.WHITE, "menu_card_readable_gpt", 0.65)
+			indicator.self_modulate = Color(0.95, 0.92, 0.85) if is_claimed else Color(0.84, 0.80, 0.72)
+		indicator.name = "DailyLoginDayNode_%d" % day_num
 		var day_reward_text := "双倍" if is_milestone else "+100"
 		var day_state_text := "第%d天 · %s · %s" % [day_num, ("已领取" if is_claimed else ("今日可领" if is_current else "待签到")), day_reward_text]
 		indicator.set_meta("accessible_name", day_state_text)
@@ -40129,18 +40162,22 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 
 		var day_label = make_label(indicator, "第%d天" % day_num, 14, text_color, true)
 		day_label.name = "DailyLoginDayLabel_%d" % day_num
-		apply_rect(day_label, rect_full(0.070, 0.040, 0.800, 0.310))
+		apply_rect(day_label, rect_full(0.070, 0.040, 0.930, 0.310))
 		set_ui_full_text(day_label, day_state_text, "签到第%d天" % day_num)
 		style_guofeng_label(day_label, is_current)
 		configure_clipped_label(day_label)
-		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 14, Color(0.76, 0.20, 0.14) if is_claimed else text_color, true)
+		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 14, Color(0.54, 0.13, 0.10) if is_claimed else text_color, true)
 		day_state_label.name = "DailyLoginDayStateLabel_%d" % day_num
 		apply_rect(day_state_label, rect_full(0.070, 0.360, 0.930, 0.630))
 		day_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(day_state_label, day_state_label.text, day_state_text)
 		style_guofeng_label(day_state_label, is_current)
 		if is_claimed:
-			day_state_label.add_theme_color_override("font_color", Color(0.76, 0.20, 0.14))
+			day_state_label.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+			day_state_label.set_meta("preserve_semantic_color", true)
+		elif not is_current:
+			day_state_label.add_theme_color_override("font_color", Color(0.18, 0.24, 0.21))
+			day_state_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(day_state_label)
 
 		var reward_icon = "双倍" if is_milestone else "+100"
@@ -40150,17 +40187,20 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		apply_rect(icon_label, rect_full(0.070, 0.680, 0.930, 0.950))
 		set_ui_full_text(icon_label, day_state_text, "第%d天奖励" % day_num)
 		style_guofeng_label(icon_label, is_current)
+		if is_milestone and not is_current:
+			icon_label.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+			icon_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(icon_label)
 
 		# 已签到的天数添加对勾
 		if is_claimed:
-			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.810, 0.075, 0.945, 0.255), Color(0.82, 0.22, 0.16, 0.95))
+			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.790, 0.075, 0.945, 0.255), Color(0.76, 0.20, 0.14, 0.95))
 			if claimed_check != null:
 				claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
 
 		if is_current:
 			indicator.modulate = Color.WHITE
-		var day_focus_rail := make_gpt_plate_rect(rect_full(0.055, 0.005, 0.945, 0.045), Color.WHITE, "menu_card_readable_gpt")
+		var day_focus_rail := make_gpt_center_crop_plate_rect(rect_full(0.140, 0.030, 0.860, 0.062), Color.WHITE, "quiet_gold_accent", 0.50)
 		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
 		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		day_focus_rail.modulate.a = 0.46 if is_current else 0.0
@@ -40249,12 +40289,12 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	progress_panel.set_meta("bottom_lane_top", claim_top)
 	mark_ui_optimization(progress_panel, "F-234")
 	panel.add_child(progress_panel)
-	var progress_rail = make_gpt_plate_rect(rect_full(0.120, 0.780, 0.880, 0.960), Color.WHITE, "menu_card_readable_gpt")
+	var progress_rail = make_gpt_center_crop_plate_rect(rect_full(0.180, 0.680, 0.820, 0.940), Color.WHITE, "menu_card_readable_gpt", 0.35)
 	progress_rail.name = "DailyLoginProgressRail"
-	progress_rail.self_modulate = Color(0.88, 0.84, 0.74)
+	progress_rail.self_modulate = Color(0.86, 0.82, 0.72)
 	progress_panel.add_child(progress_rail)
 	var progress_ratio := 0.0 if progress <= 0 else clampf(float(progress) / 7.0, 0.0, 1.0)
-	var progress_fill = make_gpt_plate_rect(rect_full(0.0, 0.0, progress_ratio, 1.0), Color.WHITE, "menu_ink_primary")
+	var progress_fill = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, progress_ratio, 1.0), Color.WHITE, "menu_ink_primary", 0.35)
 	progress_fill.name = "DailyLoginProgressFill"
 	progress_fill.set_meta("progress_value", progress_ratio)
 	progress_fill.set_meta("animated_role", "daily_login_progress_flow")
@@ -40414,27 +40454,29 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
-	var forecast_panel = make_layout_host(rect_full(0.10, forecast_top, 0.90, 0.990))
+	var forecast_panel = make_gpt_center_crop_plate_rect(rect_full(0.06, forecast_top, 0.94, 0.960), Color.WHITE, "menu_card_readable_gpt", 0.65)
+	forecast_panel.self_modulate = Color(0.93, 0.89, 0.80)
 	forecast_panel.name = "DailyLoginForecastPanel"
 	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
 	forecast_panel.set_meta("tip_policy", "legacy_tip_anchor_hidden")
 	panel.add_child(forecast_panel)
-	var forecast_rail = make_layout_host(rect_full(0.035, 0.180, 0.047, 0.820))
+	var forecast_rail = make_layout_host(rect_full(0.020, 0.180, 0.032, 0.820))
 	forecast_rail.name = "DailyLoginForecastRail"
 	forecast_panel.add_child(forecast_rail)
 	var forecast_title = make_label(forecast_panel, "七日奖励预告", 14, Color(0.96, 0.88, 0.58, 0.92), true)
 	forecast_title.name = "DailyLoginForecastTitle"
-	apply_rect(forecast_title, rect_full(0.080, 0.040, 0.560, 0.420))
+	forecast_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(forecast_title, rect_full(0.035, 0.100, 0.620, 0.480))
 	configure_clipped_label(forecast_title)
 	var forecast_badge = make_label(forecast_panel, forecast_badge_text, 14, Color(0.96, 0.92, 0.72, 0.92), true)
 	forecast_badge.name = "DailyLoginForecastBadge"
-	forecast_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	apply_rect(forecast_badge, rect_full(0.65, 0.05, 0.92, 0.46))
+	forecast_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	apply_rect(forecast_badge, rect_full(0.650, 0.100, 0.965, 0.480))
 	configure_clipped_label(forecast_badge)
 	set_ui_full_text(forecast_badge, forecast_badge_text, "七日奖励预告状态")
 	var forecast_body = make_label(forecast_panel, forecast_body_text, 14, Color(0.84, 0.88, 0.78, 0.90), true)
 	forecast_body.name = "DailyLoginForecastBody"
-	apply_rect(forecast_body, rect_full(0.080, 0.55, 0.920, 0.98))
+	apply_rect(forecast_body, rect_full(0.035, 0.520, 0.965, 0.920))
 	forecast_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(forecast_body)
 	set_ui_full_text(forecast_body, forecast_body_text, "七日奖励预告详情")
@@ -47101,7 +47143,9 @@ func play_line_edit_input_feedback(edit: LineEdit, art_id: String = "", changed:
 		tw.tween_property(feedback, "modulate:a", 0.0, 0.18).from(0.98).set_delay(0.08)
 		tw.tween_callback(Callable(self, "queue_free_node_by_id").bind(feedback.get_instance_id()))
 	else:
-		feedback.modulate.a = 0.88
+		# Keep authored feedback nodes intact for state/smoke contracts without
+		# leaving a persistent dark wash or stray vertical bar across the input.
+		feedback.modulate.a = 0.0
 	return feedback
 
 
@@ -50611,19 +50655,43 @@ func ended_action_button_widths(count: int) -> Array[float]:
 		if str(visible_buttons[i].get_meta("action_priority", "secondary")) == "primary":
 			primary_index = i
 			break
-	var secondary = 0.0
+	var secondary_widths: Array[float] = []
 	if secondary_count > 0:
 		var minimum_secondary_total: float = (50.0 + separation) * float(secondary_count)
 		primary = minf(primary, maxf(50.0, available - minimum_secondary_total))
-		secondary = clampf((available - primary - separation * float(secondary_count)) / float(secondary_count), 50.0, 132.0)
-		var used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+		var secondary_budget := maxf(50.0 * float(secondary_count), available - primary - separation * float(secondary_count))
+		var weights: Array[float] = []
+		var total_weight := 0.0
+		for i in range(resolved_count):
+			if i == primary_index:
+				continue
+			var text_len := visible_buttons[i].text.strip_edges().length() if i < visible_buttons.size() else 2
+			var weight := 1.38 if text_len >= 4 else 0.90
+			weights.append(weight)
+			total_weight += weight
+		var used_secondary := 0.0
+		for weight in weights:
+			var slot_w := clampf(secondary_budget * (weight / maxf(0.1, total_weight)), 50.0, 140.0)
+			secondary_widths.append(slot_w)
+			used_secondary += slot_w
+		var used: float = primary + used_secondary + separation * float(secondary_count)
 		if used > available:
-			secondary = maxf(50.0, (available - primary - separation * float(secondary_count)) / float(secondary_count))
-			used = primary + secondary * float(secondary_count) + separation * float(secondary_count)
+			var overflow: float = used - available
+			var shrink_each: float = overflow / float(secondary_count)
+			used_secondary = 0.0
+			for j in range(secondary_widths.size()):
+				secondary_widths[j] = maxf(50.0, secondary_widths[j] - shrink_each)
+				used_secondary += secondary_widths[j]
+			used = primary + used_secondary + separation * float(secondary_count)
 			if used > available:
-				primary = maxf(50.0, available - secondary * float(secondary_count) - separation * float(secondary_count))
+				primary = maxf(50.0, available - used_secondary - separation * float(secondary_count))
+	var sec_cursor := 0
 	for i in range(resolved_count):
-		widths.append(primary if i == primary_index else secondary)
+		if i == primary_index:
+			widths.append(primary)
+		else:
+			widths.append(secondary_widths[sec_cursor] if sec_cursor < secondary_widths.size() else 50.0)
+			sec_cursor += 1
 	return widths
 
 func ended_action_max_visible_button_count() -> int:
@@ -55731,27 +55799,33 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
-	var required_text_height := (26.0 if wide_typography else 24.0) + float(group_titles.size()) * (32.0 + line_gap)
+	var required_text_height := (30.0 if wide_typography else 28.0) + float(group_titles.size()) * (36.0 + line_gap)
 	for line in lines:
 		var line_height := estimate_wrapped_text_height(str(line), text_width, line_font_size, line_gap)
 		measured_line_heights.append(line_height)
 		required_text_height += line_height + line_gap
-	required_text_height += 38.0 if wide_typography else 34.0
+	required_text_height += 44.0 if wide_typography else 38.0
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
+	var section_plate := add_optional_gpt_illustration_texture(section, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if section_plate != null:
+		section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
+		section_plate.self_modulate = Color(0.96, 0.94, 0.88, 0.92)
+		configure_guofeng_button_slice(section_plate, true, 64, 0.16)
 	var vbox = VBoxContainer.new()
-	vbox.anchor_left = 0.058
-	vbox.anchor_top = 0.040
-	vbox.anchor_right = 0.96
-	vbox.anchor_bottom = 0.970
+	vbox.anchor_left = 0.024
+	vbox.anchor_top = 0.045
+	vbox.anchor_right = 0.976
+	vbox.anchor_bottom = 0.965
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
 	var numbered_title := "%02d · %s" % [section_index + 1, title_text] if section_index >= 0 else title_text
-	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(18, 3), Color(1.00, 0.91, 0.60), true)
+	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(20, 3), Color(1.00, 0.91, 0.60), true)
 	style_guofeng_label(title_label)
+	title_label.add_theme_font_override("font", ui_heading_font())
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
 	title_label.tooltip_text = title_text
-	title_label.custom_minimum_size = Vector2(0, 26 if wide_typography else 24)
+	title_label.custom_minimum_size = Vector2(0, 30 if wide_typography else 28)
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title_label)
 	set_ui_full_text(title_label, title_text, "规则章节标题：" + title_text)
@@ -55760,11 +55834,12 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	for line_index in range(lines.size()):
 		var line = lines[line_index]
 		if group_titles.has(line_index):
-			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(16, 2), Color.WHITE, true)
+			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(17, 2), Color.WHITE, true)
 			group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
-			group_title.custom_minimum_size = Vector2(0, 32)
+			group_title.custom_minimum_size = Vector2(0, 34)
 			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_guofeng_label(group_title)
+			group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
@@ -55829,8 +55904,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	stats_row_plate.name = "StatsRowGptPlate"
 	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
 	row.add_child(stats_row_plate)
-	var value_left := 0.535
-	var value_right := 0.935 if large_text_enabled and effective_viewport_size().x <= 960.0 else 0.755
+	var value_left := 0.500
+	var value_right := 0.950
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
@@ -55853,6 +55928,8 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	var display_value_text := value_text
 	var value = make_label(row, display_value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	style_guofeng_label(value)
+	if numeric_value < 0.0:
+		value.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	value.name = "StatsRowValueLabel_%s" % label_text
 	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
