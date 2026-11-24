@@ -34913,7 +34913,7 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 			button.remove_child(old_marker)
 			old_marker.queue_free()
 		return
-	var marker_glyph := "•" if is_back else "▸"
+	var marker_glyph := "▸"
 	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
 	var marker := button.get_node_or_null("GuofengActionFocusMarker") as Label
 	if marker == null:
