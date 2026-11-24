@@ -462,7 +462,7 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.480, 0.080, 0.840, 0.380))
+		apply_rect(shortcut_label, rect_full(0.480, 0.080, 0.945, 0.380))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var focus_marker := make_label(art, "•", 14, Color.WHITE, false)
 	focus_marker.name = "ActionButtonFocusMarker"
@@ -10364,7 +10364,6 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		background.name = "DangerWarningTexture"
 	var warning_rail := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.040, 0.032, 0.960, 0.082), 0.92, false)
 	if warning_rail != null:
-		warning_rail.name = "DangerWarningTopRail"
 		warning_rail.modulate = Color(0.95, 0.30, 0.22, 0.92)
 	var danger_tile = make_tile_view(tile, Vector2(32, 44), false, Callable(), true, "", "")
 	danger_tile.name = "DangerDiscardTile"
@@ -10954,7 +10953,7 @@ func discard_archive_button_focus_visual_by_id(button_id: int, focused: bool) ->
 	var seat := int(archive_button.get_meta("discard_archive_seat", -1))
 	var archive_art := archive_button.find_child("DiscardRiverArchiveArt_%d" % seat, true, false) as Control
 	if archive_art != null:
-		archive_art.modulate = Color(1.18, 1.10, 0.78, 1.0) if focused else Color(1.0, 1.0, 1.0, 0.82)
+		archive_art.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	var archive_label := archive_button.find_child("DiscardRiverArchiveLabel_%d" % seat, true, false) as Label
 	if archive_label != null:
 		archive_label.add_theme_color_override("font_color", Color(1.0, 1.0, 0.86, 1.0) if focused else Color(1.0, 0.94, 0.66, 1.0))
@@ -15706,11 +15705,13 @@ func draw_rules_guide_art(parent: Control, viewport_snapshot: Vector2 = Vector2.
 		var label := make_label(node, RULES_SECTION_NAMES[i], 12, Color.WHITE, true)
 		label.name = "RulesGuideStepLabel_%d" % i
 		label.set_meta("guide_name", RULES_SECTION_NAMES[i])
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		apply_rect(label, rect_full(0.03, 0.0, 0.97, 0.0))
 		style_guofeng_label(label)
 		var state := make_label(node, "当前" if i == 0 else "待读", 12, Color.WHITE, false)
 		state.name = "RulesGuideStepState_%d" % i
-		apply_rect(state, rect_full(0.14, 0.0, 0.86, 0.0))
+		state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		apply_rect(state, rect_full(0.03, 0.0, 0.97, 0.0))
 		style_guofeng_label(state)
 		var line_height := maxf(label.get_minimum_size().y, state.get_minimum_size().y)
 		var chapter_height := maxf(UI_MIN_TOUCH_TARGET, line_height * 2.0 + 6.0)
@@ -16191,10 +16192,10 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		dealer.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86))
 	if active:
 		# A single authored gold signal marks the entire current seat at a glance.
-		var turn_marker := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.022, 0.14, 0.042, 0.86), 1.0, false)
+		var turn_marker := add_optional_gpt_illustration_texture(panel, "quiet_gold_accent", rect_full(0.024, 0.16, 0.040, 0.84), 1.0, false)
 		if turn_marker != null:
 			turn_marker.name = "SeatCurrentTurnMarker_%d" % seat
-			turn_marker.self_modulate = Color(1.0, 0.86, 0.44, 0.95)
+			turn_marker.self_modulate = Color(1.0, 0.88, 0.48, 0.92)
 			turn_marker.set_meta("active_seat", seat)
 		name.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48))
 		status.add_theme_color_override("font_color", Color(1.0, 0.88, 0.48))
@@ -16937,7 +16938,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		mark_ui_optimization(section_nav_button, "F-713")
 		settings_section_navigation.add_child(section_nav_button)
 		if section_name == active_settings_section:
-			var active_marker := make_gpt_tick_strip(rect_full(0.220, 0.885, 0.780, 0.965), Color(0.96, 0.78, 0.36, 0.82))
+			var active_marker := make_gpt_tick_strip(rect_full(0.280, 0.835, 0.720, 0.895), Color(1.0, 0.88, 0.46, 0.95))
 			active_marker.name = "SettingsSectionActiveMarker"
 			active_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			active_marker.set_meta("marker_owner", section_name)
@@ -18419,26 +18420,33 @@ func draw_tile_flip_signal_art(tile_view: Control, from_face_up: bool) -> Contro
 		tw.parallel().tween_property(route, "modulate:a", 0.96, 0.16).from(0.56)
 	return art
 
-func draw_tile_status_route_art(parent: Control, risk: String, hint_badge: String) -> Control:
+func draw_tile_status_route_art(parent: Control, risk: String, hint_badge: String, vertical_lift: float = 0.0) -> Control:
 	# Keep tile face pixels 100% unobstructed: place semantic status bar strictly
-	# underneath the tile's bottom edge while preserving structural smoke-test nodes.
+	# underneath the lifted tile's bottom edge with no dark backing strip.
 	var accent = tile_hint_badge_color(hint_badge) if hint_badge != "" else tile_risk_color(risk)
-	var route = make_gpt_route_rail(rect_full(0.100, 1.015, 0.900, 1.065), Color(accent.r, accent.g, accent.b, 0.28))
+	if hint_badge == "确认":
+		accent = Color(0.98, 0.38, 0.28)
+	elif hint_badge == "荐":
+		accent = Color(0.36, 0.90, 0.64)
+	var route = make_gpt_route_rail(rect_full(0.100, 1.020, 0.900, 1.060), Color(accent.r, accent.g, accent.b, 0.0))
 	route.name = "TileStatusRoute"
+	if not is_zero_approx(vertical_lift):
+		route.offset_top -= vertical_lift
+		route.offset_bottom -= vertical_lift
 	parent.add_child(route)
-	var fill = make_gpt_meter_fill(rect_full(0.0, 0.0, 1.0, 1.0), Color(accent.r, accent.g, accent.b, 0.88))
+	var fill = make_gpt_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(accent.r, accent.g, accent.b, 0.92), "quiet_gold_accent")
 	fill.name = "TileStatusFill"
 	route.add_child(fill)
-	var gate = make_gpt_gate(rect_full(0.755, 1.015, 0.870, 1.065), Color(accent.r, accent.g, accent.b, 0.0))
+	var gate = make_gpt_gate(rect_full(0.755, 1.020, 0.870, 1.060), Color(accent.r, accent.g, accent.b, 0.0))
 	gate.name = "TileStatusGate"
 	gate.modulate.a = 0.0
 	parent.add_child(gate)
-	var tick = add_gpt_tick_strip(parent, rect_full(0.410, 1.015, (0.445) + float(1) * (0.100), 1.065), Color(accent.r, accent.g, accent.b, 0.0), "TileStatusTick_0")
+	var tick = add_gpt_tick_strip(parent, rect_full(0.410, 1.020, (0.445) + float(1) * (0.100), 1.060), Color(accent.r, accent.g, accent.b, 0.0), "TileStatusTick_0")
 	if tick != null:
 		tick.modulate.a = 0.0
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		var peak := 0.96 if hint_badge != "" else 0.88
-		var trough := 0.54 if hint_badge != "" else 0.60
+		var trough := 0.62 if hint_badge != "" else 0.66
 		var pulse_tw := create_screen_tween()
 		pulse_tw.set_loops(48)
 		pulse_tw.tween_property(fill, "modulate:a", trough, 0.70).from(peak)
@@ -20729,7 +20737,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 			tile_owner.set_meta("tile_face_texture_ready", true)
 		var visual_parent: Control = frame if frame != null else tile_body
 		if frame != null and (risk_text != "" or hint_badge != ""):
-			draw_tile_status_route_art(visual_parent, risk, hint_badge)
+			draw_tile_status_route_art(visual_parent, risk, hint_badge, highlight_lift)
 		if highlighted:
 			draw_tile_depth_art(tile_body, size, clickable, highlighted, risk_text, true)
 			var marker_tint := Color(0.98, 0.36, 0.26) if hint_badge == "确认" else (Color(0.36, 0.88, 0.62) if hint_badge == "荐" else Color.WHITE)

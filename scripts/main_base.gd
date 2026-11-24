@@ -3247,8 +3247,10 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
 	var text_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
 	var is_raw_ink_contract := button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")
-	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and str(button.get_meta("action_role", "")) == ""
-	var use_paper_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and str(button.get_meta("action_role", "")) == "" and (
+	var action_role := str(button.get_meta("action_role", "")) if button != null else ""
+	var is_pending_claim_role := action_role in ["chi", "peng", "gang", "win", "pass"]
+	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and not is_pending_claim_role
+	var use_paper_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and action_role == "" and (
 		button.name.begins_with("SettingRowButton_")
 		or button.name.begins_with("SettingsSectionNavButton_")
 		or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
