@@ -17283,10 +17283,11 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	chip.set_meta("viewport_snapshot", chip_viewport)
 	chip.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_chip")
 	parent.add_child(chip)
-	var chip_plate := add_optional_gpt_illustration_texture(chip, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	var chip_plate := add_optional_gpt_illustration_texture(chip, "button_face_jiangnan_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if chip_plate != null:
 		chip_plate.name = "StatsSummaryChipPlate_%s" % chip_id
-		chip_plate.self_modulate = Color(0.96, 0.94, 0.88)
+		chip_plate.self_modulate = Color(0.98, 0.96, 0.91)
+		configure_guofeng_button_slice(chip_plate, true)
 	var display_value := value_text
 	var unit_text := ""
 	for suffix in ["番/局", "分/局", "%", "局", "分"]:

@@ -29588,10 +29588,11 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	chip.set_meta("viewport_snapshot", chip_viewport)
 	chip.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_chip")
 	parent.add_child(chip)
-	var chip_plate := add_optional_gpt_illustration_texture(chip, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	var chip_plate := add_optional_gpt_illustration_texture(chip, "button_face_jiangnan_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if chip_plate != null:
 		chip_plate.name = "StatsSummaryChipPlate_%s" % chip_id
-		chip_plate.self_modulate = Color(0.96, 0.94, 0.88)
+		chip_plate.self_modulate = Color(0.98, 0.96, 0.91)
+		configure_guofeng_button_slice(chip_plate, true)
 	var display_value := value_text
 	var unit_text := ""
 	for suffix in ["番/局", "分/局", "%", "局", "分"]:
@@ -55808,10 +55809,10 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		required_text_height += line_height + line_gap
 	required_text_height += 44.0 if wide_typography else 38.0
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
-	var section_plate := add_optional_gpt_illustration_texture(section, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
-	if section_plate != null:
-		section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
-		section_plate.self_modulate = Color(0.96, 0.94, 0.88)
+	var section_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
+	section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
+	section_plate.self_modulate = Color(0.93, 0.89, 0.81)
+	section.add_child(section_plate)
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045
