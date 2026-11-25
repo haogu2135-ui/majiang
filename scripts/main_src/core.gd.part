@@ -2706,17 +2706,20 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 
 
 func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int, tile_size: Vector2, visible_count: int, archive_reserved_start: int, table_size: Vector2) -> float:
-	if (seat != 0 and seat != 2) or visible_count <= 0 or archive_reserved_start >= 0 or columns <= 0:
-		return 0.0
-	if table_size.x <= 1.0:
+	if (seat != 0 and seat != 2) or visible_count <= 0 or columns <= 0 or table_size.x <= 1.0:
 		return 0.0
 	var used_cols: int = mini(columns, visible_count)
 	var content_w: float = float(used_cols) * tile_size.x + float(maxi(0, used_cols - 1) * DISCARD_GRID_SEPARATION)
 	var zone_w: float = maxf(0.0, (zone_rect.size.x - zone_rect.position.x) * table_size.x)
-	if content_w >= zone_w - 0.5:
+	var max_right_px: float = zone_w
+	if seat == 2 and archive_reserved_start >= 0 and not top_discard_archive_uses_side_gutter(effective_viewport_size()):
+		if archive_reserved_start >= columns or archive_reserved_start <= 0:
+			return 0.0
+		max_right_px = minf(max_right_px, float(archive_reserved_start) / float(columns) * zone_w - 6.0)
+	if content_w >= max_right_px - 0.5:
 		return 0.0
 	var desired_left: float = (0.500 - zone_rect.position.x) * table_size.x - content_w * 0.5
-	return floorf(clampf(desired_left, 0.0, maxf(0.0, zone_w - content_w)))
+	return floorf(clampf(desired_left, 0.0, maxf(0.0, max_right_px - content_w)))
 
 func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 	var discards = get_discards(seat)
@@ -2731,9 +2734,10 @@ func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Ve
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, columns, resolved_table_size)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, resolved_table_size)
 		var raw_visible_capacity: int = int(columns * visible_rows)
+		var archive_geometry := discard_archive_reserved_geometry(zone_rect, columns, visible_rows, resolved_table_size)
 		var side_gutter := discard_side_archive_uses_gutter(seat, zone_rect, columns, visible_rows, resolved_table_size)
 		var visible_capacity := discard_visible_capacity(seat, discards.size(), zone_rect, columns, visible_rows, resolved_table_size)
-		var archive_reserved_start := 0 if discards.size() > raw_visible_capacity and not side_gutter else -1
+		var archive_reserved_start := int(archive_geometry.get("start", visible_capacity)) if discards.size() > raw_visible_capacity and not side_gutter else -1
 		var visible_start = tail_window_start(discards.size(), visible_capacity)
 		var visible_count: int = mini(visible_capacity, discards.size() - visible_start)
 		var visible_index = discards.size() - 1 - visible_start

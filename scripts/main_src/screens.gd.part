@@ -1600,7 +1600,7 @@ func _show_online_lobby_impl() -> void:
 	retry_connection_button.set_meta("layout_role", "connection_state_retry_lane")
 	retry_connection_button.set_meta("minimum_clearance_px", 8.0)
 	set_ui_full_text(retry_connection_button, retry_connection_button.tooltip_text, "连接状态恢复操作")
-	apply_rect(retry_connection_button, rect_full(0.835, 0.108, 0.960, 0.174))
+	apply_rect(retry_connection_button, rect_full(0.835, 0.108, 0.943, 0.174))
 	panel.add_child(retry_connection_button)
 	retry_connection_button.visible = connection_state == "异常" or online_retry_available or online_feedback_requires_recovery()
 	retry_connection_button.disabled = connection_state == "连接中"
@@ -1894,25 +1894,26 @@ func _show_online_lobby_impl() -> void:
 	var compact_lobby_log := online_lobby_viewport_size.y <= 560.0
 	var log_header_top_px: float = float(log_list_panel.get_meta("header_min_height_px", 0.0))
 	var log_frame_key: String = "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
-	var log_body_frame := add_optional_gpt_illustration_texture(log_list_panel, log_frame_key, rect_full(0.025, 0.0, 0.975, 0.985), 1.0, false)
+	var log_body_frame := add_optional_gpt_illustration_texture(log_list_panel, log_frame_key, rect_full(0.025, 0.0, 0.975, 0.995), 1.0, false)
 	if log_body_frame != null:
 		log_body_frame.name = "OnlineLobbyLogBodyFrame"
-		log_body_frame.offset_top = maxf(0.0, log_header_top_px - 2.0)
+		log_body_frame.offset_top = maxf(0.0, log_header_top_px - 4.0)
 		log_body_frame.self_modulate = Color(0.98, 0.96, 0.92)
 		configure_guofeng_button_slice(log_body_frame, true, 104 if log_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if log_frame_key == "guofeng_card_frame_gpt" else 0.125)
 	var log_scroll := ScrollContainer.new()
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
 	mark_ui_optimization(log_scroll, "F-394")
-	apply_rect(log_scroll, rect_full(0.055, 0.470, 0.945, 0.955))
+	apply_rect(log_scroll, rect_full(0.055, 0.470, 0.945, 0.985))
 	log_scroll.anchor_top = 0.0
-	log_scroll.offset_top = log_header_top_px + (7.0 if compact_lobby_log else 10.0)
+	var log_scroll_base_top: float = log_header_top_px + (2.0 if compact_lobby_log else 3.0)
+	log_scroll.offset_top = log_scroll_base_top
 	if compact_large_roster:
 		# Keep a full log line and a real twelve-pixel gap before the feedback.
 		log_scroll.anchor_bottom = 0.0
 		log_scroll.offset_bottom = maxf(log_scroll.offset_top + 34.0, log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0)
 	else:
-		log_scroll.offset_bottom = -6.0
+		log_scroll.offset_bottom = -2.0
 	log_scroll.set_meta("header_bottom", 0.445)
 	log_scroll.set_meta("content_lane", "房间日志列表")
 	log_scroll.set_meta("footer_clearance_px", 12.0)
@@ -1943,13 +1944,36 @@ func _show_online_lobby_impl() -> void:
 	logs_label.add_theme_constant_override("outline_size", 0)
 	logs_label.add_theme_constant_override("shadow_offset_x", 0)
 	logs_label.add_theme_constant_override("shadow_offset_y", 0)
-	logs_label.add_theme_constant_override("line_spacing", -1 if compact_lobby_log else 1)
+	logs_label.add_theme_constant_override("line_spacing", -1 if compact_lobby_log else 0)
 	logs_label.custom_minimum_size = Vector2.ZERO
 	logs_label.set_meta("line_range_source", "OnlineLobbyLogScroll")
 	mark_ui_optimization(logs_label, "F-909")
 	log_scroll.add_child(logs_label)
+	var snap_online_log_viewport := func() -> void:
+		if compact_large_roster or not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
+			return
+		var avail_h: float = log_list_panel.size.y * 0.985 - 2.0 - log_scroll_base_top
+		var line_count: int = logs_label.get_line_count()
+		var content_h: float = float(logs_label.get_content_height())
+		if avail_h < 18.0 or line_count <= 0 or content_h <= 1.0:
+			return
+		var line_h: float = content_h / float(line_count)
+		if line_h < 10.0:
+			return
+		var whole_lines: float = maxf(1.0, floorf(avail_h / line_h))
+		var snapped_h: float = minf(avail_h, ceilf(whole_lines * line_h))
+		var pad_y: float = floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
+		var target_top: float = log_scroll_base_top + pad_y
+		var target_bottom: float = target_top + snapped_h
+		if log_scroll.anchor_bottom != 0.0 or absf(log_scroll.offset_top - target_top) > 0.5 or absf(log_scroll.offset_bottom - target_bottom) > 0.5:
+			log_scroll.anchor_bottom = 0.0
+			log_scroll.offset_top = target_top
+			log_scroll.offset_bottom = target_bottom
+			if online_log_at_latest:
+				call_deferred("scroll_online_log_to_end")
 	for geometry_owner in [log_scroll, logs_label]:
 		geometry_owner.resized.connect(func() -> void:
+			snap_online_log_viewport.call()
 			call_deferred("refresh_online_log_navigation")
 		)
 	var log_scrollbar := log_scroll.get_v_scroll_bar()
@@ -1960,6 +1984,7 @@ func _show_online_lobby_impl() -> void:
 		)
 		log_scroll.set_meta("range_status_updates_on_scroll", true)
 	render_room_log()
+	snap_online_log_viewport.call_deferred()
 	draw_online_feedback_art(log_panel)
 	ensure_update_dialog()
 	refresh_online_lobby_state(online_lobby_viewport_size)
