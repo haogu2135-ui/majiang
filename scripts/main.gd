@@ -13555,10 +13555,15 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		focus_plate.modulate = Color(1.0, 1.0, 1.0, 1.0 if focused else 0.0)
 	var focus_marker := button.find_child("ActionButtonFocusMarker", true, false) as Label
 	if focus_marker != null:
-		var suppress_settlement_dot := button.name == "NextHandPrimaryButton" or role == "next" or role == "win"
+		var suppress_settlement_dot := button.name == "NextHandPrimaryButton" or role == "next"
 		focus_marker.visible = focused and not suppress_settlement_dot
 		style_guofeng_label(focus_marker, on_ink)
-		if (is_danger or role == "win") and focused:
+		if role == "win":
+			focus_marker.add_theme_color_override("font_color", Color(0.0, 0.0, 0.0, 0.0))
+			focus_marker.add_theme_constant_override("outline_size", 0)
+			focus_marker.add_theme_constant_override("shadow_offset_x", 0)
+			focus_marker.add_theme_constant_override("shadow_offset_y", 0)
+		elif is_danger and focused:
 			focus_marker.add_theme_color_override("font_color", Color(1.0, 0.88, 0.68))
 		position_button_focus_marker(button, focus_marker)
 	var shortcut_label := button.find_child("ActionButtonShortcutHint", true, false) as Label
@@ -28930,7 +28935,7 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 			if delta != 0:
 				label.add_theme_color_override("font_color", Color(0.08, 0.27, 0.18, 1.0) if delta > 0 else Color(0.54, 0.13, 0.10, 1.0))
 			else:
-				label.add_theme_color_override("font_color", Color(0.24, 0.28, 0.24, 1.0))
+				label.add_theme_color_override("font_color", Color(0.17, 0.21, 0.17, 1.0))
 		set_ui_full_text(label, str(column[1]), "%s · %s" % [str(players[seat]["name"]), str(column[1])])
 	row.tooltip_text = "第%d名 · %s · 总分%d · 本局%+d · 花%d%s" % [rank, str(players[seat]["name"]), int(players[seat].get("score", 0)), delta, int(players[seat].get("flowers", 0)), " · 本局和牌" if seat == offline_last_winner and round_result_kind != "wall_draw" else ""]
 
@@ -34162,7 +34167,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		visible_status = "清空续局·保留战绩" if single_line_reset else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
 	var status_label = make_label(row, visible_status, row_status_size, Color(0.28, 0.34, 0.27, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
-	status_label.add_theme_color_override("font_color", Color(0.06, 0.14, 0.10, 1.0) if high_contrast_enabled else Color(0.18, 0.27, 0.21, 1.0))
+	status_label.add_theme_color_override("font_color", Color(0.06, 0.14, 0.10, 1.0) if high_contrast_enabled else Color(0.15, 0.23, 0.18, 1.0))
 	set_ui_full_text(status_label, status, title + "完整状态")
 	if title == "本地进度" or title == "隐私诊断":
 		row.set_meta("maintenance_row", true)
@@ -34444,12 +34449,12 @@ func tile_face_crop_material(tile_key: String) -> ShaderMaterial:
 	}
 	if not crop_table.has(tile_key):
 		return null
-	var cache: Dictionary = get_meta("_tile_face_crop_materials", {})
+	var cache: Dictionary = get_meta("_tile_face_crop_materials") as Dictionary if has_meta("_tile_face_crop_materials") else {}
 	if cache.has(tile_key):
 		var cached_mat := cache[tile_key] as ShaderMaterial
 		if cached_mat != null:
 			return cached_mat
-	var shader := get_meta("_tile_face_crop_shader", null) as Shader
+	var shader: Shader = get_meta("_tile_face_crop_shader") as Shader if has_meta("_tile_face_crop_shader") else null
 	if shader == null:
 		shader = Shader.new()
 		shader.code = "shader_type canvas_item;\nuniform vec4 crop_uv = vec4(0.0, 0.0, 1.0, 1.0);\nvarying vec4 v_modulate;\nvoid vertex() {\n\tv_modulate = COLOR;\n}\nvoid fragment() {\n\tvec2 src_uv = crop_uv.xy + UV * crop_uv.zw;\n\tvec4 col = texture(TEXTURE, src_uv);\n\tfloat mask_a = texture(TEXTURE, UV).a;\n\tCOLOR = vec4(col.rgb, col.a * mask_a) * v_modulate;\n}\n"
@@ -41096,8 +41101,9 @@ func show_telemetry_data_sheet() -> void:
 	card.add_child(consent)
 	var export := make_small_button("导出", Color(0.30, 0.48, 0.60), Callable(self, "export_telemetry_data"))
 	export.name = "TelemetryExportButton"
-	export.disabled = telemetry_mutation_in_flight or telemetry_outbox.is_empty()
-	export.tooltip_text = "暂无本地诊断数据可导出" if telemetry_outbox.is_empty() else "复制本机匿名诊断数据"
+	var export_unavailable_init: bool = telemetry_outbox.is_empty() and not telemetry_consent
+	export.disabled = telemetry_mutation_in_flight or export_unavailable_init
+	export.tooltip_text = "暂无本地诊断数据可导出" if export_unavailable_init else "复制本机匿名诊断数据"
 	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 	export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	export.custom_minimum_size = Vector2(100, 44)
@@ -41214,9 +41220,11 @@ func refresh_telemetry_data_sheet() -> void:
 			consent.set_meta("ui_danger_action", false)
 			style_guofeng_secondary_action(consent, true)
 	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
-	if export != null and (mutation_changed or queue_changed):
-		export.disabled = telemetry_mutation_in_flight or telemetry_outbox.is_empty()
-		export.tooltip_text = "暂无本地诊断数据可导出" if telemetry_outbox.is_empty() else "复制本机匿名诊断数据"
+	if export != null and (mutation_changed or queue_changed or consent_changed):
+		var export_unavailable: bool = telemetry_outbox.is_empty() and not telemetry_consent
+		export.disabled = telemetry_mutation_in_flight or export_unavailable
+		export.focus_mode = Control.FOCUS_NONE if export.disabled else Control.FOCUS_ALL
+		export.tooltip_text = "暂无本地诊断数据可导出" if export_unavailable else "复制本机匿名诊断数据"
 		set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 		export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		sync_guofeng_button_face_state(export)

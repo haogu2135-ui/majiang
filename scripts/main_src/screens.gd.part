@@ -4564,8 +4564,9 @@ func show_telemetry_data_sheet() -> void:
 	card.add_child(consent)
 	var export := make_small_button("导出", Color(0.30, 0.48, 0.60), Callable(self, "export_telemetry_data"))
 	export.name = "TelemetryExportButton"
-	export.disabled = telemetry_mutation_in_flight or telemetry_outbox.is_empty()
-	export.tooltip_text = "暂无本地诊断数据可导出" if telemetry_outbox.is_empty() else "复制本机匿名诊断数据"
+	var export_unavailable_init: bool = telemetry_outbox.is_empty() and not telemetry_consent
+	export.disabled = telemetry_mutation_in_flight or export_unavailable_init
+	export.tooltip_text = "暂无本地诊断数据可导出" if export_unavailable_init else "复制本机匿名诊断数据"
 	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 	export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	export.custom_minimum_size = Vector2(100, 44)
@@ -4682,9 +4683,11 @@ func refresh_telemetry_data_sheet() -> void:
 			consent.set_meta("ui_danger_action", false)
 			style_guofeng_secondary_action(consent, true)
 	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
-	if export != null and (mutation_changed or queue_changed):
-		export.disabled = telemetry_mutation_in_flight or telemetry_outbox.is_empty()
-		export.tooltip_text = "暂无本地诊断数据可导出" if telemetry_outbox.is_empty() else "复制本机匿名诊断数据"
+	if export != null and (mutation_changed or queue_changed or consent_changed):
+		var export_unavailable: bool = telemetry_outbox.is_empty() and not telemetry_consent
+		export.disabled = telemetry_mutation_in_flight or export_unavailable
+		export.focus_mode = Control.FOCUS_NONE if export.disabled else Control.FOCUS_ALL
+		export.tooltip_text = "暂无本地诊断数据可导出" if export_unavailable else "复制本机匿名诊断数据"
 		set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 		export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		sync_guofeng_button_face_state(export)
