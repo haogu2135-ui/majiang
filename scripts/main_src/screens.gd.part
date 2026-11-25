@@ -969,8 +969,10 @@ func complete_tutorial(reason: String = "基础操作已完成") -> void:
 
 
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
-	# This row owns one fixed caption/field lane. A clear proxy is an absolute
-	# sibling so its 44px target never expands the form's VBox height.
+	# On short safe areas the caption and focus indicator sit beside the field.
+	# The clear proxy remains an absolute sibling of the native editor.
+	var use_inline_caption := safe_content_pixel_size().y < 500.0
+	var caption_width := 96.0
 	var row = Control.new()
 	configure_passive_container(row)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -989,7 +991,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.max_length = max_length
 	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.virtual_keyboard_type = keyboard_type
-	edit.custom_minimum_size = Vector2(240, UI_MIN_TOUCH_TARGET)
+	edit.custom_minimum_size = Vector2(160 if use_inline_caption else 240, UI_MIN_TOUCH_TARGET)
 	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 2))
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
@@ -1041,9 +1043,19 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	# starts after the last field, including its minimum touch height.
 	var caption_height := ceilf(maxf(caption.get_combined_minimum_size().y, editing.get_combined_minimum_size().y))
 	var edit_height := ceilf(edit.get_combined_minimum_size().y)
-	row.custom_minimum_size.y = caption_height + 2.0 + edit_height
-	apply_rect(edit, rect_full(0.0, 1.0, 1.0, 1.0))
-	edit.offset_top = -edit_height
+	if use_inline_caption:
+		row.custom_minimum_size.y = maxf(edit_height, caption_height * 2.0)
+		apply_rect(caption, rect_full(0.0, 0.0, 0.0, 0.5))
+		caption.offset_right = caption_width
+		apply_rect(editing, rect_full(0.0, 0.5, 0.0, 1.0))
+		editing.offset_right = caption_width
+		editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		apply_rect(edit, rect_full(0.0, 0.0, 1.0, 1.0))
+		edit.offset_left = caption_width + 6.0
+	else:
+		row.custom_minimum_size.y = caption_height + 2.0 + edit_height
+		apply_rect(edit, rect_full(0.0, 1.0, 1.0, 1.0))
+		edit.offset_top = -edit_height
 	row.add_child(edit)
 	var clear_proxy := add_line_edit_clear_proxy(row, edit, "LobbyFieldClearButton_%s" % label_text, Callable(self, "refresh_online_lobby_action_states"))
 	if clear_proxy != null:
