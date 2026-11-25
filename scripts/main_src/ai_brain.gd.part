@@ -2891,26 +2891,27 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	if report_wall_count < 0:
 		report_wall_count = get_wall_count()
 	var midgame_tactical_adj: float = 0.0
-	if diff_idx >= AI_DIFFICULTY_NORMAL and report_wall_count <= wall_phase_threshold(50):
-		# 1) 中盘留安牌护盾（防“提前烧安牌”）：全桌尚无近听高压时，优先先切孤张生张，手留全现物/主现物作后盘折返牌。
+	if diff_idx >= AI_DIFFICULTY_NORMAL and report_wall_count <= wall_phase_threshold(50) and risk < AI_DANGER_RISK_SOFT and feed_risk < AI_DANGER_FEED_SOFT and human_pressure < 12.0:
+		# 1) 早中盘留安牌护盾（防“提前烧安牌”）：仅在牌桌完全平静（无快进/威胁）且未临近一向听时，轻度保留「全现物/主现物」作后盘折返牌。
 		var calm_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
 		var calm_threat_rank: int = int(pressure_context.get("threat_rank", 0))
 		var calm_multi: bool = bool(pressure_context.get("multi_threat", false))
-		if shanten >= 1 and report_wall_count >= wall_phase_threshold(28) and calm_readiness < 8.5 and calm_threat_rank <= 1 and not calm_multi and risk < AI_DANGER_RISK_SOFT:
+		if shanten >= 2 and report_wall_count >= wall_phase_threshold(36) and calm_readiness < 6.8 and calm_threat_rank == 0 and not calm_multi:
 			if safety == "安":
-				midgame_tactical_adj -= 26.0 if diff_idx == AI_DIFFICULTY_HARD else 16.0
+				midgame_tactical_adj -= 12.0 if diff_idx == AI_DIFFICULTY_HARD else 8.0
 			elif safety == "现":
-				midgame_tactical_adj -= 16.0 if diff_idx == AI_DIFFICULTY_HARD else 10.0
-		# 2) 中盘两向听活形/死搭识别：O(1) 识别单张孤张与绝张嵌/边搭，避免拖着死搭进后盘。
-		if shanten == 2 and candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
+				midgame_tactical_adj -= 7.0 if diff_idx == AI_DIFFICULTY_HARD else 4.0
+		# 2) 中盘两向听活形/死搭识别（严格限定低风险、非多威胁候选）：O(1) 识别单张孤张与绝张嵌/边搭，避免拖着死搭进后盘。
+		if shanten == 2 and not calm_multi and candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
 			var cand_copies: int = int(original_counts[candidate_tile_index_snapshot])
 			if cand_copies == 1:
 				if is_isolated_shape_tile(original_counts, candidate_tile_index_snapshot):
 					if candidate_tile_index_snapshot >= 27:
-						midgame_tactical_adj += 22.0 * attack
+						midgame_tactical_adj += 14.0 * attack
 					else:
 						var iso_rank: int = candidate_tile_index_snapshot % 9
-						midgame_tactical_adj += (16.0 if (iso_rank == 0 or iso_rank == 8) else 8.0) * attack
+						if iso_rank == 0 or iso_rank == 8:
+							midgame_tactical_adj += 10.0 * attack
 				elif candidate_tile_index_snapshot < 27:
 					var known_for_live: Array = ai_context_known_counts(eval_context, seat, visible_counts)
 					if known_for_live.size() >= 27:
@@ -2930,7 +2931,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 								elif right_kan and not left_kan and int(known_for_live[candidate_tile_index_snapshot + 1]) >= 4:
 									dead_block = true
 						if dead_block:
-							midgame_tactical_adj += 18.0 * attack
+							midgame_tactical_adj += 14.0 * attack
 	var score = -float(shanten) * 760.0
 	score += (float(ukeire) * 26.0 + float(variety) * 18.0) * attack
 	score += (shape * 0.30 + shape_quality * 0.42) * attack + ruleset_shape_adj + midgame_tactical_adj
