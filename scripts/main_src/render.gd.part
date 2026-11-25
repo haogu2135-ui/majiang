@@ -14355,8 +14355,8 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var quick_icon := add_optional_gpt_illustration_texture(button, "menu_nav_" + quick_id + "_jiangnan_gpt", rect_full(0.5, 0.5, 0.5, 0.5), 1.0, true)
 		if quick_icon != null:
 			quick_icon.name = "MenuQuick%sIcon" % quick_suffix
-			quick_icon.offset_left = -34.0 if compact_quick_rail else -38.0
-			quick_icon.offset_right = -8.0 if compact_quick_rail else -6.0
+			quick_icon.offset_left = -33.0 if compact_quick_rail else -36.0
+			quick_icon.offset_right = -7.0 if compact_quick_rail else -4.0
 			quick_icon.offset_top = -13.0 if compact_quick_rail else -16.0
 			quick_icon.offset_bottom = 13.0 if compact_quick_rail else 16.0
 			quick_icon.z_index = 11
@@ -14366,10 +14366,10 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 			if claim_dot != null:
 				claim_dot.name = "MenuQuickDailyClaimDot"
 				claim_dot.custom_minimum_size = Vector2(14.0, 14.0)
-				claim_dot.offset_left = -15.0 if compact_quick_rail else -16.0
-				claim_dot.offset_right = -1.0 if compact_quick_rail else -2.0
-				claim_dot.offset_top = -16.0 if compact_quick_rail else -20.0
-				claim_dot.offset_bottom = -2.0 if compact_quick_rail else -6.0
+				claim_dot.offset_left = -12.0 if compact_quick_rail else -11.0
+				claim_dot.offset_right = 2.0 if compact_quick_rail else 3.0
+				claim_dot.offset_top = -18.0 if compact_quick_rail else -21.0
+				claim_dot.offset_bottom = -4.0 if compact_quick_rail else -7.0
 				claim_dot.z_index = 12
 				var claim_glyph := make_label(claim_dot, "礼", 8, Color(0.99, 0.96, 0.86, 1.0), true)
 				claim_glyph.name = "MenuQuickDailyClaimGlyph"
@@ -14382,8 +14382,8 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		quick_label.name = "MenuQuick%sLabel" % quick_suffix
 		quick_label.add_theme_font_override("font", ui_heading_font())
 		apply_rect(quick_label, rect_full(left + button_width * 0.5, 0.125, left + button_width * 0.5, 0.875))
-		quick_label.offset_left = 0.0
-		quick_label.offset_right = 44.0
+		quick_label.offset_left = 2.0
+		quick_label.offset_right = 46.0
 		quick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		quick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		quick_label.z_index = 11
@@ -17655,6 +17655,9 @@ func draw_shop_item_row_art(row: Control, _item_color: Color, count: int, item_i
 	if paper != null:
 		paper.name = "ShopItemRowGptPlate"
 		paper.set_meta("artwork_key", "menu_card_readable_gpt")
+		var shop_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+		if shop_frame_tex != null:
+			configure_guofeng_button_slice(paper, true, 104, 0.22, shop_frame_tex, true)
 		row.move_child(paper, 0)
 	var charm_key := shop_charm_gpt_key(item_id)
 	var display_card := bool(row.get_meta("shop_display_card", false))
@@ -19949,7 +19952,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		limit.add_theme_font_override("font", ui_heading_font())
 		var limit_seal_bg := add_optional_gpt_illustration_texture(limit, "quiet_gold_accent", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
 		if limit_seal_bg != null:
-			limit_seal_bg.name = "WinDetailLimitSealWash"
+			limit_seal_bg.name = "WinDetailLimitBg"
 			limit_seal_bg.self_modulate = Color(0.82, 0.30, 0.20, 0.26)
 			limit_seal_bg.show_behind_parent = true
 		place_round_summary_control(limit, Rect2(detail_rect.size.x - 62.0, status.position.y, 62.0, float(layout["small_height"])))
@@ -21060,8 +21063,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (76.0 if large_text_settings or title == "本地进度" else 64.0))
-	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (56 if large_text_enabled else (58 if compact_settings else 64)))
+	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (78.0 if large_text_settings or title == "本地进度" else 64.0))
+	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66 if large_text_enabled else (58 if compact_settings else 64)))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
 	row.set_meta("status_lane_contract", "title_then_status_then_action")
@@ -21071,21 +21074,21 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	parent.add_child(row)
 	var row_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if row_frame_tex != null:
-		var row_frame := add_optional_gpt_illustration_texture(row, "guofeng_card_frame_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+		var row_frame := add_optional_gpt_illustration_texture(row, "guofeng_card_frame_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 0.94, false)
 		if row_frame != null:
 			row_frame.name = "SettingsRowCardFrame_%s" % title
-			row_frame.self_modulate = Color(0.99, 0.97, 0.92)
+			row_frame.self_modulate = guofeng_high_contrast_card_tint()
 			configure_guofeng_button_slice(row_frame, true, 104, 0.22)
 	# Large text needs a little more room for four-character setting names on
 	# the compact three-column grid. Keep the button lane fixed so its target
 	# size and focus geometry remain stable.
-	var text_right := 0.465 if compact_settings and large_text_settings else (0.430 if compact_settings else 0.565)
-	var button_left := 0.495 if compact_settings else 0.595
-	var single_line_reset := compact_settings and not large_text_settings and title == "本地进度"
-	if single_line_reset:
+	var text_right := 0.465 if compact_settings and large_text_settings else (0.430 if compact_settings else (0.595 if title == "播放曲目" else 0.565))
+	var button_left := 0.495 if compact_settings else (0.610 if title == "播放曲目" else 0.595)
+	var single_line_reset := not large_text_settings and title == "本地进度"
+	if single_line_reset and compact_settings:
 		text_right = 0.615
 		button_left = 0.645
-	var row_title_size := 14 if compact_settings or large_text_settings else 18
+	var row_title_size := 14 if compact_settings or large_text_settings else guofeng_card_title_font_size(17)
 	var row_status_size := 13 if compact_settings or large_text_settings else 14
 	var title_label = make_label(row, title, row_title_size, Color(0.10, 0.24, 0.17, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
@@ -21116,7 +21119,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		compact_reset_status = "清空续局·保留战绩"
 	var visible_status := compact_reset_status if compact_settings and title == "本地进度" else (status if show_full_status else (consequence_status if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status))
 	if title == "本地进度":
-		visible_status = "清空续局·保留战绩" if single_line_reset else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
+		visible_status = ("清空续局·保留战绩" if compact_settings else "仅清续局 · 保留战绩") if single_line_reset else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
 	var status_label = make_label(row, visible_status, row_status_size, Color(0.28, 0.34, 0.27, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	status_label.add_theme_color_override("font_color", Color(0.08, 0.18, 0.13, 1.0))
@@ -21130,7 +21133,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	apply_rect(status_label, rect_full(0.052, 0.500, text_right - 0.015, 0.860))
 	if title == "本地进度":
 		apply_rect(status_label, rect_full(0.052, 0.400, text_right - 0.015, 0.960))
-		if single_line_reset:
+		if single_line_reset and compact_settings:
 			status_label.anchor_left = 0.015
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -21154,6 +21157,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		mark_ui_optimization(status_label, "F-223")
 	else:
 		configure_clipped_label(status_label)
+		if title == "播放曲目":
+			fit_label_font_size(status_label, maxf(74.0, setting_viewport.x * maxf(0.16, text_right - 0.068)), accessibility_font_size(row_status_size), 11)
 		if consequence_row and compact_settings:
 			status_label.add_theme_font_size_override("font_size", accessibility_font_size(13))
 			if title != "本地进度":

@@ -4241,29 +4241,29 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 	var dock_rect = action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)
 	var ended_action_mode := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
 	var danger_confirm_mode := mode == "offline" and has_pending_danger_discard()
-	var separation = action_button_separation_for_count(count, resolved_viewport)
-	var width = action_button_width_for_count(count, separation, resolved_viewport)
+	var separation: int = action_button_separation_for_count(count, resolved_viewport)
+	var width: float = action_button_width_for_count(count, separation, resolved_viewport)
 	if count == 1 and not danger_confirm_mode and not ended_action_mode:
 		width = minf(width, 100.0)
-	var disconnected_online := mode == "online_game" and online_game_disconnected()
+	var disconnected_online: bool = mode == "online_game" and online_game_disconnected()
 	var dock_pixels: float = 0.0
 	if ended_action_mode:
 		dock_pixels = ended_action_bar_required_width(count) + 24.0
 	else:
-		var measured_total := 0.0
+		var measured_total: float = 0.0
 		var live_buttons: Array[Button] = action_bar_buttons()
 		if not live_buttons.is_empty():
-			var base_font_size := action_button_font_size(width)
+			var base_font_size: int = action_button_font_size(width)
 			for live_btn in live_buttons:
-				var btn_w := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
-				var action_font := live_btn.get_theme_font("font")
-				var clean_text := live_btn.text.strip_edges()
-				var h_pad := 18.0
-				var normal_style := live_btn.get_theme_stylebox("normal")
+				var btn_w: float = maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
+				var action_font: Font = live_btn.get_theme_font("font")
+				var clean_text: String = live_btn.text.strip_edges()
+				var h_pad: float = 18.0
+				var normal_style: StyleBox = live_btn.get_theme_stylebox("normal")
 				if normal_style != null:
 					h_pad = maxf(8.0, normal_style.get_content_margin(SIDE_LEFT) + normal_style.get_content_margin(SIDE_RIGHT))
-				var resolved_fs := maxi(12, base_font_size)
-				var text_w := action_font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_fs).x if action_font != null else float(clean_text.length()) * float(resolved_fs) * 0.98
+				var resolved_fs: int = maxi(12, base_font_size)
+				var text_w: float = action_font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_fs).x if action_font != null else float(clean_text.length()) * float(resolved_fs) * 0.98
 				while text_w + h_pad > btn_w and resolved_fs > 12:
 					resolved_fs -= 1
 					text_w = action_font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_fs).x if action_font != null else float(clean_text.length()) * float(resolved_fs) * 0.98
@@ -4271,7 +4271,7 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 					btn_w = text_w + h_pad
 				measured_total += btn_w
 			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + (16.0 if live_buttons.size() == 1 else 24.0)
-		var solver_total := float(count) * width + float(max(0, count - 1) * separation) + (16.0 if count == 1 else 24.0)
+		var solver_total: float = float(count) * width + float(maxi(0, count - 1) * separation) + (16.0 if count == 1 else 24.0)
 		dock_pixels = maxf(solver_total, measured_total)
 	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else (minf(dock_rect.position.x, 0.480) if disconnected_online else dock_rect.position.x)
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
@@ -10373,6 +10373,12 @@ func add_rules_goal_hand_showcase(section: Control) -> void:
 			var tile := make_tile_view(str((group["tiles"] as Array)[t_idx]), Vector2(34, 48), false, Callable(), false)
 			tile.name = "RuleGoalHandTile_%s_%d" % [str(group["key"]), t_idx]
 			row.add_child(tile)
+		if (group["tiles"] as Array).size() < 3:
+			var pad_slot := Control.new()
+			pad_slot.name = "RuleGoalHandPad_%s" % str(group["key"])
+			pad_slot.custom_minimum_size = Vector2(34, 48)
+			pad_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row.add_child(pad_slot)
 	var summary := make_label(showcase_box, "4 组面子（顺子/刻子）+ 1 对将牌 = 14 张和牌", 12, Color.WHITE, false)
 	summary.name = "RuleGoalHandSummary"
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
