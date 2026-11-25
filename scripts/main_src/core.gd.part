@@ -2705,6 +2705,19 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 		feedback.modulate.a = 0.92
 
 
+func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int, tile_size: Vector2, visible_count: int, archive_reserved_start: int, table_size: Vector2) -> float:
+	if (seat != 0 and seat != 2) or visible_count <= 0 or archive_reserved_start >= 0 or columns <= 0:
+		return 0.0
+	if table_size.x <= 1.0:
+		return 0.0
+	var used_cols: int = mini(columns, visible_count)
+	var content_w: float = float(used_cols) * tile_size.x + float(maxi(0, used_cols - 1) * DISCARD_GRID_SEPARATION)
+	var zone_w: float = maxf(0.0, (zone_rect.size.x - zone_rect.position.x) * table_size.x)
+	if content_w >= zone_w - 0.5:
+		return 0.0
+	var desired_left: float = (0.500 - zone_rect.position.x) * table_size.x - content_w * 0.5
+	return floorf(clampf(desired_left, 0.0, maxf(0.0, zone_w - content_w)))
+
 func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 	var discards = get_discards(seat)
 	if discards.is_empty() or seat != get_last_discard_seat():
@@ -2717,14 +2730,19 @@ func last_discard_focus_marker_rect_for_seat(seat: int, table_size: Vector2 = Ve
 		var columns = int(zone[2])
 		var visible_rows = discard_zone_visible_rows_for_table_size(zone_rect, columns, resolved_table_size)
 		var tile_size = discard_zone_tile_size_for_table_size(zone_rect, columns, visible_rows, resolved_table_size)
+		var raw_visible_capacity: int = int(columns * visible_rows)
+		var side_gutter := discard_side_archive_uses_gutter(seat, zone_rect, columns, visible_rows, resolved_table_size)
 		var visible_capacity := discard_visible_capacity(seat, discards.size(), zone_rect, columns, visible_rows, resolved_table_size)
+		var archive_reserved_start := 0 if discards.size() > raw_visible_capacity and not side_gutter else -1
 		var visible_start = tail_window_start(discards.size(), visible_capacity)
+		var visible_count: int = mini(visible_capacity, discards.size() - visible_start)
 		var visible_index = discards.size() - 1 - visible_start
 		if visible_index < 0:
 			return Rect2()
+		var inset_px: float = discard_grid_horizontal_inset_px(seat, zone_rect, columns, tile_size, visible_count, archive_reserved_start, resolved_table_size)
 		var col = visible_index % max(1, columns)
 		var row = visible_index / max(1, columns)
-		var left_px = float(col) * (tile_size.x + float(DISCARD_GRID_SEPARATION))
+		var left_px = inset_px + float(col) * (tile_size.x + float(DISCARD_GRID_SEPARATION))
 		var top_px = float(row) * (tile_size.y + float(DISCARD_GRID_SEPARATION))
 		var zone_width_px = max(1.0, (zone_rect.size.x - zone_rect.position.x) * resolved_table_size.x)
 		var zone_height_px = max(1.0, (zone_rect.size.y - zone_rect.position.y) * resolved_table_size.y)
@@ -3323,6 +3341,15 @@ func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count
 	return min(width_by_space, width_by_height)
 
 func hand_layout_drawn_index(hand: Array) -> int:
+	if mode == "online_game":
+		if hand.size() % 3 != 2 or hand.size() < 2:
+			return -1
+		var online_phase := str(online_game.get("phase", ""))
+		var online_current := int(online_game.get("currentSeat", -1))
+		var online_you := int(online_game.get("youSeat", -1))
+		if online_phase == "awaitDiscard" and online_current == online_you:
+			return hand.size() - 1
+		return -1
 	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0:
 		return -1
 	var drawn_tile := str(offline_last_draw.get("tile", ""))
@@ -3411,7 +3438,7 @@ func hand_tile_report_risk_text(report: Dictionary) -> String:
 func hand_tile_interaction_tooltip(tile: String, report: Dictionary = {}, hint_badge: String = "", drawn: bool = false) -> String:
 	var parts: Array[String] = [tile_label(tile)]
 	if hint_badge == "选":
-		parts.append("键盘已选 · Enter确认出牌")
+		parts.append("键盘已选 · 回车确认出牌")
 	elif hint_badge == "确认":
 		parts.append("当前待确认")
 	elif hint_badge == "荐":
@@ -3487,7 +3514,7 @@ func hand_tray_text() -> String:
 	if mode == "offline" and can_self_discard():
 		var selected_tile := hand_keyboard_selected_tile()
 		if selected_tile != "":
-			return "已选%s · Enter确认出牌" % tile_label(selected_tile)
+			return "已选%s · 回车确认出牌" % tile_label(selected_tile)
 		var wall_count := get_wall_count()
 		if wall_is_critical(wall_count):
 			return "牌墙将尽 · 余%d · 谨慎出牌" % wall_count
@@ -3506,7 +3533,7 @@ func hand_tray_text() -> String:
 	if mode == "online_game":
 		var online_selected_tile := hand_keyboard_selected_tile()
 		if online_selected_tile != "":
-			return "已选%s · Enter确认出牌" % tile_label(online_selected_tile)
+			return "已选%s · 回车确认出牌" % tile_label(online_selected_tile)
 		return "等待对家" if not can_self_discard() else "点击手牌出牌"
 	return "等待对家"
 
@@ -3524,8 +3551,8 @@ func hand_tray_visible_text(detail_snapshot: String = "") -> String:
 		return detail
 	if detail == "点击手牌出牌":
 		return "点击手牌 · 出牌"
-	if detail.contains(" · Enter确认出牌"):
-		return detail.replace(" · Enter确认出牌", " · Enter出牌")
+	if detail.contains(" · 回车确认出牌"):
+		return detail.replace(" · 回车确认出牌", " · 回车出牌")
 	return detail
 
 
@@ -3542,11 +3569,11 @@ func hand_shortcut_hint_text() -> String:
 		return ""
 	if can_self_discard():
 		if compact_battle_view():
-			return "方向键选牌 · 1-0直选 · Enter出牌"
+			return "方向键选牌 · 1-0直选 · 回车出牌"
 		var hand := get_self_hand()
 		if hand.size() > 10:
-			return "方向键选牌 · 1-0 / QWER选第11-14张 · Enter出牌"
-		return "方向键选牌 · 1-0直选 · Enter出牌"
+			return "方向键选牌 · 1-0 / QWER选第11-14张 · 回车出牌"
+		return "方向键选牌 · 1-0直选 · 回车出牌"
 	return ""
 
 
