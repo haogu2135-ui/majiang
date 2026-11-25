@@ -3946,10 +3946,10 @@ func _show_shop_screen_impl() -> void:
 		if exchange_ratio > 0.001:
 			var bar_right := clampf(exchange_ratio, 0.05, 0.992)
 			var bar_fill_key := "menu_card_readable_gpt" if optional_gpt_illustration_texture("menu_card_readable_gpt") != null else "quiet_gold_accent"
-			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.010, 0.16, bar_right, 0.84), Color.WHITE, bar_fill_key, 0.45)
+			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.010, 0.14, bar_right, 0.86), Color.WHITE, bar_fill_key, 0.45)
 			exchange_meter_bar.name = "ShopExchangeMeterBar"
 			exchange_meter_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			exchange_meter_bar.self_modulate = Color(0.16, 0.56, 0.36, 1.0) if exchange_coins_needed == 0 else Color(0.82, 0.58, 0.16, 1.0)
+			exchange_meter_bar.self_modulate = Color(0.10, 0.62, 0.38, 1.0) if exchange_coins_needed == 0 else Color(0.16, 0.58, 0.38, 1.0)
 			exchange_meter_track.add_child(exchange_meter_bar)
 	var exchange_meter_copy := "%d/%d 铜钱 → %d 玉符" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS] if shop_wide_layout else "%d/%d → %d玉" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var exchange_meter_caption := make_label(exchange_meter_host, exchange_meter_copy, commercial_ui_font_size(12, 3), shop_ink, true)
@@ -7679,7 +7679,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.919 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.936 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -7823,10 +7823,33 @@ func _show_replay_import_screen_impl() -> void:
 func fit_compact_replay_archive_viewport(scroll: ScrollContainer, list: VBoxContainer) -> void:
 	if not is_instance_valid(scroll) or not is_instance_valid(list):
 		return
+	var pane := scroll.get_parent() as Control
 	if ui_layout_density(get_viewport_rect().size) != "compact":
 		scroll.offset_bottom = 0.0
+		if pane != null and pane.size.y > 1.0 and effective_viewport_size().x >= 1600.0 and not large_text_enabled:
+			var max_wide_bottom := 0.955
+			var avail_wide_h := pane.size.y * (max_wide_bottom - scroll.anchor_top)
+			var wide_sep := float(list.get_theme_constant("separation"))
+			var fit_h := 0.0
+			var fitted := 0
+			var next_row_top := -1.0
+			for child in list.get_children():
+				if not child is Control or not str(child.name).begins_with("ReplayArchiveRow_"):
+					continue
+				var r := child as Control
+				var rh := maxf(r.size.y, maxf(r.custom_minimum_size.y, r.get_combined_minimum_size().y))
+				var candidate_top := fit_h + (wide_sep if fitted > 0 else 0.0)
+				if candidate_top + rh > avail_wide_h - 1.0:
+					next_row_top = candidate_top
+					break
+				fit_h = candidate_top + rh
+				fitted += 1
+			if fitted > 0 and next_row_top > fit_h:
+				var target_h := minf(fit_h + 3.0, next_row_top - 2.0)
+				var target_bottom := clampf(scroll.anchor_top + target_h / pane.size.y, 0.85, max_wide_bottom)
+				if absf(scroll.anchor_bottom - target_bottom) > 0.0005:
+					scroll.anchor_bottom = target_bottom
 		return
-	var pane := scroll.get_parent() as Control
 	if pane == null or pane.size.y <= 1.0:
 		return
 	var available := pane.size.y * (scroll.anchor_bottom - scroll.anchor_top)
