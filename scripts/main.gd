@@ -1471,6 +1471,11 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			allow = false
 			reason = "序盘蓄力"
 			declined_by_opening = true
+	if allow and exposed_melds == 0 and claim == "chi" and after_shanten >= 2 and after_shanten >= before_shanten and claim_diff == AI_DIFFICULTY_HARD and own_flowers == 0 and before_plan_label == "标准" and after_plan_label_now == "标准" and claim_wall_count >= wall_phase_threshold(44):
+		# 困难档早中盘不以脏吃破坏门清（保留+1番与后盘防守手牌厚度）。
+		allow = false
+		reason = "保门清"
+		declined_by_opening = true
 	var from_seat = int(claim_context.get("from_seat", -1)) if has_claim_context else -1
 	var claim_eval_context = claim_context.get("eval_context", {}) if has_claim_context else {}
 	if typeof(claim_eval_context) != TYPE_DICTIONARY:
@@ -1669,6 +1674,21 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 			decline = after_shanten > 1 and pressure >= pressure_limit and not terminal_or_honor
 		elif forced_safety != "安":
 			decline = forced_risk >= risk_limit or pressure >= pressure_limit
+	if not decline and claim != "gang" and after_shanten >= 1:
+		var claim_diff_now: int = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		if claim_diff_now != AI_DIFFICULTY_EASY:
+			var claim_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
+			var claim_multi: bool = bool(pressure_context.get("multi_threat", false))
+			# 未达听牌时，绝不为加速副露而被迫直切无依据高危张（>=31）点炮。
+			if forced_safety == "" and forced_risk >= AI_DANGER_RISK_HIGH and (claim_readiness >= 9.5 or claim_multi or defense >= 1.45):
+				decline = true
+			elif after_shanten >= 2 and claim_diff_now == AI_DIFFICULTY_HARD:
+				var ctx_exposed: int = int(claim_context.get("exposed_melds", -1)) if is_ai_claim_context_for_seat(claim_context, seat) else -1
+				if ctx_exposed < 0:
+					ctx_exposed = exposed_meld_count_for_seat(seat)
+				# 门清远听（副露后仍>=2向听）面对多家/近听高压时，不轻易开牌缩减逃张。
+				if ctx_exposed == 0 and (claim_multi or claim_readiness >= 11.0) and forced_safety != "安" and forced_safety != "现" and forced_risk >= 22.0:
+					decline = true
 	return {
 		"defense": defense,
 		"pressure": pressure,
@@ -3174,7 +3194,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			or int(pressure_context.get("threat_rank", 0)) >= 2 \
 			or bool(pressure_context.get("multi_threat", false)) \
 			or human_pressure_peak >= 16.0 \
-			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 12.0)
+			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH + 4.0) \
+			or (diff == AI_DIFFICULTY_HARD and fast_wall_count <= wall_phase_threshold(26) and float(pressure_context.get("readiness_pressure", 0.0)) >= 8.5)
 		# 常态以三张控制基准成本；高压时保留第四张，让效率推进与
 		# 逃张能同时进入完整评分，不能只留下其中一方。
 		var full_eval_limit = AI_FAST_EVAL_PRESSURE_TOP_K if high_pressure else AI_FAST_EVAL_TOP_K
@@ -3362,9 +3383,15 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				best["hard_guard_safe_score_gap"] = score_gap
 				best["hard_guard_safe_pressure_gain"] = pressure_gain
 		if rejection_reason.is_empty() and shanten_delta > 0:
-			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai:
+			var cand_safety_lbl: String = str(candidate.get("safety_label", ""))
+			var severe_table_one_away_fold: bool = best_shanten == 1 \
+				and best_risk >= AI_DANGER_RISK_HIGH + 11.0 \
+				and (cand_safety_lbl == "安" or cand_safety_lbl == "现" or cand_safety_lbl == "熟") \
+				and float(candidate.get("risk", 0.0)) <= 14.0 \
+				and pressure_gain >= 24.0
+			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai and not severe_table_one_away_fold:
 				rejection_reason = "human_pressure_gate"
-			else:
+			elif not severe_table_one_away_fold:
 				if human_exposure_tenpai:
 					var materially_safer = candidate_human_exposure <= best_human_exposure - 8.0
 					var near_equal_exposure = candidate_human_exposure <= best_human_exposure + 3.0 and pressure_gain >= 35.0
@@ -3912,31 +3939,34 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var opening_push = opening_efficiency_adjustment(seat, tile, shanten, original_counts, exposed_melds, eval_context, candidate_tile_index_arg)
 	var post_meld_push = post_meld_route_adjustment(seat, tile, exposed_melds, original_counts, plan_label, plan_suit, shanten, eval_context, candidate_tile_index_arg)
 	var open_wait_push = open_tenpai_quality_adjustment(seat, exposed_melds, shanten, wait_total_remaining, int(effective_tiles.size()) if typeof(effective_tiles) == TYPE_ARRAY else 0, wait_average_points, wait_best_points, eval_context)
-	var wall_draw_push = wall_draw_tenpai_preservation_adjustment(seat, shanten, ukeire, eval_context)
+	var wall_draw_push = wall_draw_tenpai_preservation_adjustment(seat, shanten, ukeire, eval_context, risk, safety)
+	var report_wall_count: int = int(eval_context.get("discard_report_wall_count", -1)) if context_matches_seat else -1
+	if report_wall_count < 0:
+		report_wall_count = get_wall_count()
 	var effective_route_focus: float = route_focus
 	if rule_min_fan() >= 3 and plan_label != "标准":
-		# 高起胡番规则（如广东3番起胡）：强化大牌路线权重，尽早向可起胡番型靠拢。
-		effective_route_focus *= 1.35
+		# 高起胡番规则（如广东3番起胡）：强化大牌路线权重，尽早向可起胡番型靠拢；已副露更需锁死达标番型。
+		effective_route_focus *= 1.45 if exposed_melds >= 1 else 1.35
+	elif rule_min_fan() <= 1 and shanten <= 1 and report_wall_count <= wall_phase_threshold(24):
+		# 残墙末盘（低起胡番规则）：近听/听牌阶段适度淡化慢路线，果断转向速听保和或查听。
+		effective_route_focus *= 0.65
 	var ruleset_shape_adj: float = 0.0
 	if not rule_allows_chi() and shanten >= 1:
 		# 四川等无吃牌规则：对子与刻子是唯一提速途径，提高留对/留刻牌形权重。
 		ruleset_shape_adj = (float(int(shape_report.get("pairs", 0))) * 5.0 + float(int(shape_report.get("triplets", 0))) * 10.0) * attack
-	var report_wall_count: int = int(eval_context.get("discard_report_wall_count", -1)) if context_matches_seat else -1
-	if report_wall_count < 0:
-		report_wall_count = get_wall_count()
+	var table_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
+	var table_threat_rank: int = int(pressure_context.get("threat_rank", 0))
+	var table_multi: bool = bool(pressure_context.get("multi_threat", false))
 	var midgame_tactical_adj: float = 0.0
 	if diff_idx >= AI_DIFFICULTY_NORMAL and report_wall_count <= wall_phase_threshold(50) and risk < AI_DANGER_RISK_SOFT and feed_risk < AI_DANGER_FEED_SOFT and human_pressure < 12.0:
 		# 1) 早中盘留安牌护盾（防“提前烧安牌”）：仅在牌桌完全平静（无快进/威胁）且未临近一向听时，轻度保留「全现物/主现物」作后盘折返牌。
-		var calm_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
-		var calm_threat_rank: int = int(pressure_context.get("threat_rank", 0))
-		var calm_multi: bool = bool(pressure_context.get("multi_threat", false))
-		if shanten >= 2 and report_wall_count >= wall_phase_threshold(36) and calm_readiness < 6.8 and calm_threat_rank == 0 and not calm_multi:
+		if shanten >= 2 and report_wall_count >= wall_phase_threshold(38) and table_readiness < 6.8 and table_threat_rank == 0 and not table_multi:
 			if safety == "安":
-				midgame_tactical_adj -= 12.0 if diff_idx == AI_DIFFICULTY_HARD else 8.0
+				midgame_tactical_adj -= 10.0 if diff_idx == AI_DIFFICULTY_HARD else 7.0
 			elif safety == "现":
-				midgame_tactical_adj -= 7.0 if diff_idx == AI_DIFFICULTY_HARD else 4.0
+				midgame_tactical_adj -= 6.0 if diff_idx == AI_DIFFICULTY_HARD else 4.0
 		# 2) 中盘两向听活形/死搭识别（严格限定低风险、非多威胁候选）：O(1) 识别单张孤张与绝张嵌/边搭，避免拖着死搭进后盘。
-		if shanten == 2 and not calm_multi and candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
+		if shanten == 2 and not table_multi and candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < original_counts.size():
 			var cand_copies: int = int(original_counts[candidate_tile_index_snapshot])
 			if cand_copies == 1:
 				if is_isolated_shape_tile(original_counts, candidate_tile_index_snapshot):
@@ -3984,6 +4014,19 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				danger_pen *= 0.72
 		if risk >= AI_DANGER_RISK_HIGH:
 			danger_pen += 28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0
+		# 中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张炮弹」与「两见幺九/字牌」。
+		if safety == "" and risk >= 20.0 and diff_idx >= AI_DIFFICULTY_NORMAL and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
+			var tile_vis: int = int(risk_vector.get("visible", -1))
+			if tile_vis == 0:
+				var is_mid_num: bool = candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and (candidate_tile_index_snapshot % 9) >= 2 and (candidate_tile_index_snapshot % 9) <= 6
+				if is_mid_num:
+					danger_pen += 22.0 if diff_idx == AI_DIFFICULTY_HARD else 13.0
+				else:
+					danger_pen += 10.0 if diff_idx == AI_DIFFICULTY_HARD else 6.0
+			elif tile_vis >= 2:
+				var is_term_or_hon: bool = candidate_tile_index_snapshot >= 27 or (candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and ((candidate_tile_index_snapshot % 9) == 0 or (candidate_tile_index_snapshot % 9) == 8))
+				if is_term_or_hon:
+					danger_pen = maxf(0.0, danger_pen - (8.0 if diff_idx == AI_DIFFICULTY_HARD else 5.0))
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure, diff_idx)
@@ -4440,6 +4483,11 @@ func annotate_human_advisor_reports(reports: Array, pressure_context: Dictionary
 			clauses.append("成听余%d张(最高%d番%d分)" % [wait_rem, wait_fan, wait_pts])
 		else:
 			clauses.append("成听余%d张" % wait_rem)
+		var advisor_wall: int = int(eval_context.get("discard_report_wall_count", -1))
+		if advisor_wall < 0:
+			advisor_wall = get_wall_count()
+		if advisor_wall <= wall_phase_threshold(16):
+			clauses.append("末局保听" if best_risk < AI_DANGER_RISK_SOFT else ("末局慎推" if best_risk >= AI_DANGER_RISK_HIGH else "残墙守听"))
 	else:
 		var added_offense_clause: bool = false
 		if reports.size() >= 2 and typeof(reports[1]) == TYPE_DICTIONARY:
@@ -4448,7 +4496,13 @@ func annotate_human_advisor_reports(reports: Array, pressure_context: Dictionary
 			var second_shanten := int(second.get("shanten", 8))
 			var second_ukeire := int(second.get("ukeire", 0))
 			var second_risk := float(second.get("risk", 0.0))
-			if best_shanten < second_shanten:
+			if best_shanten > second_shanten and (best_safety == "安" or best_safety == "现" or best_safety == "熟"):
+				if second_risk >= AI_DANGER_RISK_HIGH:
+					clauses.append("转守保安全(避打%s高危)" % tile_label(second_tile))
+				else:
+					clauses.append("转守保安全")
+				added_offense_clause = true
+			elif best_shanten < second_shanten:
 				clauses.append("领先备选%s 1向听" % tile_label(second_tile))
 				added_offense_clause = true
 			elif best_ukeire - second_ukeire >= 2:
@@ -4460,7 +4514,9 @@ func annotate_human_advisor_reports(reports: Array, pressure_context: Dictionary
 		if not added_offense_clause and best_ukeire > 0:
 			var best_variety: int = int(best.get("variety", 0))
 			var shape_hint_str: String = str(best.get("shape_label", ""))
-			if shape_hint_str.find("两面") >= 0:
+			if str(best.get("reason_label", "")) == "切孤张":
+				clauses.append("%s·切孤张提速(进张%d/%d)" % [shanten_label(best_shanten), best_ukeire, best_variety])
+			elif shape_hint_str.find("两面") >= 0:
 				clauses.append("%s·进张%d/%d(留两面)" % [shanten_label(best_shanten), best_ukeire, best_variety])
 			else:
 				clauses.append("%s·进张%d/%d" % [shanten_label(best_shanten), best_ukeire, best_variety])
@@ -4742,7 +4798,14 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 			own_strength = minf(1.0, own_strength + 0.10)
 	# 强牌不收缩；弱牌按强度反比放大防守权重，性格分化进攻型/防守型对攻边界。
 	var raw_attack := float(ai_profile_source(seat).get("attack", 1.0))
-	var strength_cut = (0.56 if multi_threat else 0.62) - clamp((raw_attack - 1.0) * 0.14, -0.06, 0.08)
+	var strength_cut: float = (0.56 if multi_threat else 0.62) - clampf((raw_attack - 1.0) * 0.14, -0.06, 0.08)
+	if risk >= AI_DANGER_RISK_HIGH:
+		if shanten == 1:
+			# 面对高危张（>=31）时，未听牌的一向听除非极厚强牌，否则必须纳入弃攻权衡。
+			strength_cut = maxf(strength_cut, 0.82)
+		elif shanten == 0 and wait_best_points > 0 and wait_best_points <= score_points_for_fan(2) and risk >= AI_DANGER_RISK_HIGH + 5.0 and (readiness >= 10.5 or threat_rank >= 2 or multi_threat):
+			# 廉价低番听牌面对高危炸弹张（>=36）与近听/副露强压时，允许评估转守。
+			strength_cut = maxf(strength_cut, 0.78)
 	if own_strength >= strength_cut:
 		return 0.0
 	var weakness = clamp(1.0 - own_strength, 0.0, 1.0)
@@ -4809,8 +4872,8 @@ func wall_draw_ba_urgency(wall_count: int = -1) -> float:
 	return clamp(1.0 - float(wall) / float(max(1, wall_low_threshold())), 0.0, 1.0)
 
 
-func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: int = 0, eval_context: Dictionary = {}) -> float:
-	# 残墙查听：听牌加分、一向听薄形追听、离听过远则不再硬推。
+func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: int = 0, eval_context: Dictionary = {}, risk: float = 0.0, safety: String = "") -> float:
+	# 残墙查听（流局攻守纪律）：安全牌保听，绝不为保小额查听罚符直切高危张点大炮；末盘离听过远果断弃攻。
 	var context_matches_seat := not eval_context.is_empty() and int(eval_context.get("seat", -1)) == seat
 	var wall := int(eval_context.get("discard_report_wall_count", -1)) if context_matches_seat else -1
 	if wall < 0:
@@ -4824,12 +4887,34 @@ func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: i
 		diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	var diff_scale = 0.72 if diff == AI_DIFFICULTY_EASY else (1.18 if diff == AI_DIFFICULTY_HARD else 1.0)
 	if shanten <= 0:
-		# 已听：保住查听收入，并略抬安全听牌。
-		return (52.0 + ba * 0.028) * urgency * diff_scale
+		# 已听：安全/中低危张保住查听收入；若需直切高危张（>=31），大幅压低保听权重，避免赔大炮保小罚。
+		var tenpai_keep: float = (52.0 + ba * 0.028) * urgency * diff_scale
+		if risk >= AI_DANGER_RISK_HIGH and diff != AI_DIFFICULTY_EASY:
+			tenpai_keep *= 0.28 if diff == AI_DIFFICULTY_HARD else 0.48
+		return tenpai_keep
 	if shanten == 1:
-		# 一向听：进张尚够时追听，避免荒庄付罚。
+		# 一向听：极残墙（<=16张）面对高危张不再硬追查听。
+		if wall <= wall_phase_threshold(16) and diff != AI_DIFFICULTY_EASY:
+			if risk >= AI_DANGER_RISK_HIGH:
+				return -38.0 * urgency * diff_scale
+			if diff == AI_DIFFICULTY_HARD and ukeire <= 4 and risk >= 22.0:
+				return 0.0
 		var chase = 28.0 + ba * 0.016 + float(clamp(ukeire, 0, 8)) * 1.8
 		return chase * urgency * diff_scale
+	if shanten >= 2 and wall <= wall_phase_threshold(14) and diff != AI_DIFFICULTY_EASY:
+		# 残墙<=14张且仍>=2向听：实质无望流局成听，果断偏向安/现/熟张并重罚危险张。
+		var late_fold: float = 0.0
+		if safety == "安":
+			late_fold += 44.0
+		elif safety == "现":
+			late_fold += 34.0
+		elif safety == "熟":
+			late_fold += 24.0
+		if risk >= 18.0:
+			late_fold -= (risk - 12.0) * 1.45
+		if shanten >= 3:
+			late_fold -= 18.0 + ba * 0.01
+		return late_fold * urgency * diff_scale
 	if shanten >= 3:
 		# 明显未听：残墙不再为虚攻牺牲安全。
 		return -(18.0 + ba * 0.01) * urgency * diff_scale
