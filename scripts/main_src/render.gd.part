@@ -16650,6 +16650,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	scrim.set_meta("backdrop_layer_count", 1)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
+	if parent == root_layer:
+		# The panel and its input stay in the safe area; only the bitmap extends
+		# into the inset so the surrounding artwork is dimmed edge to edge.
+		scrim.offset_left = -safe_area_margins.x
+		scrim.offset_top = -safe_area_margins.y
+		scrim.offset_right = safe_area_margins.z
+		scrim.offset_bottom = safe_area_margins.w
 
 	# Keep one authored panel surface behind the modal content. The scrim and
 	# primary GPT plate provide depth without a second full-page rear texture.

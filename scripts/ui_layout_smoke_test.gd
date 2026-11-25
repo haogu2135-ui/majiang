@@ -5446,7 +5446,7 @@ func check_settings_overlay(scene, viewport_size: Vector2) -> void:
 	check(scrim != null, "settings overlay exposes a named full-screen scrim at %s" % viewport_size)
 	if scrim != null:
 		var scrim_rect = screen_rect(scrim)
-		check(scrim_rect.position.distance_to(overlay_rect.position) <= 0.5 and scrim_rect.size.distance_to(overlay_rect.size) <= 1.0, "settings scrim covers the entire overlay at %s" % viewport_size)
+		check(scrim_rect.position.distance_to(Vector2.ZERO) <= 0.5 and scrim_rect.size.distance_to(viewport_size) <= 1.0, "settings scrim covers the entire viewport including the safe-area inset at %s" % viewport_size)
 		var scrim_ok := false
 		if scrim is ColorRect:
 			var sc := scrim as ColorRect

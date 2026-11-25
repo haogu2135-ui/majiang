@@ -28955,6 +28955,13 @@ func draw_settings_overlay(parent: Control) -> void:
 	scrim.set_meta("backdrop_layer_count", 1)
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(scrim)
+	if parent == root_layer:
+		# The panel and its input stay in the safe area; only the bitmap extends
+		# into the inset so the surrounding artwork is dimmed edge to edge.
+		scrim.offset_left = -safe_area_margins.x
+		scrim.offset_top = -safe_area_margins.y
+		scrim.offset_right = safe_area_margins.z
+		scrim.offset_bottom = safe_area_margins.w
 
 	# Keep one authored panel surface behind the modal content. The scrim and
 	# primary GPT plate provide depth without a second full-page rear texture.
@@ -38499,11 +38506,11 @@ func _show_shop_screen_impl() -> void:
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_text := "铜钱获取" if exchange_coins_needed > 0 else ("确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符")
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
+	footer_state.name = "ShopGetGemsButton"
 	apply_guofeng_button_face(footer_state, exchange_coins_needed == 0)
 	shop_footer.add_child(footer_state)
-	footer_state.name = "ShopGetGemsButton"
 	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
-	footer_state.tooltip_text = "%d铜钱兑换%d玉符；再次点击确认。铜钱可通过对局、签到与每日任务获得。" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
+	footer_state.tooltip_text = "%s。还差 %d 铜钱。完成对局、签到或每日任务可获得铜钱。" % [exchange_rate, exchange_coins_needed] if exchange_coins_needed > 0 else "%s。请在 5 秒内再次点击确认。" % exchange_rate
 	set_ui_full_text(footer_state, footer_state.tooltip_text, "铜钱获取方式" if exchange_coins_needed > 0 else "铜钱兑换玉符")
 	footer_state.set_meta("recovery_route", "earned_coins_exchange")
 	footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
