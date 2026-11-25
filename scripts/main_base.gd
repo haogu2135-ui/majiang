@@ -3250,8 +3250,17 @@ func sync_guofeng_button_slice(plate_id: int) -> void:
 	if plate == null:
 		return
 	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
-	if edges != null:
-		edges.size = plate.size / edges.scale
+	if edges == null or not is_finite(edges.scale.x) or not is_finite(edges.scale.y) or edges.scale.x <= 0.0001 or edges.scale.y <= 0.0001:
+		return
+	var plate_size := plate.size
+	if not is_finite(plate_size.x) or not is_finite(plate_size.y):
+		return
+	var target_size := Vector2(
+		maxf(0.0, plate_size.x) / edges.scale.x,
+		maxf(0.0, plate_size.y) / edges.scale.y
+	)
+	if is_finite(target_size.x) and is_finite(target_size.y):
+		edges.size = target_size
 
 
 func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, source_margin: int = 96, bitmap_scale: float = 0.125, slice_texture_override: Texture2D = null, keep_plate_texture: bool = false) -> void:
@@ -3264,13 +3273,16 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 	var source := slice_texture_override if slice_texture_override != null else plate.texture
 	if source == null:
 		return
+	var safe_scale := maxf(0.01, bitmap_scale if is_finite(bitmap_scale) else 0.125)
 	if edges == null:
 		edges = NinePatchRect.new()
 		edges.name = "AuthoredBitmapEdges"
 		edges.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		edges.scale = Vector2(safe_scale, safe_scale)
 		plate.add_child(edges)
 		plate.resized.connect(Callable(self, "sync_guofeng_button_slice").bind(plate.get_instance_id()))
-	edges.scale = Vector2(bitmap_scale, bitmap_scale)
+	else:
+		edges.scale = Vector2(safe_scale, safe_scale)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
 		edges.set_patch_margin(side, source_margin)
 	edges.texture = source
