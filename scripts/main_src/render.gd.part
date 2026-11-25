@@ -12889,8 +12889,9 @@ func draw_hand(parent: Control) -> void:
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
-		var hint_height := 48.0 if hand_viewport_size.y >= 650.0 else float(UI_MIN_TOUCH_TARGET)
-		var tutorial_gap_px := 22.0 if hand_viewport_size.y >= 900.0 else (20.0 if hand_viewport_size.y >= 650.0 else 10.0)
+		var has_self_melds := not get_melds(0).is_empty()
+		var hint_height := (48.0 if hand_viewport_size.y >= 650.0 and not has_self_melds else float(UI_MIN_TOUCH_TARGET))
+		var tutorial_gap_px := (22.0 if hand_viewport_size.y >= 900.0 else 20.0) if (hand_viewport_size.y >= 650.0 and not has_self_melds) else (12.0 if hand_viewport_size.y >= 650.0 else 10.0)
 		var hint_bottom := HAND_TRAY_TILES_RECT.position.y - tutorial_gap_px / maxf(1.0, hand_tray_size.y)
 		var hint_top := hint_bottom - hint_height / maxf(1.0, hand_tray_size.y)
 		var content_size := safe_content_pixel_size()
