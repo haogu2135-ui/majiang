@@ -4687,11 +4687,15 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.
 	var header_left := 0.020
-	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / safe_height)
+	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 1.0 / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
+	if header_top > 0.108:
+		var legacy_header_candidate := rect_full(header_left, 0.108, header_right, 0.108 + context_height_px / safe_height)
+		if pending_claim_context_candidate_is_clear(legacy_header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
+			return legacy_header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
 	var bottom_river = seat_discard_rect(0)
@@ -5645,10 +5649,8 @@ func update_stage_index() -> int:
 			result = 0
 		"downloading":
 			result = 1
-		"current":
+		"ready", "current":
 			result = 2
-		"ready":
-			result = 3
 		"error":
 			result = 1
 	update_stage_index_cache_key = update_state
@@ -5765,7 +5767,7 @@ func _update_progress_text_uncached() -> String:
 			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), wide_percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
-		return "100% · 已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
+		return "100%% · 已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "current":
 		return "远端版本 v%s%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "error":
@@ -10849,19 +10851,19 @@ func chat_panel_rect() -> Rect2:
 	# The drawer is selected from several authored safe lanes. A fixed choice used
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
-	var upper_left_right := 0.335
-	var left_route_right := 0.310 if effective_viewport_size().x >= 1600.0 else 0.335
-	# Keep the compact drawer clear of SeatPanel_3 (x<=0.115) and above the left-seat
-	# plaque vertically so the seat identity stays fully visible with >=12px breathing room.
-	var upper_left_bottom := 0.395
+	var upper_left_right := 0.320
+	var left_route_right := 0.295 if effective_viewport_size().x >= 1600.0 else 0.320
+	# Keep the compact drawer clear of SeatPanel_3 (x<=0.115) on the left and
+	# DiscardGrid_3 on the right so neither seat identity nor left river is covered.
+	var upper_left_bottom := 0.400
 	var candidates: Array[Rect2] = [
 		# Leave a gap below the top seat plaque; the occupancy score rejects this
 		# lane when the right meld area is active.
 		rect_full(0.620, 0.120, 0.880, 0.430),
-		rect_full(0.130, 0.110, upper_left_right, upper_left_bottom),
+		rect_full(0.125, 0.110, upper_left_right, upper_left_bottom),
 		# When the upper-left reading lane is reserved by an active meld, keep the
-		# compact controls clear of SeatPanel_3 on the left and above the hand tray.
-		rect_full(0.130, 0.460, left_route_right, 0.720),
+		# compact controls clear of SeatPanel_3 on the left and DiscardGrid_3 on the right.
+		rect_full(0.125, 0.460, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
 	# Candidate scoring runs once per authored lane. Capture all shared geometry
@@ -10893,7 +10895,7 @@ func chat_panel_rect() -> Rect2:
 			var modal_left := 0.360 if compact_modal else 0.300
 			var modal_right := 0.640 if compact_modal else 0.700
 			return rect_full(modal_left, modal_top, modal_right, maxf(modal_top + 0.240, modal_bottom))
-		return rect_full(0.130, 0.460, left_route_right, 0.720)
+		return rect_full(0.125, 0.460, left_route_right, 0.720)
 	return best
 
 func chat_panel_occupancy_snapshot(visible_meld_seats_snapshot = null) -> Dictionary:

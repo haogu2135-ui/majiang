@@ -28247,10 +28247,11 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var content_size := safe_content_pixel_size()
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
-		var context_offset_px := 62.0 if large_text_enabled else 56.0
-		var base_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / content_size.y)
-		var timer_top := base_top + context_offset_px / content_size.y
-		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
+		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
+		var context_offset_px := 59.0 if (large_text_enabled and timer_viewport.y <= 560.0) else (62.0 if large_text_enabled else 56.0)
+		var timer_top := context_rect.position.y + context_offset_px / content_size.y
+		var seat_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
+		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - seat_gap_px / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
 	var timer := make_gpt_center_crop_plate_rect(timer_rect, Color.WHITE, "menu_card_readable_gpt", 1.0)
 	timer.self_modulate = Color.WHITE
@@ -30661,6 +30662,7 @@ func draw_shop_item_row_art(row: Control, _item_color: Color, count: int, item_i
 		var shop_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 		if shop_frame_tex != null:
 			configure_guofeng_button_slice(paper, true, 104, 0.22, shop_frame_tex, true)
+			paper.self_modulate = Color.WHITE
 		row.move_child(paper, 0)
 	var charm_key := shop_charm_gpt_key(item_id)
 	var display_card := bool(row.get_meta("shop_display_card", false))
@@ -32435,8 +32437,7 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	# bitmap replaces the old layers that covered the microphone action label.
 	if button is Button:
 		var voice_button := button as Button
-		var mic_tex := optional_gpt_illustration_texture("icon_mic_ink_gpt")
-		voice_button.icon = mic_tex if mic_tex != null else optional_gpt_illustration_texture("voice_gpt_channel")
+		voice_button.icon = optional_gpt_illustration_texture("voice_gpt_channel")
 		voice_button.expand_icon = true
 		voice_button.add_theme_constant_override("icon_max_width", 18)
 		voice_button.add_theme_constant_override("h_separation", 8)
@@ -43859,6 +43860,7 @@ func _show_replay_import_screen_impl() -> void:
 	if search_clear_proxy != null:
 		style_flat_clear_proxy(search_clear_proxy)
 	configure_button_focus_navigation(panel, "ReplayImportCodeInput")
+	clear_button.focus_mode = Control.FOCUS_ALL
 	call_deferred("focus_named_control", "ReplayImportCodeInput")
 	render_replay_archive_list()
 	call_deferred("sync_replay_archive_range_status", archive_scroll)
@@ -43984,6 +43986,7 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 	var clear_code_button := root_layer.find_child("ReplayImportClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if clear_code_button != null:
 		clear_code_button.disabled = code == ""
+		clear_code_button.focus_mode = Control.FOCUS_ALL
 		sync_guofeng_button_face_state(clear_code_button)
 	var copy_code_button := root_layer.find_child("ReplayImportCopyCodeButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if copy_code_button != null:
@@ -52355,11 +52358,15 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.
 	var header_left := 0.020
-	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / safe_height)
+	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 1.0 / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
+	if header_top > 0.108:
+		var legacy_header_candidate := rect_full(header_left, 0.108, header_right, 0.108 + context_height_px / safe_height)
+		if pending_claim_context_candidate_is_clear(legacy_header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
+			return legacy_header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
 	var bottom_river = seat_discard_rect(0)
@@ -53313,10 +53320,8 @@ func update_stage_index() -> int:
 			result = 0
 		"downloading":
 			result = 1
-		"current":
+		"ready", "current":
 			result = 2
-		"ready":
-			result = 3
 		"error":
 			result = 1
 	update_stage_index_cache_key = update_state
@@ -53433,7 +53438,7 @@ func _update_progress_text_uncached() -> String:
 			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), wide_percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
-		return "100% · 已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
+		return "100%% · 已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "current":
 		return "远端版本 v%s%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "error":
@@ -58517,19 +58522,19 @@ func chat_panel_rect() -> Rect2:
 	# The drawer is selected from several authored safe lanes. A fixed choice used
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
-	var upper_left_right := 0.335
-	var left_route_right := 0.310 if effective_viewport_size().x >= 1600.0 else 0.335
-	# Keep the compact drawer clear of SeatPanel_3 (x<=0.115) and above the left-seat
-	# plaque vertically so the seat identity stays fully visible with >=12px breathing room.
-	var upper_left_bottom := 0.395
+	var upper_left_right := 0.320
+	var left_route_right := 0.295 if effective_viewport_size().x >= 1600.0 else 0.320
+	# Keep the compact drawer clear of SeatPanel_3 (x<=0.115) on the left and
+	# DiscardGrid_3 on the right so neither seat identity nor left river is covered.
+	var upper_left_bottom := 0.400
 	var candidates: Array[Rect2] = [
 		# Leave a gap below the top seat plaque; the occupancy score rejects this
 		# lane when the right meld area is active.
 		rect_full(0.620, 0.120, 0.880, 0.430),
-		rect_full(0.130, 0.110, upper_left_right, upper_left_bottom),
+		rect_full(0.125, 0.110, upper_left_right, upper_left_bottom),
 		# When the upper-left reading lane is reserved by an active meld, keep the
-		# compact controls clear of SeatPanel_3 on the left and above the hand tray.
-		rect_full(0.130, 0.460, left_route_right, 0.720),
+		# compact controls clear of SeatPanel_3 on the left and DiscardGrid_3 on the right.
+		rect_full(0.125, 0.460, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
 	# Candidate scoring runs once per authored lane. Capture all shared geometry
@@ -58561,7 +58566,7 @@ func chat_panel_rect() -> Rect2:
 			var modal_left := 0.360 if compact_modal else 0.300
 			var modal_right := 0.640 if compact_modal else 0.700
 			return rect_full(modal_left, modal_top, modal_right, maxf(modal_top + 0.240, modal_bottom))
-		return rect_full(0.130, 0.460, left_route_right, 0.720)
+		return rect_full(0.125, 0.460, left_route_right, 0.720)
 	return best
 
 func chat_panel_occupancy_snapshot(visible_meld_seats_snapshot = null) -> Dictionary:

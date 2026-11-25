@@ -7405,6 +7405,7 @@ func _show_replay_import_screen_impl() -> void:
 	if search_clear_proxy != null:
 		style_flat_clear_proxy(search_clear_proxy)
 	configure_button_focus_navigation(panel, "ReplayImportCodeInput")
+	clear_button.focus_mode = Control.FOCUS_ALL
 	call_deferred("focus_named_control", "ReplayImportCodeInput")
 	render_replay_archive_list()
 	call_deferred("sync_replay_archive_range_status", archive_scroll)
@@ -7530,6 +7531,7 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 	var clear_code_button := root_layer.find_child("ReplayImportClearButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if clear_code_button != null:
 		clear_code_button.disabled = code == ""
+		clear_code_button.focus_mode = Control.FOCUS_ALL
 		sync_guofeng_button_face_state(clear_code_button)
 	var copy_code_button := root_layer.find_child("ReplayImportCopyCodeButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if copy_code_button != null:

@@ -15244,10 +15244,11 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var content_size := safe_content_pixel_size()
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
-		var context_offset_px := 62.0 if large_text_enabled else 56.0
-		var base_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / content_size.y)
-		var timer_top := base_top + context_offset_px / content_size.y
-		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
+		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
+		var context_offset_px := 59.0 if (large_text_enabled and timer_viewport.y <= 560.0) else (62.0 if large_text_enabled else 56.0)
+		var timer_top := context_rect.position.y + context_offset_px / content_size.y
+		var seat_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
+		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - seat_gap_px / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
 	var timer := make_gpt_center_crop_plate_rect(timer_rect, Color.WHITE, "menu_card_readable_gpt", 1.0)
 	timer.self_modulate = Color.WHITE
@@ -17658,6 +17659,7 @@ func draw_shop_item_row_art(row: Control, _item_color: Color, count: int, item_i
 		var shop_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 		if shop_frame_tex != null:
 			configure_guofeng_button_slice(paper, true, 104, 0.22, shop_frame_tex, true)
+			paper.self_modulate = Color.WHITE
 		row.move_child(paper, 0)
 	var charm_key := shop_charm_gpt_key(item_id)
 	var display_card := bool(row.get_meta("shop_display_card", false))
@@ -19432,8 +19434,7 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	# bitmap replaces the old layers that covered the microphone action label.
 	if button is Button:
 		var voice_button := button as Button
-		var mic_tex := optional_gpt_illustration_texture("icon_mic_ink_gpt")
-		voice_button.icon = mic_tex if mic_tex != null else optional_gpt_illustration_texture("voice_gpt_channel")
+		voice_button.icon = optional_gpt_illustration_texture("voice_gpt_channel")
 		voice_button.expand_icon = true
 		voice_button.add_theme_constant_override("icon_max_width", 18)
 		voice_button.add_theme_constant_override("h_separation", 8)

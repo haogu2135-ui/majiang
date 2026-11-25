@@ -6058,6 +6058,9 @@ func load_assets() -> void:
 	var celadon_tile_back := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
 	if celadon_tile_back != null:
 		tile_back = celadon_tile_back
+	var mic_ink_icon := optional_gpt_illustration_texture("icon_mic_ink_gpt")
+	if mic_ink_icon != null:
+		optional_gpt_illustration_textures["voice_gpt_channel"] = mic_ink_icon
 
 	# 着色器材质加载
 	if not bool(get_meta("assets_visuals_loaded", false)):
