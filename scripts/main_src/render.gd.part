@@ -14615,13 +14615,21 @@ func draw_online_feedback_art(parent: Control) -> Control:
 	var feedback_left := 0.525 if feedback_viewport.x >= 1600.0 else 0.505
 	var feedback_right := 0.885 if feedback_viewport.x >= 1600.0 else 0.965
 	var recovery_feedback := online_feedback_requires_recovery()
+	var compact_large := feedback_viewport.y <= 560.0 and large_text_enabled
 	# Keep the footer after the native log scroll while retaining a small lower
 	# breathing room inside the room-state panel.
-	var feedback_rect := rect_full(0.05, 0.72 if recovery_feedback else 0.90, 0.95, 0.99) if parent.name == "OnlineLobbyLogPanel" else rect_full(feedback_left, 0.72 if recovery_feedback else 0.80, feedback_right, 0.87)
+	var feedback_top := 0.72 if recovery_feedback else (0.90 if compact_large else 0.944)
+	var feedback_bottom := 0.99 if (recovery_feedback or compact_large) else 0.998
+	var feedback_rect := rect_full(0.05, feedback_top, 0.95, feedback_bottom) if parent.name == "OnlineLobbyLogPanel" else rect_full(feedback_left, 0.72 if recovery_feedback else 0.80, feedback_right, 0.87)
 	if parent.name == "OnlineLobbyLogPanel" and use_jiangnan_secondary_composition(feedback_viewport) and recovery_feedback:
 		# The larger seats and the log retain their own reading space. The room
 		# footer has room for the complete cause and recovery step below them.
 		feedback_rect = rect_full(0.05, 0.90, 0.95, 1.025)
+	if parent.name == "OnlineLobbyLogPanel":
+		var log_list_node := parent.get_node_or_null("OnlineLobbyLogListPanel") as Control
+		if log_list_node != null:
+			var max_log_bottom := 0.895 if (compact_large or recovery_feedback) else 0.938
+			log_list_node.anchor_bottom = minf(log_list_node.anchor_bottom, max_log_bottom)
 	var art = make_layout_host(feedback_rect)
 	art.name = "OnlineFeedbackArt"
 	parent.add_child(art)
@@ -14742,7 +14750,7 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 
 func online_lobby_slot_state_icon(entry: Dictionary, slot: int) -> String:
 	if entry.is_empty():
-		return "user"
+		return "wind"
 	if first_present(entry, ["connected", "online", "isConnected"], true) == false:
 		return "alert-triangle"
 	if bool(entry.get("bot", false)):
@@ -14837,7 +14845,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 			var roster_plate := add_optional_gpt_illustration_texture(row, roster_plate_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 			if roster_plate != null:
 				roster_plate.name = "OnlineLobbyRosterRowPlate_%d" % i
-				roster_plate.self_modulate = Color(0.99, 0.97, 0.92) if active else Color(0.92, 0.89, 0.83)
+				roster_plate.self_modulate = Color(0.99, 0.97, 0.92, 1.0) if active else Color(0.91, 0.88, 0.82, 0.74)
 				configure_guofeng_button_slice(roster_plate, true, 104 if roster_plate_key == "guofeng_card_frame_gpt" else 96, 0.22 if roster_plate_key == "guofeng_card_frame_gpt" else 0.125)
 		row.name = "OnlineLobbyRosterRow_%d" % i
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -14864,7 +14872,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		name.set_meta("full_name_route", "OnlineLobbyRosterTouchTarget_%d" % i)
 		set_ui_full_text(name, online_lobby_slot_name(entry), "第%d席完整昵称" % (i + 1))
 		mark_ui_optimization(name, "F-072")
-		var state_icon_tint := Color(0.14, 0.44, 0.26, 0.96) if active and bool(entry.get("ready", false)) else (Color(0.24, 0.36, 0.30, 0.90) if active else Color(0.40, 0.44, 0.40, 0.76))
+		var state_icon_tint := Color(0.14, 0.44, 0.26, 0.96) if active and bool(entry.get("ready", false)) else (Color(0.20, 0.34, 0.28, 0.92) if active else Color(0.46, 0.50, 0.47, 0.52))
 		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.525, 0.205, 0.585, 0.795), state_icon_tint)
 		if state_icon != null:
 			state_icon.name = "OnlineLobbyRosterStateIcon_%d" % i
@@ -14914,7 +14922,10 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	# r214: bulk GPT chrome sweep
 	var reading_layout := online_lobby_roster_reading_layout(parent.size)
-	var list = make_layout_host(rect_full(0.050, float(reading_layout["log_top"]) / parent.size.y, 0.950, 0.895))
+	var compact_large := bool(reading_layout["compact_large"])
+	var has_feedback := online_feedback.strip_edges() != "" or online_waiting_for_server
+	var log_bottom := 0.895 if (compact_large or online_feedback_requires_recovery()) else (0.938 if has_feedback else 0.970)
+	var list = make_layout_host(rect_full(0.050, float(reading_layout["log_top"]) / parent.size.y, 0.950, log_bottom))
 	list.name = "OnlineLobbyLogListPanel"
 	mark_ui_optimization(list, "F-2919")
 	parent.add_child(list)
@@ -14929,7 +14940,7 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	var latest_button = make_small_button("最新" if log_unread <= 0 else "最新 · %d" % log_unread, Color(0.34, 0.42, 0.34), Callable(self, "scroll_online_log_to_end"))
 	latest_button.name = "OnlineLobbyLogLatestButton"
 	latest_button.custom_minimum_size = Vector2(76, UI_MIN_TOUCH_TARGET)
-	latest_button.add_theme_font_size_override("font_size", accessibility_font_size(10))
+	latest_button.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	set_ui_full_text(latest_button, "跳到最新房间日志", "房间日志：跳到最新")
 	latest_button.set_meta("ui_button_role", "log_latest")
 	latest_button.set_meta("unread_count", log_unread)
@@ -14979,7 +14990,7 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	mark_ui_optimization(range_label, "F-902")
 	var count_value := online_lobby_retained_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var total_count := online_lobby_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
-	var count_badge = make_guofeng_secondary_badge(list, rect_full(0.760, 0.030, 0.985, 0.175), "%d/%d\n未读%d" % [count_value, total_count, log_unread], 12, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
+	var count_badge = make_guofeng_secondary_badge(list, rect_full(0.755, 0.030, 0.965, 0.175), "%d/%d\n未读%d" % [count_value, total_count, log_unread], 12, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
 	count_badge.name = "OnlineLobbyLogCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(count_badge, "房间日志共%d条" % count_value, "房间日志总数")
@@ -17532,8 +17543,8 @@ func add_shop_focus_marker(button: Button, owner: Control, icon: Control, marker
 	var is_back := str(button.get_meta("ui_navigation_role", "")) == "page_back" or button.name == "ShopBackButton"
 	var glyph := "•"
 	var ink_face := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
-	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.82, 0.24, 0.18)
-	var marker := make_label(owner, glyph, 20, marker_color, false)
+	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.14, 0.34, 0.26, 0.88)
+	var marker := make_label(owner, glyph, 16 if is_back else 18, marker_color, false)
 	marker.name = "ShopFocusMarker"
 	marker.z_index = 7
 	marker.add_theme_color_override("font_color", marker_color)
@@ -20060,7 +20071,7 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 				return
 			callback.call()
 	var button = make_base_button(text, guarded_callback)
-	var role = action_button_visual_role(text)
+	var role: String = str(action_button_visual_role(text))
 	var shortcut_hint := action_button_shortcut_hint(text)
 	if role == "chi" and not claim_choice.is_empty():
 		var pending := pending_claim_display_model()
@@ -20074,14 +20085,14 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 	button.set_meta("action_shortcut", shortcut_hint)
 	if role == "danger_confirm":
 		button.set_meta("ui_danger_action", true)
-	var is_cinnabar_role := role in ["win", "danger_confirm"]
-	var has_cinnabar := is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
+	var is_cinnabar_role: bool = role in ["win", "danger_confirm"]
+	var has_cinnabar: bool = is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
 	var ink_face: bool = role in ["gang", "peng", "safe", "next"]
-	var has_active_ink := ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
+	var has_active_ink: bool = ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
 	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))
-	var use_raw_pending_face := role in ["chi", "peng", "gang", "win", "pass"]
+	var use_raw_pending_face: bool = role in ["chi", "peng", "gang", "win", "pass"]
 	var action_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if action_face != null:
 		var face_source := optional_gpt_illustration_texture(face_key)
