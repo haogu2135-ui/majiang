@@ -137,6 +137,11 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"menu_nav_daily_login_jiangnan_gpt": "res://assets/illustrations/menu_nav_daily_login_jiangnan_20261025.tres",
 	"menu_nav_replay_jiangnan_gpt": "res://assets/illustrations/menu_nav_replay_jiangnan_20261025.tres",
 	"button_face_jiangnan_gpt": "res://assets/illustrations/menu_nav_button_face_jiangnan_20261025.tres",
+	"button_face_danger_cinnabar_gpt": "res://assets/illustrations/button_face_danger_cinnabar_gpt.png",
+	"button_face_jiangnan_active_gpt": "res://assets/illustrations/button_face_jiangnan_active_gpt.png",
+	"guofeng_card_frame_gpt": "res://assets/illustrations/guofeng_card_frame_gpt.png",
+	"input_field_paper_normal_gpt": "res://assets/illustrations/input_field_paper_normal_gpt.png",
+	"input_field_paper_focus_gpt": "res://assets/illustrations/input_field_paper_focus_gpt.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -548,7 +553,7 @@ const ONLINE_RECONNECT_MAX_DELAY_MSEC := 12000
 const ONLINE_VOICE_SILENCE_THRESHOLD := 0.018
 const ONLINE_LOG_OVERLAP_WINDOW := 16
 const ITEM_TYPES := {
-	"swap_card": {"name": "换牌卡", "desc": "单机替换本拍摸牌，换出牌放回牌墙", "icon": "🔄", "cost_gems": 5},
+	"swap_card": {"name": "换牌卡", "desc": "单机替换本回合摸牌，换出牌放回牌墙", "icon": "🔄", "cost_gems": 5},
 	"peek_card": {"name": "偷看卡", "desc": "单机查看下家一张手牌", "icon": "👁", "cost_gems": 8},
 	"lucky_charm": {"name": "幸运符", "desc": "单机祈福签，不改变摸牌与胜率", "icon": "🍀", "cost_gems": 10},
 	"double_coins": {"name": "双倍铜钱卡", "desc": "下次结算自动消耗，铜钱奖励翻倍", "icon": "💰", "cost_gems": 15},
@@ -1496,9 +1501,9 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
-	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
 	Rect2(Vector2(0.43, 0.805), Vector2(0.57, 1.000)),
+	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
+	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
 ]
 const CENTER_DICE_DOT_POINTS := [
@@ -3018,51 +3023,66 @@ func find_ui_contract_control(root: Control, node_name: String) -> Control:
 		root.set_meta("ui_contract_name_index", name_index)
 	return found
 
+func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical: bool, inset: float, is_grabber: bool) -> StyleBox:
+	if texture == null:
+		var fallback := StyleBoxEmpty.new()
+		if is_vertical:
+			fallback.content_margin_left = 4.0
+			fallback.content_margin_right = 4.0
+			if is_grabber:
+				fallback.content_margin_top = 16.0
+				fallback.content_margin_bottom = 16.0
+		else:
+			fallback.content_margin_top = 4.0
+			fallback.content_margin_bottom = 4.0
+			if is_grabber:
+				fallback.content_margin_left = 16.0
+				fallback.content_margin_right = 16.0
+		return fallback
+	var box := StyleBoxTexture.new()
+	box.texture = texture
+	box.modulate_color = tint
+	box.texture_margin_left = 2.0
+	box.texture_margin_right = 2.0
+	box.texture_margin_top = 2.0
+	box.texture_margin_bottom = 2.0
+	if is_vertical:
+		box.expand_margin_left = -inset
+		box.expand_margin_right = -inset
+		box.content_margin_left = 4.0
+		box.content_margin_right = 4.0
+		box.content_margin_top = 16.0 if is_grabber else 0.0
+		box.content_margin_bottom = 16.0 if is_grabber else 0.0
+	else:
+		box.expand_margin_top = -inset
+		box.expand_margin_bottom = -inset
+		box.content_margin_top = 4.0
+		box.content_margin_bottom = 4.0
+		box.content_margin_left = 16.0 if is_grabber else 0.0
+		box.content_margin_right = 16.0 if is_grabber else 0.0
+	return box
+
+
 func style_guofeng_scrollbar(scroll_bar: ScrollBar) -> void:
 	if scroll_bar == null or not is_instance_valid(scroll_bar):
 		return
 	var is_vertical := scroll_bar is VScrollBar
 	var width := maxf(scroll_bar.custom_minimum_size.x if is_vertical else scroll_bar.custom_minimum_size.y, 44.0 if scroll_bar.has_meta("ui_min_touch_target") else 0.0)
-	var inset := maxf(0.0, (width - 10.0) * 0.5)
-	var track_inset := maxf(0.0, (width - 4.0) * 0.5)
-	var grabber_style := StyleBoxFlat.new()
-	grabber_style.bg_color = Color(0.24, 0.36, 0.30, 0.65)
-	grabber_style.set_corner_radius_all(3)
-	if is_vertical:
-		grabber_style.expand_margin_left = -inset
-		grabber_style.expand_margin_right = -inset
-		grabber_style.content_margin_top = 16
-		grabber_style.content_margin_bottom = 16
-	else:
-		grabber_style.expand_margin_top = -inset
-		grabber_style.expand_margin_bottom = -inset
-		grabber_style.content_margin_left = 16
-		grabber_style.content_margin_right = 16
+	var effective_width := maxf(width, 8.0)
+	var inset := maxf(0.0, (effective_width - 10.0) * 0.5)
+	var track_inset := maxf(0.0, (effective_width - 6.0) * 0.5)
+	var track_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+	var grabber_tex := optional_gpt_illustration_texture("menu_ink_primary")
+	var grabber_active_tex := optional_gpt_illustration_texture("table_gpt_backdrop_bright")
+	if grabber_active_tex == null:
+		grabber_active_tex = grabber_tex
+	var grabber_style := _make_guofeng_scrollbar_style(grabber_tex, Color(1.0, 1.0, 1.0, 0.72), is_vertical, inset, true)
+	var grabber_hl := _make_guofeng_scrollbar_style(grabber_active_tex, Color(1.0, 1.0, 1.0, 0.90), is_vertical, inset, true)
+	var grabber_pressed := _make_guofeng_scrollbar_style(grabber_active_tex, Color(0.92, 0.96, 0.90, 0.98), is_vertical, inset, true)
+	var track_style := _make_guofeng_scrollbar_style(track_tex, Color(1.0, 1.0, 1.0, 0.22), is_vertical, track_inset, false)
 	scroll_bar.add_theme_stylebox_override("grabber", grabber_style)
-	var grabber_hl := StyleBoxFlat.new()
-	grabber_hl.bg_color = Color(0.18, 0.44, 0.34, 0.85)
-	grabber_hl.set_corner_radius_all(3)
-	if is_vertical:
-		grabber_hl.expand_margin_left = -inset
-		grabber_hl.expand_margin_right = -inset
-		grabber_hl.content_margin_top = 16
-		grabber_hl.content_margin_bottom = 16
-	else:
-		grabber_hl.expand_margin_top = -inset
-		grabber_hl.expand_margin_bottom = -inset
-		grabber_hl.content_margin_left = 16
-		grabber_hl.content_margin_right = 16
 	scroll_bar.add_theme_stylebox_override("grabber_highlight", grabber_hl)
-	scroll_bar.add_theme_stylebox_override("grabber_pressed", grabber_hl)
-	var track_style := StyleBoxFlat.new()
-	track_style.bg_color = Color(0.85, 0.82, 0.74, 0.20)
-	track_style.set_corner_radius_all(2)
-	if is_vertical:
-		track_style.expand_margin_left = -track_inset
-		track_style.expand_margin_right = -track_inset
-	else:
-		track_style.expand_margin_top = -track_inset
-		track_style.expand_margin_bottom = -track_inset
+	scroll_bar.add_theme_stylebox_override("grabber_pressed", grabber_pressed)
 	scroll_bar.add_theme_stylebox_override("scroll", track_style)
 	scroll_bar.add_theme_stylebox_override("scroll_focus", track_style)
 
@@ -3216,13 +3236,14 @@ func sync_guofeng_button_slice(plate_id: int) -> void:
 		edges.size = plate.size / edges.scale
 
 
-func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, source_margin: int = 96, bitmap_scale: float = 0.125) -> void:
+func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, source_margin: int = 96, bitmap_scale: float = 0.125, slice_texture_override: Texture2D = null, keep_plate_texture: bool = false) -> void:
 	var edges := plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 	if not preserve_edges:
 		if edges != null:
 			edges.visible = false
+		plate.self_modulate = Color.WHITE
 		return
-	var source := plate.texture
+	var source := slice_texture_override if slice_texture_override != null else plate.texture
 	if source == null:
 		return
 	if edges == null:
@@ -3239,22 +3260,73 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 	edges.visible = true
 	# The existing atlas supplies every pixel. Uniform scaling keeps its frame
 	# near 1px; native nine-slice stretches only the quiet center and straight edges.
-	plate.texture = null
+	if keep_plate_texture:
+		plate.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+	else:
+		plate.texture = null
+		plate.self_modulate = Color.WHITE
 	sync_guofeng_button_slice(plate.get_instance_id())
+
+
+func _guofeng_chamfer_slice_params(texture: Texture2D, target_corner_px: float = 12.0) -> Dictionary:
+	var source_dim := minf(texture.get_size().x, texture.get_size().y) if texture != null else 490.0
+	var margin := clampi(int(round(source_dim * 0.195)), 24, 240)
+	var scale := clampf(target_corner_px / maxf(1.0, float(margin)), 0.05, 0.50)
+	return {"margin": margin, "scale": scale}
+
+
+func sync_guofeng_button_face_state(button: Button) -> void:
+	if button == null or not is_instance_valid(button):
+		return
+	var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	if face == null:
+		return
+	var action_role := str(button.get_meta("action_role", ""))
+	if action_role in ["chi", "peng", "gang", "win", "pass", "safe", "advice", "voice", "menu", "next", "replay", "refresh", "action"]:
+		face.modulate = Color.WHITE
+		return
+	var base_modulate: Color = button.get_meta("guofeng_button_base_modulate", Color.WHITE)
+	var ink_face := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
+	if button.disabled:
+		var disabled_alpha := 0.90 if high_contrast_enabled else (0.76 if ink_face else 0.74)
+		face.modulate = Color(
+			base_modulate.r * (0.88 if ink_face else 0.93),
+			base_modulate.g * (0.90 if ink_face else 0.92),
+			base_modulate.b * (0.88 if ink_face else 0.89),
+			disabled_alpha
+		)
+	else:
+		face.modulate = base_modulate
+
+
+func mark_guofeng_danger_button(button: Button, filled_cinnabar: bool = false) -> void:
+	if button == null or not is_instance_valid(button):
+		return
+	button.set_meta("ui_danger_action", true)
+	apply_guofeng_button_face(button, filled_cinnabar)
 
 
 func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
-	var text_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
-	var is_raw_ink_contract := button != null and (button.name.begins_with("SettingRowButton_") or button.name == "OnlineLobbyConnectButton" or button.text == "重置" or button.text == "确认清空")
 	var action_role := str(button.get_meta("action_role", "")) if button != null else ""
-	var is_pending_claim_role := action_role in ["chi", "peng", "gang", "win", "pass"]
-	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and not is_pending_claim_role
-	var use_paper_nine_slice := not ink_face and button != null and button.name != "OnlineLobbyConnectButton" and action_role == "" and (
-		button.name.begins_with("SettingRowButton_")
-		or button.name.begins_with("SettingsSectionNavButton_")
-		or button.name in ["SettingsCloseButton", "SettingsRuleVariantButton", "AchievementsNextTargetButton", "OnlineLobbyConnectionHelpButton", "OnlineLobbyPrimaryStartButton", "OnlineLobbySecondaryReturnButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyEndpointCopyButton", "ChatLobbyButton", "ShopGetGemsButton", "StatsRuleFilterButton", "StatsCopyButton", "StatsLatestRoundButton", "StatsBackButton", "RulesBackButton", "AchievementsBackButton", "DailyLoginBackButton"]
-	)
+	var is_danger_action := button != null and (action_role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false)))
+	var is_battle_action_role := action_role in ["chi", "peng", "gang", "win", "pass", "safe", "advice", "voice", "menu", "next", "replay", "refresh", "action"]
+	var is_lobby_connect := button != null and button.name == "OnlineLobbyConnectButton"
+	var is_menu_quick := button != null and button.name.begins_with("MenuQuick")
+	var is_raw_ink_contract := button != null and (button.name.begins_with("SettingRowButton_") or button.text == "重置" or button.text == "确认清空")
+	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and not is_battle_action_role
+	var use_paper_nine_slice := not ink_face and button != null and not is_battle_action_role and not is_menu_quick
+	var danger_cinnabar_tex := optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") if is_danger_action else null
+	var filled_danger_visual := is_danger_action and (ink_face or danger_cinnabar_tex != null)
+	var text_color := Color(0.99, 0.94, 0.84) if filled_danger_visual else (Color(0.60, 0.14, 0.11) if is_danger_action else (Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)))
+	var hover_text_color := Color(1.0, 0.97, 0.90) if filled_danger_visual else (Color(0.48, 0.10, 0.08) if is_danger_action else text_color)
+	var disabled_text_color := Color(0.80, 0.79, 0.69) if (ink_face or filled_danger_visual) else (Color(0.55, 0.34, 0.31) if is_danger_action else Color(0.36, 0.41, 0.37))
+	var base_face_modulate := Color.WHITE
+	if is_danger_action and danger_cinnabar_tex == null:
+		base_face_modulate = Color(0.68, 0.21, 0.18, 1.0) if ink_face else Color(1.0, 0.91, 0.88, 1.0)
+	var active_ink_tex := optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") if use_framed_ink_slice else null
+	var plaque_texture := active_ink_tex if active_ink_tex != null else (optional_gpt_illustration_texture("battle_ink_plaque_20261112") if use_framed_ink_slice else null)
+	var plaque_slice := _guofeng_chamfer_slice_params(active_ink_tex) if active_ink_tex != null else {"margin": 32, "scale": 0.25}
 	var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if face == null:
 		face = add_optional_gpt_illustration_texture(button, face_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
@@ -3263,42 +3335,68 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 			face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			face.show_behind_parent = true
 	if face != null:
-		var plaque_texture := optional_gpt_illustration_texture("battle_ink_plaque_20261112") if use_framed_ink_slice else null
-		if plaque_texture != null:
-			face.texture = plaque_texture
-			configure_guofeng_button_slice(face, true, 32, 0.25)
+		var raw_texture := optional_gpt_illustration_texture(face_key)
+		if is_danger_action:
+			if danger_cinnabar_tex != null:
+				var danger_slice := _guofeng_chamfer_slice_params(danger_cinnabar_tex)
+				face.texture = raw_texture if is_lobby_connect else danger_cinnabar_tex
+				configure_guofeng_button_slice(face, true, int(danger_slice["margin"]), float(danger_slice["scale"]), danger_cinnabar_tex, is_lobby_connect)
+			else:
+				var paper_source := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+				face.texture = raw_texture if is_lobby_connect else paper_source
+				configure_guofeng_button_slice(face, paper_source != null, 96, 0.125, paper_source, is_lobby_connect)
+		elif plaque_texture != null:
+			face.texture = raw_texture if is_lobby_connect else plaque_texture
+			configure_guofeng_button_slice(face, true, int(plaque_slice["margin"]), float(plaque_slice["scale"]), plaque_texture, is_lobby_connect)
 		else:
-			var raw_texture := optional_gpt_illustration_texture(face_key)
 			if raw_texture != null:
-				if not ink_face or is_raw_ink_contract:
+				if not ink_face or is_raw_ink_contract or is_lobby_connect:
 					face.texture = raw_texture
 				else:
 					face.texture = gpt_center_crop_texture(raw_texture, face_key, 0.65)
 			else:
 				face.texture = null
-			configure_guofeng_button_slice(face, use_paper_nine_slice)
-		face.modulate = Color.WHITE
-		face.self_modulate = Color.WHITE
+			configure_guofeng_button_slice(face, use_paper_nine_slice, 96, 0.125, raw_texture, is_lobby_connect and use_paper_nine_slice)
+		face.modulate = base_face_modulate
+		if not is_lobby_connect:
+			face.self_modulate = Color.WHITE
+	button.set_meta("guofeng_button_base_modulate", base_face_modulate)
 	button.set_meta("guofeng_button_font_color", text_color)
 	button.set_meta("guofeng_button_face_key", face_key)
+	sync_guofeng_button_face_state(button)
 	var empty_style := StyleBoxEmpty.new()
+	if button != null and button.alignment == HORIZONTAL_ALIGNMENT_LEFT:
+		empty_style.content_margin_left = 14.0
+		empty_style.content_margin_right = 12.0
 	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		button.add_theme_stylebox_override(state, empty_style)
-	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
-		button.add_theme_color_override(state, text_color)
+	button.add_theme_color_override("font_color", text_color)
+	button.add_theme_color_override("font_focus_color", text_color)
+	button.add_theme_color_override("font_hover_color", hover_text_color)
+	button.add_theme_color_override("font_pressed_color", hover_text_color)
+	button.add_theme_color_override("font_hover_pressed_color", hover_text_color)
+	button.add_theme_color_override("font_disabled_color", disabled_text_color)
 	button.add_theme_constant_override("outline_size", 0)
 	button.add_theme_constant_override("shadow_offset_x", 0)
 	button.add_theme_constant_override("shadow_offset_y", 0)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if focus_plate != null:
-		var focus_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112") if use_framed_ink_slice else null
-		if focus_plaque != null:
-			focus_plate.texture = focus_plaque
-			configure_guofeng_button_slice(focus_plate, true, 32, 0.25)
+		if is_danger_action:
+			if danger_cinnabar_tex != null:
+				var danger_focus_slice := _guofeng_chamfer_slice_params(danger_cinnabar_tex)
+				focus_plate.texture = danger_cinnabar_tex
+				configure_guofeng_button_slice(focus_plate, true, int(danger_focus_slice["margin"]), float(danger_focus_slice["scale"]))
+			else:
+				var danger_paper := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+				focus_plate.texture = danger_paper
+				configure_guofeng_button_slice(focus_plate, danger_paper != null, 96, 0.125)
+		elif plaque_texture != null:
+			focus_plate.texture = plaque_texture
+			configure_guofeng_button_slice(focus_plate, true, int(plaque_slice["margin"]), float(plaque_slice["scale"]))
 		else:
 			var raw_focus := optional_gpt_illustration_texture(face_key)
 			if raw_focus != null:
-				if not ink_face or is_raw_ink_contract:
+				if not ink_face or is_raw_ink_contract or is_lobby_connect:
 					focus_plate.texture = raw_focus
 				else:
 					focus_plate.texture = gpt_center_crop_texture(raw_focus, face_key, 0.65)
@@ -3867,17 +3965,22 @@ func button_style_set(color: Color, radius: int, border_width: int = 2, shadow_s
 	return cached_set
 
 func input_style_set() -> Dictionary:
-	# r180: transparent StyleBoxFlat hosts (no extra content margins that inflate LineEdit min size).
-	# GPT ui_online_form_field paints the field face.
+	# r180: transparent StyleBoxFlat hosts with horizontal text breathing room
+	# (0 vertical margins so LineEdit min height stays untouched).
 	if input_style_set_cache.is_empty():
 		clear_cache_lru(input_style_set_lru)
 	var key = "default"
 	if input_style_set_cache.has(key):
 		touch_cache_key(input_style_set_lru, key)
 		return input_style_set_cache[key]
-	var normal = style(Color(0.120, 0.134, 0.112, 0.0), 10, Color(0.62, 0.54, 0.34, 0.0), 0, 0)
-	var focus = style(Color(0.145, 0.160, 0.130, 0.0), 10, Color(0.82, 0.68, 0.34, 0.0), 0, 0)
-	var read_only = style(Color(0.092, 0.104, 0.090, 0.0), 10, Color(0.40, 0.36, 0.24, 0.0), 0, 0)
+	var normal := style(Color(0.120, 0.134, 0.112, 0.0), 10, Color(0.62, 0.54, 0.34, 0.0), 0, 0).duplicate() as StyleBoxFlat
+	var focus := style(Color(0.145, 0.160, 0.130, 0.0), 10, Color(0.82, 0.68, 0.34, 0.0), 0, 0).duplicate() as StyleBoxFlat
+	var read_only := style(Color(0.092, 0.104, 0.090, 0.0), 10, Color(0.40, 0.36, 0.24, 0.0), 0, 0).duplicate() as StyleBoxFlat
+	for box in [normal, focus, read_only]:
+		box.content_margin_left = 10.0
+		box.content_margin_right = 10.0
+		box.content_margin_top = 0.0
+		box.content_margin_bottom = 0.0
 	var cached_set = {
 		"normal": normal,
 		"focus": focus,

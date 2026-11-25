@@ -4722,6 +4722,9 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	last_win_score["package_payer"] = package_payer if has_package_payment else -1
 	last_win_score["package_payment"] = has_package_payment
 	last_win_score["result_kind"] = "win"
+	last_win_score["winner_hand"] = players[winner].get("hand", []).duplicate()
+	last_win_score["winner_melds"] = players[winner].get("melds", []).duplicate(true)
+	last_win_score["winner_flowers"] = int(players[winner].get("flowers", 0))
 	record_round_event("win", {"winner": winner, "from_seat": from_seat, "tile": normalize_tile_code(win_tile), "self_draw": self_draw, "fan": int(score_data.get("fan", 0)), "points": points, "deltas": last_score_deltas.duplicate()})
 
 	add_log(round_summary)
@@ -5197,7 +5200,7 @@ func discard_safety_short_text(report: Dictionary) -> String:
 	var safety = str(report.get("safety_label", ""))
 	if safety != "":
 		return safety
-	return str(report.get("risk_label", "中"))
+	return "风险%s" % str(report.get("risk_label", "中"))
 
 func human_claim_hint_text() -> String:
 	if mode != "offline" or offline_phase != "pending_claim":

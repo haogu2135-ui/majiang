@@ -1293,15 +1293,7 @@ func add_gems(amount: int) -> void:
 
 
 func test_audio_setting() -> void:
-	music_enabled = true
-	sfx_enabled = true
-	tts_enabled = true
-	save_settings()
-	refresh_settings_local_row("背景音乐")
-	refresh_settings_local_row("音效反馈")
-	refresh_settings_local_row("语音报牌")
-
-	# 强制同步初始化
+	# Preserve user's mute toggles and saved settings; only run a diagnostic sound probe.
 	ensure_master_audio_bus()
 	warm_speech_backend()
 
@@ -1315,9 +1307,10 @@ func test_audio_setting() -> void:
 	if music_enabled:
 		start_background_music()
 
-	# 播放测试音效
+	# 播放测试音效（仅在音效开启时，不擅自改写用户静音设置）
 	await get_tree().create_timer(0.3).timeout
-	play_sfx("discard", -1.0)
+	if sfx_enabled:
+		play_sfx("discard", -1.0)
 	await get_tree().create_timer(0.7).timeout
 
 	# 收集诊断信息
@@ -3666,7 +3659,7 @@ func advisor_detail_text() -> String:
 func advisor_progress_text(report: Dictionary) -> String:
 	if bool(report.get("wait_discard_furiten", false)):
 		return "%s · 振听仅自摸" % shanten_label(int(report.get("shanten", 8)))
-	return "%s · 进%d/%d" % [
+	return "%s · 进张%d(%d种)" % [
 		shanten_label(int(report.get("shanten", 8))),
 		int(report.get("ukeire", 0)),
 		int(report.get("variety", 0)),
@@ -4591,12 +4584,18 @@ func advisor_panel_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, conten
 	# center console, rivers, seat plaques, and hand tray.
 	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size_for_margins(resolved_viewport, safe_area_margins)
-	var summary_height := (88.0 if large_text_enabled else 72.0) / resolved_content_size.y
+	var summary_height := (86.0 if large_text_enabled else 68.0) / resolved_content_size.y
+	# Size the compact card to its real content budget instead of stretching to a
+	# fixed 33.5% viewport fraction that leaves blank paper and crowds the river.
+	var target_width_px := clampf(356.0 if large_text_enabled else 318.0, 284.0, resolved_content_size.x * 0.335)
+	var card_width_norm := target_width_px / maxf(1.0, resolved_content_size.x)
+	var left_right := 0.015 + card_width_norm
+	var right_left := 0.985 - card_width_norm
 	var candidates: Array[Rect2] = [
-		rect_full(0.015, 0.535, 0.350, 0.535 + summary_height),
-		rect_full(0.650, 0.535, 0.985, 0.535 + summary_height),
-		rect_full(0.015, 0.115, 0.350, 0.115 + summary_height),
-		rect_full(0.650, 0.115, 0.985, 0.115 + summary_height),
+		rect_full(0.015, 0.535, left_right, 0.535 + summary_height),
+		rect_full(right_left, 0.535, 0.985, 0.535 + summary_height),
+		rect_full(0.015, 0.115, left_right, 0.115 + summary_height),
+		rect_full(right_left, 0.115, 0.985, 0.115 + summary_height),
 	]
 	var occupancy_snapshot := advisor_panel_occupancy_snapshot(resolved_viewport, resolved_content_size)
 	for candidate in candidates:
@@ -4607,7 +4606,7 @@ func advisor_panel_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, conten
 	var fallback_top := 0.510 + 6.0 / resolved_content_size.y
 	var fallback_bottom := minf(0.745 - 6.0 / resolved_content_size.y, fallback_top + summary_height)
 	var live_occupancy := advisor_panel_occupancy_snapshot(resolved_viewport, resolved_content_size, true)
-	var fallback_right := 0.350
+	var fallback_right := left_right
 	for occupied in live_occupancy:
 		if occupied.end.y > fallback_top and occupied.position.y < fallback_bottom and occupied.position.x > 0.015:
 			fallback_right = minf(fallback_right, occupied.position.x - 0.004 - 6.0 / resolved_content_size.x)
@@ -6172,27 +6171,36 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 				add_visible_tile_counts(scoring_counts, meld)
 	var fan = 1
 	var reasons: Array[String] = ["平胡"]
+	var reason_items: Array[Dictionary] = [{"name": "平胡", "fan": 1}]
 	if self_draw:
 		fan += 1
 		reasons.append("自摸")
+		reason_items.append({"name": "自摸", "fan": 1})
 	if self_draw and is_last_draw_context(seat, "gang"):
 		fan += 2
 		reasons.append("杠上开花")
+		reason_items.append({"name": "杠上开花", "fan": 2})
 	if self_draw and bool(offline_last_draw.get("wall_empty", false)) and int(offline_last_draw.get("seat", -1)) == seat:
 		fan += 1
 		reasons.append("海底捞月")
+		reason_items.append({"name": "海底捞月", "fan": 1})
 	if (not assume_complete or preserve_context_bonuses) and not self_draw and win_context == "" and is_last_discard_context():
 		fan += 1
 		reasons.append("河底捞鱼")
+		reason_items.append({"name": "河底捞鱼", "fan": 1})
 	if win_context == "rob_gang":
 		fan += 1
 		reasons.append("抢杠胡")
+		reason_items.append({"name": "抢杠胡", "fan": 1})
 	if seat == dealer_seat:
 		fan += 1
 		reasons.append("庄家")
+		reason_items.append({"name": "庄家", "fan": 1})
 	if int(players[seat]["flowers"]) > 0:
-		fan += int(players[seat]["flowers"])
+		var flower_fan := int(players[seat]["flowers"])
+		fan += flower_fan
 		reasons.append("花牌")
+		reason_items.append({"name": "花牌", "fan": flower_fan})
 	var scoring_meld_state := scoring_meld_state_for_seat(seat)
 	if not scoring_melds_snapshot.is_empty():
 		scoring_meld_state = {"value": 0, "gang_count": 0}
@@ -6204,53 +6212,68 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 	if int(scoring_meld_state.get("value", 0)) == 0:
 		fan += 1
 		reasons.append("门清")
+		reason_items.append({"name": "门清", "fan": 1})
 	var special_hand_profile := scoring_special_hand_profile_from_counts(hand_counts, canonical_tile_count) if melds.size() == 0 else {}
 	if bool(special_hand_profile.get("seven_pairs", false)):
 		fan += 3
 		reasons.append("七对")
+		reason_items.append({"name": "七对", "fan": 3})
 	if bool(special_hand_profile.get("thirteen_orphans", false)):
 		fan += 7
 		reasons.append("十三幺")
+		reason_items.append({"name": "十三幺", "fan": 7})
 	var scoring_profile := scoring_tile_profile_from_counts(scoring_counts)
 	if bool(scoring_profile.get("all_honor", false)):
 		fan += 5
 		reasons.append("字一色")
+		reason_items.append({"name": "字一色", "fan": 5})
 	elif bool(scoring_profile.get("pure_one_suit", false)):
 		fan += 3
 		reasons.append("清一色")
+		reason_items.append({"name": "清一色", "fan": 3})
 	elif bool(scoring_profile.get("mixed_one_suit", false)):
 		fan += 2
 		reasons.append("混一色")
+		reason_items.append({"name": "混一色", "fan": 2})
 	var dragon_stats := honor_group_stats_from_counts(scoring_counts, DRAGON_CODES)
 	if int(dragon_stats.get("triplets", 0)) == DRAGON_CODES.size():
 		fan += 6
 		reasons.append("大三元")
+		reason_items.append({"name": "大三元", "fan": 6})
 	elif int(dragon_stats.get("triplets", 0)) == DRAGON_CODES.size() - 1 and int(dragon_stats.get("pairs", 0)) >= 1:
 		fan += 4
 		reasons.append("小三元")
+		reason_items.append({"name": "小三元", "fan": 4})
 	var wind_stats := honor_group_stats_from_counts(scoring_counts, WIND_CODES)
 	if int(wind_stats.get("triplets", 0)) == WIND_CODES.size():
 		fan += 7
 		reasons.append("大四喜")
+		reason_items.append({"name": "大四喜", "fan": 7})
 	elif int(wind_stats.get("triplets", 0)) == WIND_CODES.size() - 1 and int(wind_stats.get("pairs", 0)) >= 1:
 		fan += 5
 		reasons.append("小四喜")
+		reason_items.append({"name": "小四喜", "fan": 5})
 	if bool(scoring_profile.get("all_simples", false)):
 		fan += 1
 		reasons.append("断幺九")
+		reason_items.append({"name": "断幺九", "fan": 1})
 	if full_straight_suit_from_counts(seat, hand_counts, scoring_melds_snapshot) >= 0:
 		fan += 2
 		reasons.append("一条龙")
+		reason_items.append({"name": "一条龙", "fan": 2})
 	if is_all_triplet_from_counts(seat, hand_counts, canonical_tile_count, scoring_melds_snapshot):
 		fan += 2
 		reasons.append("碰碰胡")
+		reason_items.append({"name": "碰碰胡", "fan": 2})
 	if melds.size() >= 4:
 		fan += 2
 		reasons.append("大吊车")
+		reason_items.append({"name": "大吊车", "fan": 2})
 	var gang_count := int(scoring_meld_state.get("gang_count", 0))
 	if gang_count > 0:
 		fan += gang_count
 		reasons.append("杠")
+		reason_items.append({"name": "杠", "fan": gang_count})
 	var points = score_points_for_fan(fan)
 	return {
 		"fan": fan,
@@ -6258,6 +6281,7 @@ func calculate_win_score_from_tiles(seat: int, test_hand: Array, self_draw: bool
 		"limit_name": "封顶" if fan >= rule_score_limit_fan() else "",
 		"points": points,
 		"reasons": reasons,
+		"reason_items": reason_items,
 	}
 
 
@@ -9068,6 +9092,8 @@ func tile_risk_color(risk: String) -> Color:
 func action_button_visual_role(text: String) -> String:
 	if text.contains("过") or text.contains("取消"):
 		return "pass"
+	if text.begins_with("确认打"):
+		return "danger_confirm"
 	if text.contains("胡") or text.contains("自摸"):
 		return "win"
 	if text.contains("杠"):
@@ -10188,7 +10214,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var line_gap := 6.0 if wide_typography else 5.0
 	var body_size := commercial_ui_font_size(15 if section_viewport.x <= 960.0 else 17, 2)
 	var line_font_size := accessibility_font_size(body_size)
-	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
+	var use_goal_tile_column := section_index == 0 and section_viewport.x >= 1200.0 and not large_text_enabled
+	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * (0.56 if use_goal_tile_column else 0.90))
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
 	var required_text_height := (30.0 if wide_typography else 28.0) + float(group_titles.size()) * (36.0 + line_gap)
@@ -10201,7 +10228,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045
-	vbox.anchor_right = 0.976
+	vbox.anchor_right = 0.625 if use_goal_tile_column else 0.976
 	vbox.anchor_bottom = 0.965
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
@@ -10237,9 +10264,57 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		mark_ui_optimization(line_label, "F-473")
 		mark_ui_optimization(line_label, "F-531")
 
+	if use_goal_tile_column:
+		add_rules_goal_hand_showcase(section)
+
 	if section_index == 3:
 		add_rules_tile_examples(vbox)
 		section.custom_minimum_size.y += 4.0 * (48.0 + line_gap)
+
+
+func add_rules_goal_hand_showcase(section: Control) -> void:
+	# Pure 2D assets/tiles diagram of a standard 4-meld + 1-pair winning hand.
+	# Uses distinct node names from Chapter 4's RulePatternExampleGroup_* smoke contract.
+	var card := make_layout_host(rect_full(0.648, 0.085, 0.978, 0.880))
+	card.name = "RuleGoalHandShowcase"
+	section.add_child(card)
+	var card_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var card_plate := add_optional_gpt_illustration_texture(card, card_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if card_plate != null:
+		card_plate.name = "RuleGoalHandShowcasePlate"
+		card_plate.self_modulate = Color(0.99, 0.97, 0.92)
+		configure_guofeng_button_slice(card_plate, true, 64 if card_key == "guofeng_card_frame_gpt" else 96, 0.125)
+	var showcase_box := VBoxContainer.new()
+	showcase_box.name = "RuleGoalHandShowcaseBox"
+	configure_passive_container(showcase_box)
+	apply_rect(showcase_box, rect_full(0.06, 0.07, 0.94, 0.93))
+	showcase_box.add_theme_constant_override("separation", 8)
+	card.add_child(showcase_box)
+	var heading := make_label(showcase_box, "胡牌牌型示意 · 四面子一将", 15, Color.WHITE, true)
+	heading.name = "RuleGoalHandShowcaseTitle"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	heading.add_theme_font_override("font", ui_heading_font())
+	style_guofeng_label(heading)
+	for group in [
+		{"key": "meld1", "caption": "顺子", "tiles": ["1W", "2W", "3W"]},
+		{"key": "meld2", "caption": "顺子", "tiles": ["4T", "5T", "6T"]},
+		{"key": "meld3", "caption": "刻子", "tiles": ["7B", "7B", "7B"]},
+		{"key": "meld4", "caption": "刻子", "tiles": ["E", "E", "E"]},
+		{"key": "pair", "caption": "将牌", "tiles": ["Z", "Z"]},
+	]:
+		var row := HBoxContainer.new()
+		row.name = "RuleGoalHandGroup_" + str(group["key"])
+		configure_passive_container(row)
+		row.add_theme_constant_override("separation", 4)
+		showcase_box.add_child(row)
+		var cap := make_label(row, str(group["caption"]), 13, Color.WHITE, false)
+		cap.custom_minimum_size = Vector2(44, 40)
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		style_guofeng_label(cap)
+		for t_idx in range((group["tiles"] as Array).size()):
+			var tile := make_tile_view(str((group["tiles"] as Array)[t_idx]), Vector2(28, 40), false, Callable(), false)
+			tile.name = "RuleGoalHandTile_%s_%d" % [str(group["key"]), t_idx]
+			row.add_child(tile)
 
 
 func add_rules_tile_examples(parent: VBoxContainer) -> void:
@@ -10285,19 +10360,19 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	row.set_meta("metric_label_contract", "short_title_visible_full_title_in_detail")
 	mark_ui_optimization(row, "F-606")
 	parent.add_child(row)
-	var stats_row_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
-	stats_row_plate.name = "StatsRowGptPlate"
-	stats_row_plate.self_modulate = Color(0.92, 0.88, 0.78)
-	row.add_child(stats_row_plate)
-	var value_left := 0.500
-	var value_right := 0.950
+	var plate_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var stats_row_plate := add_optional_gpt_illustration_texture(row, plate_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if stats_row_plate != null:
+		stats_row_plate.name = "StatsRowGptPlate"
+		stats_row_plate.self_modulate = Color(0.99, 0.97, 0.92)
+		configure_guofeng_button_slice(stats_row_plate, true, 64 if plate_key == "guofeng_card_frame_gpt" else 96, 0.125)
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
 	var label = make_label(row, stat_row_short_label(label_text), label_font_size, Color(0.96, 0.92, 0.80), true)  # r392
 	style_guofeng_label(label)
 	label.name = "StatsRowLabel_%s" % label_text
-	apply_rect(label, rect_full(0.080, 0.120, 0.480, 0.880))
+	apply_rect(label, rect_full(0.045, 0.120, 0.275, 0.880))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.set_meta("stats_column", "label")
 	configure_clipped_label(label)
@@ -10308,6 +10383,28 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	mark_ui_optimization(label, "F-086")
 
 	var numeric_value := stat_row_numeric_value(value_text)
+	var metric_fraction := clampf(stat_row_metric_fraction(label_text, value_text), 0.0, 1.0)
+	if is_zero_approx(numeric_value):
+		metric_fraction = 0.0
+	elif numeric_value < 0.0:
+		metric_fraction = clampf(absf(numeric_value) / 30000.0, 0.08, 1.0)
+	var meter_rail := add_optional_gpt_illustration_texture(row, "battle_ink_plaque_20261112", rect_full(0.295, 0.5, 0.675, 0.5), 0.18, false)
+	if meter_rail != null:
+		meter_rail.name = "StatsRowMetricRail_%s" % label_text
+		meter_rail.offset_top = -5.0
+		meter_rail.offset_bottom = 5.0
+		configure_guofeng_button_slice(meter_rail, true, 32, 0.125)
+		if metric_fraction > 0.001:
+			var fill_key := "quiet_gold_accent" if (numeric_value < 0.0 or label_text == "单局最佳") else "table_gpt_backdrop_bright"
+			var meter_fill := add_optional_gpt_illustration_texture(meter_rail, fill_key, rect_full(0.0, 0.0, metric_fraction, 1.0), 0.92, false)
+			if meter_fill != null:
+				meter_fill.name = "StatsRowMetricFill_%s" % label_text
+				if numeric_value < 0.0:
+					meter_fill.self_modulate = Color(0.76, 0.28, 0.22, 0.88)
+				elif label_text == "单局最佳":
+					meter_fill.self_modulate = Color(0.92, 0.74, 0.34, 0.94)
+				else:
+					meter_fill.self_modulate = Color(0.88, 0.96, 0.92, 0.92)
 	# The signed value already communicates direction. Keep the semantic detail in
 	# the accessible description instead of spending scarce value-column width.
 	var display_value_text := value_text
@@ -10316,7 +10413,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	if numeric_value < 0.0:
 		value.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	value.name = "StatsRowValueLabel_%s" % label_text
-	apply_rect(value, rect_full(value_left + 0.030, 0.120, value_right - 0.030, 0.880))
+	apply_rect(value, rect_full(0.695, 0.120, 0.955, 0.880))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.set_meta("stats_column", "value")
 	var value_detail := "负向 · 损失：%s" % value_text if numeric_value < 0.0 else ("零值：%s" % value_text if is_zero_approx(numeric_value) else value_text)
@@ -10502,8 +10599,22 @@ func achievement_progress_text(key: String) -> String:
 	return "进度 %d/1" % (1 if unlocked else 0)
 
 
+func achievement_progress_ratio(key: String) -> float:
+	if bool(achievements.get(key, false)):
+		return 1.0
+	if key == "five_wins":
+		return clampf(float(clampi(int(game_stats.get("games_won", 0)), 0, 5)) / 5.0, 0.0, 1.0)
+	if key == "ten_wins":
+		return clampf(float(clampi(int(game_stats.get("games_won", 0)), 0, 10)) / 10.0, 0.0, 1.0)
+	return 0.0
+
+
 func achievement_state_text(key: String) -> String:
-	return "已达成" if bool(achievements.get(key, false)) else "进行中"
+	if bool(achievements.get(key, false)):
+		return "已达成"
+	if achievement_progress_ratio(key) > 0.0:
+		return "进行中"
+	return "待达成"
 
 # ============================================================
 # 商店系统
