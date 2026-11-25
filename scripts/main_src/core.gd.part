@@ -4383,12 +4383,16 @@ func pending_claim_action_bar_rect_for_count(count: int, viewport_snapshot: Vect
 	var dock_rect = pending_claim_action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
 	var base_rect = pending_claim_action_base_rect()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var content_width := maxf(1.0, resolved_content_size.x)
 	var content_height := maxf(1.0, resolved_content_size.y)
+	var side_inset := 8.0 / content_width
 	var top_inset := 8.0 / content_height
 	var bottom_inset := 14.0 / content_height
+	var left_x := maxf(base_rect.position.x, dock_rect.position.x + side_inset)
+	var right_x := minf(base_rect.size.x, dock_rect.size.x - side_inset)
 	return Rect2(
-		Vector2(base_rect.position.x, dock_rect.position.y + top_inset),
-		Vector2(dock_rect.size.x, dock_rect.size.y - bottom_inset)
+		Vector2(left_x, dock_rect.position.y + top_inset),
+		Vector2(maxf(left_x + 0.05, right_x), dock_rect.size.y - bottom_inset)
 	)
 
 func battle_table_anchor_root_rect(table_rect: Rect2, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
@@ -4648,9 +4652,9 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	# Keep every viewport in the same upper-left reading lane. It sits below the
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.
-	var header_left := 0.015
+	var header_left := 0.020
 	var header_top := 0.108
-	var header_right := 0.280
+	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
@@ -5192,10 +5196,12 @@ func action_button_separation_for_count(count: int, viewport_snapshot: Vector2 =
 	if mode == "offline" and has_pending_danger_discard():
 		return 3
 	if has_pending_claim_window():
-		# Keep a small, stable gap; FlowContainer wraps claim choices when the row
-		# cannot fit full-size touch targets.
+		# Keep a crisp, readable gap between claim buttons while preserving the
+		# 5-column compact capacity required when many chi/peng/gang options appear.
 		var viewport_size := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
-		return 1 if viewport_size.y <= 560.0 else 3
+		if viewport_size.y <= 560.0:
+			return 1 if pending_claim_response_count(count) >= 5 else 4
+		return 5
 	if count <= 5:
 		return 4
 	if count <= 8:
@@ -10283,7 +10289,7 @@ func add_rules_goal_hand_showcase(section: Control) -> void:
 	if card_plate != null:
 		card_plate.name = "RuleGoalHandShowcasePlate"
 		card_plate.self_modulate = Color(0.99, 0.97, 0.92)
-		configure_guofeng_button_slice(card_plate, true, 64 if card_key == "guofeng_card_frame_gpt" else 96, 0.125)
+		configure_guofeng_button_slice(card_plate, true, 104 if card_key == "guofeng_card_frame_gpt" else 96, 0.22 if card_key == "guofeng_card_frame_gpt" else 0.125)
 	var showcase_box := VBoxContainer.new()
 	showcase_box.name = "RuleGoalHandShowcaseBox"
 	configure_passive_container(showcase_box)
@@ -10365,7 +10371,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 	if stats_row_plate != null:
 		stats_row_plate.name = "StatsRowGptPlate"
 		stats_row_plate.self_modulate = Color(0.99, 0.97, 0.92)
-		configure_guofeng_button_slice(stats_row_plate, true, 64 if plate_key == "guofeng_card_frame_gpt" else 96, 0.125)
+		configure_guofeng_button_slice(stats_row_plate, true, 104 if plate_key == "guofeng_card_frame_gpt" else 96, 0.22 if plate_key == "guofeng_card_frame_gpt" else 0.125)
 	var compact_row := row_height < 48.0
 	var label_font_size := 16 if compact_row else 18
 	var value_font_size := 17 if value_text.length() > 8 else (19 if compact_row else 21)
