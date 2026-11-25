@@ -4693,7 +4693,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	offline_last_winner = winner
 	offline_dealer_repeat = winner == dealer_seat
 	var limit_text = " %s" % str(score_data.get("limit_name", "")) if str(score_data.get("limit_name", "")) != "" else ""
-	round_summary = "%s%s%s，%d番%s %d分。%s" % [
+	round_summary = "%s%s%s，%d番%s，基础分%d分。%s" % [
 		players[winner]["name"],
 		"自摸" if self_draw else "胡",
 		tile_label(win_tile) if win_tile != "" else "",

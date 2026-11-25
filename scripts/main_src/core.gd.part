@@ -10098,9 +10098,8 @@ func ended_top_hud_status_text() -> String:
 			winner_name = "玩家"
 		var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
 		var fan := int(last_win_score.get("fan", 0))
-		var points := int(last_win_score.get("points", 0))
-		if fan > 0 or points > 0:
-			return "%s · %s%s %d番 %d分" % [settlement_label, winner_name, action_text, fan, points]
+		if fan > 0:
+			return "%s · %s%s %d番" % [settlement_label, winner_name, action_text, fan]
 		return "%s · %s%s" % [settlement_label, winner_name, action_text]
 	return settlement_label
 

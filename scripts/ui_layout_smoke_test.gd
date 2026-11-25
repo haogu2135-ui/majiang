@@ -5004,7 +5004,7 @@ func check_round_summary_layout(scene, viewport_size: Vector2) -> void:
 	if panel != null and input_shield != null:
 		check(panel.z_index > input_shield.z_index, "round summary panel remains above the background scrim at %s" % viewport_size)
 	if top_status != null:
-		check(top_status.text == "本局结算 · 你自摸 8番 16分" and not top_status.text.contains("..."), "round summary top HUD uses a complete short settlement status at %s" % viewport_size)
+		check(top_status.text == "本局结算 · 你自摸 8番" and not top_status.text.contains("..."), "round summary top HUD uses a complete short settlement status at %s" % viewport_size)
 	var saved_summary_score: Dictionary = scene.last_win_score.duplicate(true)
 	var saved_summary_hand_number: int = int(scene.offline_hand_number)
 	scene.last_win_score = {"wall_draw": true}

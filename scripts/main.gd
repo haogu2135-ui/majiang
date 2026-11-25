@@ -11322,7 +11322,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	offline_last_winner = winner
 	offline_dealer_repeat = winner == dealer_seat
 	var limit_text = " %s" % str(score_data.get("limit_name", "")) if str(score_data.get("limit_name", "")) != "" else ""
-	round_summary = "%s%s%s，%d番%s %d分。%s" % [
+	round_summary = "%s%s%s，%d番%s，基础分%d分。%s" % [
 		players[winner]["name"],
 		"自摸" if self_draw else "胡",
 		tile_label(win_tile) if win_tile != "" else "",
@@ -35927,7 +35927,6 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	# sibling so its 44px target never expands the form's VBox height.
 	var row = Control.new()
 	configure_passive_container(row)
-	row.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET + 16.0)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(row)
 	var caption = Label.new()
@@ -35971,7 +35970,6 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	mark_ui_optimization(edit, "F-392")
 	if value.strip_edges() == "":
 		edit.placeholder_text = "请输入%s" % label_text
-	apply_rect(edit, rect_full(0.0, 0.290, 1.0, 1.0))
 	var input_art := add_optional_gpt_illustration_texture(edit, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if input_art != null:
 		input_art.name = "LobbyFieldPaperFace"
@@ -35993,6 +35991,13 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 		play_line_edit_input_feedback(edit, art_id, true)
 		refresh_online_lobby_action_states()
 	)
+	# Contain the full native input in the VBox row so the feedback gap
+	# starts after the last field, including its minimum touch height.
+	var caption_height := ceilf(maxf(caption.get_combined_minimum_size().y, editing.get_combined_minimum_size().y))
+	var edit_height := ceilf(edit.get_combined_minimum_size().y)
+	row.custom_minimum_size.y = caption_height + 2.0 + edit_height
+	apply_rect(edit, rect_full(0.0, 1.0, 1.0, 1.0))
+	edit.offset_top = -edit_height
 	row.add_child(edit)
 	var clear_proxy := add_line_edit_clear_proxy(row, edit, "LobbyFieldClearButton_%s" % label_text, Callable(self, "refresh_online_lobby_action_states"))
 	if clear_proxy != null:
@@ -36247,7 +36252,7 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	var lane_gap := 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
 	var form_top := form.position.y
-	var form_height := minf(form.size.y, maxf(form.get_combined_minimum_size().y, 120.0))
+	var form_height := maxf(form.get_combined_minimum_size().y, 120.0)
 	form.anchor_top = 0.0
 	form.anchor_bottom = 0.0
 	form.offset_top = form_top
@@ -36751,9 +36756,9 @@ func online_connection_state_tint(state: String) -> Color:
 func online_lobby_start_gate(connection_state_override: String = "") -> Dictionary:
 	var connection_state := connection_state_override if connection_state_override != "" else lobby_connection_state_text()
 	if connection_state == "异常":
-		return {"enabled": false, "text": "连接后开始", "reason": "连接异常 · 点击“连接”重试"}
+		return {"enabled": false, "text": "待连接", "reason": "连接异常 · 点击“连接”重试"}
 	if connection_state != "已连接":
-		return {"enabled": false, "text": "连接后开始", "reason": "下一步 · 先连接服务器"}
+		return {"enabled": false, "text": "待连接", "reason": "下一步 · 先连接服务器"}
 	if online_waiting_for_server:
 		return {"enabled": false, "text": "同步中", "reason": "已提交请求，等待服务器确认"}
 	var explicit_permission = first_present(online_room, ["canStart", "can_start", "startAllowed"], null)
@@ -37467,7 +37472,7 @@ func _show_rules_screen_impl() -> void:
 
 	# 本地规则合同：文案必须与计分和结算实现同步，不将其表述为外部认证的地方规则。
 	var current_profile := rule_profile()
-	var chi_text := "允许吃牌（仅限下家弃牌）" if rule_allows_chi() else "不允许吃牌，仅可碰、杠、胡"
+	var chi_text := "允许吃牌（仅限上家弃牌）" if rule_allows_chi() else "不允许吃牌，仅可碰、杠、胡"
 	var flower_text := "含8张花牌，补花后计番" if bool(current_profile.get("include_flowers", true)) else "不含花牌"
 	var wall_rule_text := "牌墙：%d张 · %s · %s" % [rule_wall_size(), flower_text, chi_text]
 	if rules_viewport_size.x <= 960.0:
@@ -37480,7 +37485,7 @@ func _show_rules_screen_impl() -> void:
 		"4组面子 + 1对将牌即可胡牌",
 		"摸牌、打牌、碰杠来组合手牌；" + ("吃牌" if rule_allows_chi() else "本档案禁吃"),
 		"可自摸，也可点炮胡牌",
-		"响应优先：胡 > 碰/杠 > 吃；碰杠吃同级近家先",
+		"响应优先：胡 > 碰/杠%s，碰杠同级近家先" % (" > 吃" if rule_allows_chi() else ""),
 		"点炮多人可胡时保留玩家窗口，最终单家结算",
 		"过水：放弃和牌后，整组听口摸前不可再荣和",
 		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
@@ -40359,6 +40364,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var claim_top := 0.700
 	var claim_bottom := 0.800
 	var forecast_top := 0.865
+	var forecast_bottom := 0.980 if large_checkin_layout else 0.960
 	var reward_panel = make_layout_host(rect_full(0.14, reward_top, 0.86, reward_bottom))
 	reward_panel.name = "DailyLoginRewardPanel"
 	reward_panel.set_meta("layout_contract", "reward_progress_action_lanes_do_not_overlap")
@@ -40555,7 +40561,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
-	var forecast_panel = make_gpt_center_crop_plate_rect(rect_full(0.06, forecast_top, 0.94, 0.960), Color.WHITE, "menu_card_readable_gpt", 0.65)
+	var forecast_panel = make_gpt_center_crop_plate_rect(rect_full(0.06, forecast_top, 0.94, forecast_bottom), Color.WHITE, "menu_card_readable_gpt", 0.65)
 	forecast_panel.self_modulate = Color(0.93, 0.89, 0.80)
 	forecast_panel.name = "DailyLoginForecastPanel"
 	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
@@ -40567,22 +40573,31 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var forecast_title = make_label(forecast_panel, "七日奖励预告", 14, Color(0.96, 0.88, 0.58, 0.92), true)
 	forecast_title.name = "DailyLoginForecastTitle"
 	forecast_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(forecast_title, rect_full(0.035, 0.100, 0.620, 0.480))
+	apply_rect(forecast_title, rect_full(0.035, 0.0, 0.620, 0.0))
 	configure_clipped_label(forecast_title)
 	var forecast_badge = make_label(forecast_panel, forecast_badge_text, 14, Color(0.96, 0.92, 0.72, 0.92), true)
 	forecast_badge.name = "DailyLoginForecastBadge"
 	forecast_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	apply_rect(forecast_badge, rect_full(0.650, 0.100, 0.965, 0.480))
+	apply_rect(forecast_badge, rect_full(0.650, 0.0, 0.965, 0.0))
 	configure_clipped_label(forecast_badge)
 	set_ui_full_text(forecast_badge, forecast_badge_text, "七日奖励预告状态")
 	var forecast_body = make_label(forecast_panel, forecast_body_text, 14, Color(0.84, 0.88, 0.78, 0.90), true)
 	forecast_body.name = "DailyLoginForecastBody"
-	apply_rect(forecast_body, rect_full(0.035, 0.520, 0.965, 0.920))
+	apply_rect(forecast_body, rect_full(0.035, 0.0, 0.965, 0.0))
 	forecast_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(forecast_body)
 	set_ui_full_text(forecast_body, forecast_body_text, "七日奖励预告详情")
 	forecast_body.set_meta("forecast_state", "claimed" if claimed_today else ("claimable" if progress >= 7 else "in_progress"))
 	forecast_body.set_meta("days_to_bonus", days_to_bonus)
+	var forecast_header_height := ceilf(maxf(forecast_title.get_minimum_size().y, forecast_badge.get_minimum_size().y))
+	var forecast_body_height := ceilf(forecast_body.get_minimum_size().y)
+	var forecast_line_gap := 2.0
+	var forecast_inset := maxf(0.0, floorf((forecast_panel.size.y - forecast_header_height - forecast_line_gap - forecast_body_height) * 0.5))
+	for header in [forecast_title, forecast_badge]:
+		header.offset_top = forecast_inset
+		header.offset_bottom = forecast_inset + forecast_header_height
+	forecast_body.offset_top = forecast_inset + forecast_header_height + forecast_line_gap
+	forecast_body.offset_bottom = forecast_body.offset_top + forecast_body_height
 	mark_ui_optimization(forecast_body, "F-611")
 	style_guofeng_reading_tree(panel)
 	configure_button_focus_navigation(panel, "DailyLoginClaimButton")
@@ -55804,9 +55819,8 @@ func ended_top_hud_status_text() -> String:
 			winner_name = "玩家"
 		var action_text := "自摸" if bool(last_win_score.get("self_draw", false)) else "胡"
 		var fan := int(last_win_score.get("fan", 0))
-		var points := int(last_win_score.get("points", 0))
-		if fan > 0 or points > 0:
-			return "%s · %s%s %d番 %d分" % [settlement_label, winner_name, action_text, fan, points]
+		if fan > 0:
+			return "%s · %s%s %d番" % [settlement_label, winner_name, action_text, fan]
 		return "%s · %s%s" % [settlement_label, winner_name, action_text]
 	return settlement_label
 

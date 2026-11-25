@@ -35,6 +35,11 @@ func check_rules_reading(scene: Node, output_dir: String) -> void:
 	var back := scene.find_child("RulesBackButton", true, false) as Button
 	check(back != null and back.get_global_rect().end.y + 6.0 <= status.get_global_rect().position.y + 0.5, "rules reading position clears the complete native return button by six pixels")
 	check(status.get_global_rect().end.y + 1.0 <= scroll.get_global_rect().position.y, "rules reading position stays above the body viewport")
+	if scene.rule_allows_chi():
+		var wall_rule := scene.find_child("RuleSectionLine_0_1", true, false) as Label
+		var priority_rule := scene.find_child("RuleSectionLine_0_5", true, false) as Label
+		check(wall_rule != null and wall_rule.text.contains("仅限上家弃牌"), "the rules say which neighbor supplies a legal chi")
+		check(priority_rule != null and priority_rule.text.contains("胡 > 碰/杠 > 吃") and priority_rule.text.contains("碰杠同级"), "the rules explain the actual claim precedence")
 	var source := scene.optional_gpt_illustration_texture("menu_ink_primary") as Texture2D
 	check(thumb.texture is AtlasTexture and (thumb.texture as AtlasTexture).atlas == source, "rules thumb uses the authored signal artwork rather than the quiet dark scrim")
 	check(hit_target.size.x >= 44.0 and hit_target.get_global_rect().position.x >= scroll.get_global_rect().end.x, "scrollbar retains its independent forty-four-pixel hit lane outside the last text column")
@@ -150,7 +155,9 @@ func check_compact_lobby_feedback(scene: Node, output_dir: String) -> void:
 	check(feedback.get_theme_font_size("font_size") >= scene.accessibility_font_size(12), "full unready room respects the accessible feedback size")
 	var form_panel := scene.find_child("OnlineLobbyFormPanel", true, false) as Control
 	var start_row := scene.find_child("OnlineLobbyStartButtonRow", true, false) as Control
-	check(feedback.size.y + 0.01 >= feedback.get_minimum_size().y and scene.online_room_edit.get_global_rect().end.y + 8.0 <= feedback.get_global_rect().position.y + 0.01, "feedback has a complete font-height row below the room input")
+	var room_bottom: float = scene.online_room_edit.get_global_rect().end.y
+	var feedback_gap := feedback.get_global_rect().position.y - room_bottom
+	check(feedback.size.y + 0.01 >= feedback.get_minimum_size().y and feedback_gap >= 7.99, "feedback has a complete row and eight-pixel gap below the room input (height %.2f, minimum %.2f, gap %.2f)" % [feedback.size.y, feedback.get_minimum_size().y, feedback_gap])
 	check(start_row != null and button_row.get_global_rect().end.y + 8.0 <= start_row.get_global_rect().position.y + 0.01, "lobby action rows retain separate eight-pixel gaps")
 	check(form_panel != null and start_row != null and form_panel.get_global_rect().encloses(start_row.get_global_rect()), "lobby keeps both bottom actions inside the form panel")
 	var log_title := scene.find_child("OnlineLobbyLogListTitle", true, false) as Label

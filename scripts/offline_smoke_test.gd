@@ -2329,7 +2329,7 @@ func run() -> void:
 	var online_lobby_start_button = scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Button
 	check(online_lobby_status_label != null and scene.find_child("OnlineLobbyStartGateReason", true, false) != null and has_label_text(scene, "下一步 · 先连接，再建房或入房"), "online lobby lower status and start condition expose concise connection guidance")
 	check(online_lobby_status_label != null and not str(online_lobby_status_label.text).contains(str(scene.DEFAULT_HOST)) and not str(online_lobby_status_label.text).contains(":"), "online lobby lower status does not repeat raw endpoint details")
-	check(online_lobby_start_button != null and online_lobby_start_button.disabled and online_lobby_start_button.text == "连接后开始", "online lobby start button shows disabled waiting state until server connection succeeds")
+	check(online_lobby_start_button != null and online_lobby_start_button.disabled and online_lobby_start_button.text == "待连接", "online lobby start button shows disabled waiting state until server connection succeeds")
 	check(scene.find_child("OnlineLobbyFormPanel", true, false) != null and scene.find_child("OnlineLobbyLogPanel", true, false) != null and scene.find_child("LobbyGuofengPaperSurface", true, false) != null and scene.find_child("OnlineLobbyStatusReadabilityBackplate", true, false) == null and scene.find_child("OnlineLobbyLogReadabilityBackplate", true, false) == null, "lobby uses its single authored paper without overlapping status substrates")
 
 	check(scene.find_child("OnlineLobby3DCastShadow", true, false) != null and scene.find_child("OnlineLobby3DRearShell", true, false) != null and scene.find_child("OnlineLobby3DTopGlint", true, false) != null and scene.find_child("OnlineLobby3DLowerEdge", true, false) != null, "online lobby renders commercial 3D lacquer shell")
@@ -2429,7 +2429,7 @@ func run() -> void:
 	check(control_anchor_rect_matches(hud_panel, scene.TOP_HUD_RECT), "top HUD root uses fixed geometry constants")
 	check(scene.optional_gpt_illustration_texture("top_hud_gpt_banner") == null or hud_parent.find_child("TopHudGPTBannerTexture", true, false) != null, "top HUD consumes optional GPT banner texture when generated")
 	var ended_status_label = hud_parent.find_child("TopHudStatus", true, false) as Label
-	check(ended_status_label != null and ended_status_label.text == "本局结算 · 你自摸 8番 16分" and not ended_status_label.text.contains("..."), "top HUD ended status uses a complete short settlement summary")
+	check(ended_status_label != null and ended_status_label.text == "本局结算 · 你自摸 8番" and not ended_status_label.text.contains("..."), "top HUD ended status uses a complete short settlement summary")
 	check(label_is_clipped(first_label_containing_text(hud_parent, "余")), "top HUD wall summary clips inside its slot")
 	var offline_title_rect := Rect2(Vector2(0.106, 0.090), Vector2(0.260, 0.535))
 	var offline_status_rect := Rect2(Vector2(0.274, 0.090), Vector2(0.584, 0.515))
