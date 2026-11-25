@@ -2173,11 +2173,12 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 				safest_kept = true
 				break
 		var preserve_safest: bool = high_pressure \
-			or (diff == AI_DIFFICULTY_HARD and (danger_risk_peak >= AI_DANGER_RISK_HIGH + 4.0 or (fast_wall_count <= wall_phase_threshold(26) and float(pressure_context.get("readiness_pressure", 0.0)) >= 8.5)))
+			or (diff == AI_DIFFICULTY_HARD and (danger_risk_peak >= AI_DANGER_RISK_HIGH + 4.0 or (fast_wall_count <= wall_phase_threshold(22) and danger_risk_peak >= AI_DANGER_RISK_HIGH and float(pressure_context.get("readiness_pressure", 0.0)) >= 9.0)))
 		if preserve_safest and not safest_candidate.is_empty() and not safest_kept:
 			var replace_index = -1
 			var replace_rank = -1.0
-			for j in range(keep.size()):
+			var replace_start: int = 0 if high_pressure or keep.size() <= 1 else 1
+			for j in range(replace_start, keep.size()):
 				var kept_rank = float(keep[j].get("fast_safety_rank", keep[j].get("fast_risk", 0.0)))
 				if kept_rank > replace_rank:
 					replace_index = j
@@ -2349,10 +2350,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				best["hard_guard_safe_tile"] = str(candidate.get("tile", ""))
 				best["hard_guard_safe_score_gap"] = score_gap
 				best["hard_guard_safe_pressure_gain"] = pressure_gain
+		var severe_table_one_away_fold: bool = false
 		if rejection_reason.is_empty() and shanten_delta > 0:
 			var cand_safety_lbl: String = str(candidate.get("safety_label", ""))
-			var severe_table_one_away_fold: bool = best_shanten == 1 \
-				and best_risk >= AI_DANGER_RISK_HIGH + 11.0 \
+			severe_table_one_away_fold = best_shanten == 1 \
+				and best_risk >= AI_DANGER_RISK_HIGH + 9.0 \
 				and (cand_safety_lbl == "安" or cand_safety_lbl == "现" or cand_safety_lbl == "熟") \
 				and float(candidate.get("risk", 0.0)) <= 14.0 \
 				and pressure_gain >= 24.0
@@ -2369,6 +2371,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		var max_gap = 360.0 if best_shanten <= 0 else (520.0 if best_shanten == 1 else 300.0)
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
 			max_gap += 140.0
+		if severe_table_one_away_fold:
+			max_gap = maxf(max_gap, 680.0)
 		# Two-away cannot justify paying a material point-push premium into a
 		# near-zero same-shanten fold once the existing emergency signal is live.
 		# Keep this below the catastrophe allowance and never permit shanten loss.
@@ -3863,9 +3867,12 @@ func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: i
 			tenpai_keep *= 0.30
 		return tenpai_keep
 	if shanten == 1:
-		# 一向听：极残墙（<=16张）面对高危张果断放弃追听，避免赔大炮。
-		if wall <= wall_phase_threshold(16) and diff == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_HIGH:
-			return -28.0 * urgency * diff_scale
+		# 一向听：极残墙（<=16张）面对高危张果断放弃追听，薄一向听（<=4进张）面对偏危张不再硬追。
+		if wall <= wall_phase_threshold(16) and diff == AI_DIFFICULTY_HARD:
+			if risk >= AI_DANGER_RISK_HIGH:
+				return -32.0 * urgency * diff_scale
+			if ukeire <= 4 and risk >= 22.0:
+				return 0.0
 		var chase = 28.0 + ba * 0.016 + float(clamp(ukeire, 0, 8)) * 1.8
 		return chase * urgency * diff_scale
 	if shanten >= 2 and wall <= wall_phase_threshold(14) and diff == AI_DIFFICULTY_HARD:

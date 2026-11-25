@@ -2996,6 +2996,15 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 			continue
 		var section_index := int(section.get_meta("rules_section_index", -1))
 		var section_min_height := 136.0
+		var goal_card := section.find_child("RuleGoalHandShowcase", true, false) as Control
+		var goal_box := section.find_child("RuleGoalHandShowcaseBox", true, false) as VBoxContainer
+		if goal_card != null and goal_box != null:
+			var wide_rules_showcase := effective_viewport_size().x >= 1600.0
+			apply_rect(goal_card, rect_full(0.648, 0.036, 0.978, 0.964))
+			apply_rect(goal_box, rect_full(0.045, 0.038, 0.955, 0.962))
+			goal_box.add_theme_constant_override("separation", 8 if wide_rules_showcase else 6)
+			var box_min_h: float = maxf(goal_box.get_combined_minimum_size().y, 424.0 if wide_rules_showcase else 326.0)
+			section_min_height = maxf(section_min_height, ceilf((box_min_h + 44.0) / 0.928))
 		if section.custom_minimum_size.y < section_min_height:
 			section.custom_minimum_size.y = section_min_height
 		section.set_meta("section_height_policy", "content_measured_min_136px")
@@ -3549,7 +3558,7 @@ func _show_shop_screen_impl() -> void:
 		if event is InputEventKey and (event as InputEventKey).pressed and handle_shop_scroll_key(event as InputEventKey, scroll, shop_scrollbar):
 			get_viewport().set_input_as_handled()
 	)
-	var shop_scroll_position := make_label(panel, "商品 1-%d/%d" % [ITEM_TYPES.size(), ITEM_TYPES.size()], commercial_ui_font_size(11, 3), shop_ink, true)
+	var shop_scroll_position := make_label(panel, "商品 1-%d/%d" % [ITEM_TYPES.size(), ITEM_TYPES.size()], commercial_ui_font_size(11, 4), shop_ink, true)
 	shop_scroll_position.name = "ShopItemsScrollPosition"
 	apply_rect(shop_scroll_position, rect_full(0.750, scroll.anchor_bottom, 0.930, scroll.anchor_bottom))
 	shop_scroll_position.offset_top = 8.0
@@ -3601,7 +3610,7 @@ func _show_shop_screen_impl() -> void:
 	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
 		var description := str(item_info.get("desc", ""))
-		var description_height := estimate_wrapped_text_height(description, shop_text_width, accessibility_font_size(commercial_ui_font_size(14, 2)), 4.0)
+		var description_height := estimate_wrapped_text_height(description, shop_text_width, accessibility_font_size(commercial_ui_font_size(14, 3)), 4.0)
 		# Keep the authored compact baseline for one-line descriptions. Only a
 		# genuinely wrapped description earns extra row height and scroll content.
 		if description_height > 34.0:
@@ -3668,7 +3677,7 @@ func _show_shop_screen_impl() -> void:
 		set_ui_full_text(name_label, name_label.text, "商品名称：" + name_label.text)
 		mark_ui_optimization(name_label, "F-553")
 		var identity_text := "〔%s〕" % shop_item_identity_text(item_id)
-		var identity_label = make_label(row, identity_text, commercial_ui_font_size(12, 3), shop_ink, true)
+		var identity_label = make_label(row, identity_text, commercial_ui_font_size(12, 4), shop_ink, true)
 		identity_label.name = "ShopItemIdentity_%s" % item_id
 		apply_rect(identity_label, rect_full(0.365, 0.275, 0.625, 0.405) if shop_wide_layout else rect_full(0.492, 0.125, 0.588, 0.410))
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if shop_wide_layout else HORIZONTAL_ALIGNMENT_CENTER
@@ -3676,7 +3685,7 @@ func _show_shop_screen_impl() -> void:
 		mark_ui_optimization(identity_label, "F-554")
 
 		# 道具描述
-		var desc_label = make_label(row, str(item_info.get("desc", "")), commercial_ui_font_size(14, 2), shop_ink, false)
+		var desc_label = make_label(row, str(item_info.get("desc", "")), commercial_ui_font_size(14, 3), shop_ink, false)
 		desc_label.name = "ShopItemDescription_%s" % item_id
 		apply_rect(desc_label, rect_full(0.365, 0.435, 0.960, 0.675) if shop_wide_layout else rect_full(0.164, 0.555, 0.590, 0.935))
 		desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3914,35 +3923,36 @@ func _show_shop_screen_impl() -> void:
 	panel.add_child(shop_footer)
 	var footer_title = make_label(shop_footer, "宝阁说明", commercial_ui_font_size(17, 3), shop_ink, true)
 	footer_title.name = "ShopCabinetFooterTitle"
-	apply_rect(footer_title, rect_full(0.000, 0.040, 0.220, 0.350))
+	apply_rect(footer_title, rect_full(0.000, 0.055, 0.195, 0.375))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
 	var current_coins_amount := maxi(0, int(currency.get("coins", 0)))
 	var exchange_coins_needed := maxi(0, SHOP_EXCHANGE_COINS - current_coins_amount)
 	var exchange_ratio := clampf(float(current_coins_amount) / float(maxi(1, SHOP_EXCHANGE_COINS)), 0.0, 1.0)
-	var exchange_meter_host := make_layout_host(rect_full(0.205, 0.040, 0.598, 0.360))
+	var exchange_meter_host := make_layout_host(rect_full(0.185, 0.060, 0.595, 0.375))
 	exchange_meter_host.name = "ShopExchangeMeterHost"
 	exchange_meter_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_footer.add_child(exchange_meter_host)
-	var exchange_meter_track := add_optional_gpt_illustration_texture(exchange_meter_host, "battle_ink_plaque_20261112", rect_full(0.0, 0.24, 0.44, 0.76), 1.0, false)
+	var exchange_meter_track := add_optional_gpt_illustration_texture(exchange_meter_host, "battle_ink_plaque_20261112", rect_full(0.0, 0.22, 0.44, 0.78), 1.0, false)
 	if exchange_meter_track != null:
 		exchange_meter_track.name = "ShopExchangeMeterTrack"
 		exchange_meter_track.clip_contents = true
 		configure_guofeng_button_slice(exchange_meter_track, true, 32, 0.125)
 		var track_edges := exchange_meter_track.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if track_edges != null:
-			track_edges.self_modulate = Color(1.0, 1.0, 1.0, 0.32)
+			track_edges.self_modulate = Color(1.0, 1.0, 1.0, 0.30)
 		else:
-			exchange_meter_track.self_modulate = Color(1.0, 1.0, 1.0, 0.32)
+			exchange_meter_track.self_modulate = Color(1.0, 1.0, 1.0, 0.30)
 		if exchange_ratio > 0.001:
 			var bar_right := clampf(exchange_ratio, 0.05, 0.992)
-			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.008, 0.16, bar_right, 0.84), Color.WHITE, "menu_ink_primary", 0.35)
+			var bar_fill_key := "menu_card_readable_gpt" if optional_gpt_illustration_texture("menu_card_readable_gpt") != null else "quiet_gold_accent"
+			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.010, 0.16, bar_right, 0.84), Color.WHITE, bar_fill_key, 0.45)
 			exchange_meter_bar.name = "ShopExchangeMeterBar"
 			exchange_meter_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			exchange_meter_bar.self_modulate = Color(0.14, 0.46, 0.32, 0.96) if exchange_coins_needed == 0 else Color(0.76, 0.56, 0.20, 0.94)
+			exchange_meter_bar.self_modulate = Color(0.16, 0.56, 0.36, 1.0) if exchange_coins_needed == 0 else Color(0.82, 0.58, 0.16, 1.0)
 			exchange_meter_track.add_child(exchange_meter_bar)
 	var exchange_meter_copy := "%d/%d 铜钱 → %d 玉符" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS] if shop_wide_layout else "%d/%d → %d玉" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
-	var exchange_meter_caption := make_label(exchange_meter_host, exchange_meter_copy, commercial_ui_font_size(11, 2), shop_ink, true)
+	var exchange_meter_caption := make_label(exchange_meter_host, exchange_meter_copy, commercial_ui_font_size(12, 3), shop_ink, true)
 	exchange_meter_caption.name = "ShopExchangeMeterCaption"
 	apply_rect(exchange_meter_caption, rect_full(0.47, 0.0, 1.0, 1.0))
 	exchange_meter_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -3953,15 +3963,15 @@ func _show_shop_screen_impl() -> void:
 	var footer_body_text := display_exchange_rate + "。"
 	if affordable_items <= 0:
 		footer_body_text += " 最便宜的道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
-	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
+	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 3), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
-	apply_rect(footer_body, rect_full(0.000, 0.400, 0.600, 0.960))
+	apply_rect(footer_body, rect_full(0.000, 0.430, 0.600, 0.960))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_wrapped_label(footer_body, 0.0, 0.0, 2.0)
 	footer_body.set_meta("compact_fit_policy", "wrap_complete_copy_before_inventory_badges")
 	var inventory_text := "还差 %d 铜钱" % exchange_coins_needed if exchange_coins_needed > 0 else "库存 %d 件" % total_inventory
 	var inventory_color := Color(0.58, 0.15, 0.12) if exchange_coins_needed > 0 else shop_ink
-	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 2), inventory_color, true)
+	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 3), inventory_color, true)
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
 	footer_inventory.add_theme_color_override("font_color", inventory_color)
 	if exchange_coins_needed > 0:
@@ -3972,7 +3982,20 @@ func _show_shop_screen_impl() -> void:
 	var state_text := "铜钱获取" if exchange_coins_needed > 0 else ("确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符")
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
 	footer_state.name = "ShopGetGemsButton"
-	style_guofeng_secondary_action(footer_state, true)
+	var footer_is_primary_cta := affordable_items <= 0
+	style_guofeng_secondary_action(footer_state, footer_is_primary_cta)
+	if not footer_is_primary_cta:
+		var exchange_face := footer_state.get_node_or_null("GptButtonFacePlate") as TextureRect
+		if exchange_face != null:
+			var exchange_edges := exchange_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if exchange_edges != null and exchange_edges.visible:
+				exchange_edges.self_modulate = Color(1.0, 0.94, 0.78)
+			else:
+				exchange_face.self_modulate = Color(1.0, 0.94, 0.78)
+		footer_state.add_theme_color_override("font_color", Color(0.07, 0.30, 0.20))
+		footer_state.add_theme_color_override("font_hover_color", Color(0.05, 0.24, 0.16))
+		footer_state.add_theme_color_override("font_focus_color", Color(0.07, 0.30, 0.20))
+		footer_state.add_theme_color_override("font_pressed_color", Color(0.05, 0.22, 0.14))
 	footer_state.modulate = Color.WHITE
 	shop_footer.add_child(footer_state)
 	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
@@ -5405,11 +5428,19 @@ func show_chat_panel() -> void:
 	input_shield.z_index = 84
 	input_shield.set_meta("modal_input_shield", true)
 	input_shield.set_meta("layout_role", "chat_modal_background")
-	var chat_scrim := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.10, 0.14, 0.12, 0.55), "ui_dark_scrim", 0.13)
+	var chat_scrim := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.04, 0.07, 0.06, 0.80), "ui_dark_scrim", 0.13)
 	chat_scrim.name = "ChatOverlayBackdrop"
 	chat_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chat_scrim.visible = mode != "online_game"
 	input_shield.add_child(chat_scrim)
+	if chat_panel_route_name() == "center_table_modal":
+		var top_river_archive := root_layer.find_child("DiscardRiverArchiveButton_2", true, false) as Control
+		if top_river_archive != null and top_river_archive.visible:
+			top_river_archive.visible = false
+			input_shield.tree_exiting.connect(func() -> void:
+				if is_instance_valid(top_river_archive):
+					top_river_archive.visible = true
+			)
 	input_shield.gui_input.connect(func(event: InputEvent) -> void:
 		var dismiss := false
 		if event is InputEventScreenTouch:
@@ -7406,7 +7437,7 @@ func _show_replay_import_screen_impl() -> void:
 	digest_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
 	digest_hint.set_meta("preserve_semantic_color", true)
 	digest_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(digest_hint, rect_full(0.215, 0.046, 0.560, 0.092))
+	apply_rect(digest_hint, rect_full(0.165 if wide_replay else 0.215, 0.046, 0.560, 0.092))
 	configure_clipped_label(digest_hint)
 	set_ui_full_text(digest_hint, "回放防篡改校验（SHA-256 摘要链）", "回放完整性校验方式")
 	mark_ui_optimization(digest_hint, "F-504")
@@ -7584,9 +7615,10 @@ func _show_replay_import_screen_impl() -> void:
 	apply_rect(archive_title, rect_full(0.045, 0.025, 0.450, 0.095 if wide_replay else 0.115))
 	set_ui_full_text(archive_title, "本地归档", "本地回放归档")
 	mark_ui_optimization(archive_title, "F-511")
-	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), commercial_ui_font_size(12, 3), Color(0.24, 0.34, 0.28), false)
+	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), commercial_ui_font_size(13, 3), Color(0.14, 0.24, 0.19), false)
 	archive_count.name = "ReplayArchiveCount"
 	archive_count.set_meta("preserve_semantic_color", true)
+	archive_count.add_theme_color_override("font_color", Color(0.14, 0.24, 0.19))
 	apply_rect(archive_count, rect_full(0.460, 0.028, 0.955, 0.095 if wide_replay else 0.115))
 	archive_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	set_ui_full_text(archive_count, "本地归档数量", "本地回放归档数量")
@@ -7647,7 +7679,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.919 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -7693,9 +7725,10 @@ func _show_replay_import_screen_impl() -> void:
 	apply_rect(timeline_title, rect_full(0.035, 0.025, 0.285, 0.095 if wide_replay else 0.115))
 	set_ui_full_text(timeline_title, "事件时间线", "已验证回放事件时间线")
 	mark_ui_optimization(timeline_title, "F-514")
-	var timeline_position := make_label(timeline, "0 / 0 条事件", commercial_ui_font_size(12, 3), Color(0.24, 0.34, 0.28), false)
+	var timeline_position := make_label(timeline, "0 / 0 条事件", commercial_ui_font_size(13, 3), Color(0.14, 0.24, 0.19), false)
 	timeline_position.name = "ReplayImportTimelinePosition"
 	timeline_position.set_meta("preserve_semantic_color", true)
+	timeline_position.add_theme_color_override("font_color", Color(0.14, 0.24, 0.19))
 	apply_rect(timeline_position, rect_full(0.295, 0.028, 0.965, 0.095 if wide_replay else 0.115))
 	timeline_position.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(timeline_position)
@@ -7757,7 +7790,13 @@ func _show_replay_import_screen_impl() -> void:
 		fit_replay_scroll_content(event_scroll, event_list)
 		sync_replay_timeline_height_index(event_list, ui_page_generation)
 	)
-	event_scroll.resized.connect(func() -> void: fit_replay_scroll_content(event_scroll, event_list))
+	event_scroll.resized.connect(func() -> void:
+		fit_replay_scroll_content(event_scroll, event_list)
+		call_deferred("sync_replay_timeline_height_index", event_list, ui_page_generation)
+	)
+	timeline.resized.connect(func() -> void:
+		call_deferred("sync_replay_timeline_height_index", event_list, ui_page_generation)
+	)
 	call_deferred("fit_replay_scroll_content", event_scroll, event_list)
 	if event_scrollbar != null:
 		event_scrollbar.value_changed.connect(func(_value: float) -> void:
@@ -8571,7 +8610,7 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		event_button.name = "ReplayImportEventRow_%03d" % index
 		event_button.custom_minimum_size = Vector2(0.0, 44.0)
 		event_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		event_button.add_theme_font_size_override("font_size", accessibility_font_size(13))
+		event_button.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(13, 2)))
 		event_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		event_button.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		event_button.clip_text = false
@@ -8629,12 +8668,13 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		return
 	if bool(event_list.get_meta("timeline_measurement_complete", false)) and not bool(event_scroll.get_meta("timeline_measurement_pending", false)):
 		return
-	var measured_width := event_list.size.x
-	if measured_width <= 1.0:
-		measured_width = event_scroll.size.x
-		var scrollbar := event_scroll.get_v_scroll_bar()
-		if scrollbar != null and scrollbar.visible:
-			measured_width -= scrollbar.size.x
+	var timeline_pane := event_scroll.get_parent() as Control
+	var scrollbar := event_scroll.get_v_scroll_bar()
+	var scrollbar_w := maxf(float(UI_MIN_TOUCH_TARGET), scrollbar.size.x if scrollbar != null else 0.0)
+	var scroll_inner_w := event_scroll.size.x - scrollbar_w - 8.0
+	if scroll_inner_w <= 1.0 and timeline_pane != null and timeline_pane.size.x > 1.0:
+		scroll_inner_w = timeline_pane.size.x * (event_scroll.anchor_right - event_scroll.anchor_left) - scrollbar_w - 8.0
+	var measured_width := maxf(event_list.size.x, scroll_inner_w)
 	measured_width = maxf(180.0, measured_width - 18.0)
 	var total_height := 0.0
 	var row_count := 0
@@ -8658,8 +8698,8 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 		var row_height := float(row.get_meta("timeline_measured_height", 0.0))
 		if str(row.get_meta("timeline_measurement_signature", "")) != measurement_signature:
 			var measurement_text := reserved_marker_text + base_event_text
-			row_height = estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0
-			row.custom_minimum_size = Vector2(0.0, maxf(44.0, row_height))
+			row_height = maxf(44.0, estimate_wrapped_text_height(measurement_text, measured_width, font_size, 4.0) + 12.0)
+			row.custom_minimum_size = Vector2(0.0, row_height)
 			row.set_meta("timeline_measurement_signature", measurement_signature)
 			row.set_meta("timeline_measurement_pending", false)
 		else:
@@ -8685,23 +8725,7 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	event_list.set_meta("timeline_row_starts", row_starts)
 	event_list.set_meta("timeline_row_ends", row_ends)
 	event_list.set_meta("timeline_height_index_signature", "|".join(height_signature_parts))
-	var timeline_pane := event_scroll.get_parent() as Control
-	if timeline_pane != null and timeline_pane.size.y > 1.0 and not ui_is_compact() and not large_text_enabled and not row_ends.is_empty():
-		var available_timeline_h: float = timeline_pane.size.y * (event_scroll.anchor_bottom - event_scroll.anchor_top)
-		var whole_timeline_h: float = 0.0
-		for end_y in row_ends:
-			if end_y <= available_timeline_h + 0.5:
-				whole_timeline_h = end_y
-			else:
-				break
-		if whole_timeline_h > 44.0 and total_height > available_timeline_h + 0.5:
-			var snapped_bottom_offset: float = floorf(whole_timeline_h) - available_timeline_h
-			if not is_equal_approx(event_scroll.offset_bottom, snapped_bottom_offset):
-				event_scroll.offset_bottom = snapped_bottom_offset
-		elif not is_zero_approx(event_scroll.offset_bottom):
-			event_scroll.offset_bottom = 0.0
-	elif not is_zero_approx(event_scroll.offset_bottom):
-		event_scroll.offset_bottom = 0.0
+	snap_replay_timeline_viewport(event_scroll, row_ends, total_height)
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.focus_mode = Control.FOCUS_ALL
 	event_scroll.modulate.a = 1.0
@@ -8716,6 +8740,29 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	set_replay_timeline_selection(replay_timeline_selected_index if replay_timeline_selected_index >= 0 else 0, true)
 	call_deferred("sync_replay_timeline_height_index", event_list, expected_generation)
 	update_replay_timeline_status(event_scroll)
+
+
+func snap_replay_timeline_viewport(event_scroll: ScrollContainer, row_ends: Array[float], total_height: float) -> void:
+	if event_scroll == null or not is_instance_valid(event_scroll):
+		return
+	var timeline_pane := event_scroll.get_parent() as Control
+	if timeline_pane == null or timeline_pane.size.y <= 1.0 or ui_is_compact() or large_text_enabled or row_ends.is_empty():
+		if not is_zero_approx(event_scroll.offset_bottom):
+			event_scroll.offset_bottom = 0.0
+		return
+	var available_timeline_h: float = timeline_pane.size.y * (event_scroll.anchor_bottom - event_scroll.anchor_top)
+	var whole_timeline_h: float = 0.0
+	for end_y in row_ends:
+		if end_y <= available_timeline_h - 1.0:
+			whole_timeline_h = end_y
+		else:
+			break
+	if whole_timeline_h > 44.0 and total_height > available_timeline_h - 0.5:
+		var snapped_bottom_offset: float = ceilf(whole_timeline_h) - available_timeline_h
+		if absf(event_scroll.offset_bottom - snapped_bottom_offset) > 0.5:
+			event_scroll.offset_bottom = snapped_bottom_offset
+	elif not is_zero_approx(event_scroll.offset_bottom):
+		event_scroll.offset_bottom = 0.0
 
 
 func sync_replay_timeline_height_index(event_list: VBoxContainer, expected_generation: int = -1) -> void:
@@ -8734,7 +8781,10 @@ func sync_replay_timeline_height_index(event_list: VBoxContainer, expected_gener
 	event_list.set_meta("timeline_row_starts", starts)
 	event_list.set_meta("timeline_row_ends", ends)
 	event_list.set_meta("timeline_height_index_source", "actual_sorted_native_row_rectangles")
-	update_replay_timeline_status(event_list.get_parent() as ScrollContainer)
+	var event_scroll := event_list.get_parent() as ScrollContainer
+	if not ends.is_empty():
+		snap_replay_timeline_viewport(event_scroll, ends, ends[ends.size() - 1])
+	update_replay_timeline_status(event_scroll)
 
 
 func configure_replay_timeline_focus_navigation(focus_first: bool = false) -> void:

@@ -1522,10 +1522,10 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.815), Vector2(0.57, 0.985)),
-	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
-	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
-	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
+	Rect2(Vector2(0.43, 0.765), Vector2(0.57, 0.892)),
+	Rect2(Vector2(0.725, 0.415), Vector2(0.860, 0.565)),
+	Rect2(Vector2(0.43, 0.110), Vector2(0.57, 0.230)),
+	Rect2(Vector2(0.140, 0.415), Vector2(0.275, 0.565)),
 ]
 const CENTER_DICE_DOT_POINTS := [
 	Vector2(0.35, 0.32),
@@ -3519,6 +3519,32 @@ func _make_guofeng_high_contrast_border_style(left_aligned: bool = false, ink_fa
 	return border
 
 
+func sync_guofeng_button_focus_visual(button: Button, focused: bool) -> bool:
+	if button == null or not is_instance_valid(button):
+		return false
+	if not button.has_meta("guofeng_chamfer_focus_enabled") or not bool(button.get_meta("guofeng_chamfer_focus_enabled")):
+		return false
+	var focus_plate: CanvasItem = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
+	var face: TextureRect = button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	var is_dark_face: bool = button.has_meta("guofeng_chamfer_focus_ink") and bool(button.get_meta("guofeng_chamfer_focus_ink"))
+	if focus_plate != null:
+		if focused:
+			if high_contrast_enabled:
+				focus_plate.modulate = Color(1.0, 0.90, 0.30, 1.0) if is_dark_face else Color(0.86, 0.22, 0.12, 1.0)
+			else:
+				focus_plate.modulate = Color(0.98, 0.80, 0.28, 1.0) if is_dark_face else Color(0.88, 0.58, 0.14, 1.0)
+		else:
+			focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
+	if face != null:
+		var pad: float = (3.0 if high_contrast_enabled else 2.5) if focused else 0.0
+		face.offset_left = pad
+		face.offset_top = pad
+		face.offset_right = -pad
+		face.offset_bottom = -pad
+		sync_guofeng_button_slice(face.get_instance_id())
+	return true
+
+
 func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
 	var action_role := str(button.get_meta("action_role", "")) if button != null else ""
@@ -3589,7 +3615,11 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	if left_aligned:
 		empty_style.content_margin_left = 14.0
 		empty_style.content_margin_right = 12.0
-	var focus_style: StyleBox = empty_style if is_battle_action_role else _make_guofeng_focus_ring_style(left_aligned, ink_face or filled_danger_visual)
+	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
+	var is_top_hud_action: bool = button != null and button.has_meta("layout_role") and str(button.get_meta("layout_role")) == "top_hud_action"
+	var paper_chamfer_tex: Texture2D = optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+	var use_chamfer_focus_halo: bool = button != null and not is_battle_action_role and not is_menu_quick and not is_top_hud_action and focus_plate != null and face != null and paper_chamfer_tex != null and not (ink_face and is_raw_ink_contract)
+	var focus_style: StyleBox = empty_style if (is_battle_action_role or use_chamfer_focus_halo) else _make_guofeng_focus_ring_style(left_aligned, ink_face or filled_danger_visual)
 	var use_hc_border: bool = high_contrast_enabled and not is_battle_action_role and not is_menu_quick
 	var idle_style: StyleBox = _make_guofeng_high_contrast_border_style(left_aligned, ink_face or filled_danger_visual) if use_hc_border else empty_style
 	for state in ["normal", "hover", "pressed", "hover_pressed"]:
@@ -3605,9 +3635,16 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	button.add_theme_constant_override("outline_size", 0)
 	button.add_theme_constant_override("shadow_offset_x", 0)
 	button.add_theme_constant_override("shadow_offset_y", 0)
-	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
+	button.set_meta("guofeng_chamfer_focus_enabled", use_chamfer_focus_halo)
+	button.set_meta("guofeng_chamfer_focus_ink", ink_face or filled_danger_visual)
 	if focus_plate != null:
-		if is_danger_action:
+		if use_chamfer_focus_halo:
+			if face != null and focus_plate.get_index() > face.get_index():
+				button.move_child(focus_plate, face.get_index())
+			focus_plate.texture = paper_chamfer_tex
+			configure_guofeng_button_slice(focus_plate, true, 96, 0.125, paper_chamfer_tex, false)
+			sync_guofeng_button_focus_visual(button, button.has_focus())
+		elif is_danger_action:
 			if danger_cinnabar_tex != null:
 				var danger_focus_slice := _guofeng_chamfer_slice_params(danger_cinnabar_tex)
 				focus_plate.texture = danger_cinnabar_tex
@@ -3805,9 +3842,10 @@ func set_button_focus_feedback_by_id(button_id: int, focused: bool) -> void:
 	var button = node_from_instance_id(button_id) as Button
 	if button == null or not is_instance_valid(button):
 		return
-	var focus_plate = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
-	if focus_plate != null:
-		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
+	if not sync_guofeng_button_focus_visual(button, focused):
+		var focus_plate = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
+		if focus_plate != null:
+			focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.82 if focused else 0.0)
 	# Text color remains a reliable focus signal even when the optional authored
 	# focus plate is unavailable or failed to import.
 	if bool(button.get_meta("menu_native_label_hidden", false)):
