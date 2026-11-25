@@ -3260,7 +3260,7 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 			var trim_px: float = clampf(snapped_h - max_h, -36.0, 0.0)
 			if absf(content_scroll.offset_bottom - trim_px) > 0.5:
 				content_scroll.offset_bottom = trim_px
-				var gutter_ref := content_scroll.get_meta("rules_gutter_ref", null) as Control
+				var gutter_ref: Control = content_scroll.get_meta("rules_gutter_ref") as Control if content_scroll.has_meta("rules_gutter_ref") else null
 				if gutter_ref != null and is_instance_valid(gutter_ref):
 					gutter_ref.offset_bottom = trim_px
 				var hit_ref := cache.get("hit_target", null) as Control
@@ -6782,7 +6782,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	diagnostic_summary.name = "DiagnosticPrimarySummary"
 	diagnostic_summary.set_meta("preserve_semantic_color", true)
 	diagnostic_summary.add_theme_color_override("font_color", diagnostic_summary_color)
-	apply_rect(diagnostic_summary, rect_full(0.050, 0.145, 0.950, 0.205))
+	apply_rect(diagnostic_summary, rect_full(0.050, 0.130, 0.950, 0.184))
 	diagnostic_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	set_ui_full_text(diagnostic_summary, diagnostic_summary_text, "诊断结果：" + diagnostic_summary_text)
 	diagnostic_summary.set_meta("status_hierarchy", "primary_health_sentence")
@@ -6795,25 +6795,25 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	diagnostic_title.name = "DiagnosticDialogTitle"
 	diagnostic_title.add_theme_font_override("font", ui_heading_font())
 	style_guofeng_label(diagnostic_title)
-	apply_rect(diagnostic_title, rect_full(0.050, 0.035, 0.650, 0.125))
+	apply_rect(diagnostic_title, rect_full(0.050, 0.032, 0.650, 0.120))
 	diagnostic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	diagnostic_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(diagnostic_title, "本地诊断报告", "诊断报告标题")
 	diagnostic_title.set_meta("fixed_header", true)
 	var diagnostic_version := make_label(panel, "版本 %s" % app_version_short(), 13, Color(0.22, 0.32, 0.26), true)
 	diagnostic_version.name = "DiagnosticDialogVersion"
-	apply_rect(diagnostic_version, rect_full(0.720, 0.045, 0.950, 0.110))
+	apply_rect(diagnostic_version, rect_full(0.720, 0.042, 0.950, 0.108))
 	diagnostic_version.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	diagnostic_version.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(diagnostic_version, app_version(), "诊断报告应用版本")
 	diagnostic_version.set_meta("fixed_header", true)
 
 	var diag_frame_key: String = "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
-	var diag_body_frame := add_optional_gpt_illustration_texture(panel, diag_frame_key, rect_full(0.040, 0.222, 0.960, 0.715), 1.0, false)
+	var diag_body_frame := add_optional_gpt_illustration_texture(panel, diag_frame_key, rect_full(0.040, 0.194, 0.960, 0.744), 1.0, false)
 	if diag_body_frame != null:
 		diag_body_frame.name = "DiagnosticScrollHost"
 		diag_body_frame.self_modulate = Color(0.98, 0.96, 0.91)
-		configure_guofeng_button_slice(diag_body_frame, true, 104 if diag_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if diag_frame_key == "guofeng_card_frame_gpt" else 0.125)
+		configure_guofeng_button_slice(diag_body_frame, true, 104 if diag_frame_key == "guofeng_card_frame_gpt" else 96, 0.16 if diag_frame_key == "guofeng_card_frame_gpt" else 0.125)
 
 	# Keep the detailed report scrollable while the close action remains fixed.
 	var content_scroll = ScrollContainer.new()
@@ -6841,8 +6841,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	# Reserve an explicit status gutter and a separate footer boundary. The body
 	# must finish before the range label so its last visible row cannot read as a
 	# footer control or be hidden by the fixed action lane.
-	apply_rect(content_scroll, rect_full(0.052, 0.235, 0.948, 0.700))
-	content_scroll.set_meta("diagnostic_scroll_bottom_anchor", 0.700)
+	apply_rect(content_scroll, rect_full(0.058, 0.208, 0.942, 0.730))
+	content_scroll.set_meta("diagnostic_scroll_bottom_anchor", 0.730)
 	content_scroll.set_meta("diagnostic_footer_top_anchor", 0.805)
 	var diagnostic_scrollbar := content_scroll.get_v_scroll_bar()
 	if diagnostic_scrollbar != null:
@@ -6862,7 +6862,8 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	var vbox = VBoxContainer.new()
 	vbox.name = "DiagnosticContentList"
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 2)
+	vbox.custom_minimum_size.x = maxf(280.0, effective_viewport_size().x * 0.88 * 0.884 - float(UI_MIN_TOUCH_TARGET) - 16.0)
+	vbox.add_theme_constant_override("separation", 10 if large_text_enabled else 4)
 	content_scroll.add_child(vbox)
 	content_scroll.set_meta("diagnostic_content_list", vbox)
 
@@ -6891,7 +6892,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 			label.add_theme_color_override("font_color", Color(0.10, 0.22, 0.16))
 			label.add_theme_font_size_override("font_size", diag_head_font)
 			label.custom_minimum_size.y = diag_head_min_h
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		elif line.begins_with("✓"):
 			label.set_meta("preserve_semantic_color", true)
 			label.add_theme_color_override("font_color", Color(0.11, 0.40, 0.22))
@@ -6918,7 +6919,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		vbox.add_child(label)
 	var content_status = make_label(panel, "诊断内容 · 正在测量可见范围", 13, Color(0.18, 0.28, 0.22), true)
 	content_status.name = "DiagnosticContentStatusLabel"
-	apply_rect(content_status, rect_full(0.05, 0.728, 0.95, 0.790))
+	apply_rect(content_status, rect_full(0.05, 0.752, 0.95, 0.802))
 	content_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(content_status)
 	set_ui_full_text(content_status, "当前诊断报告范围尚在测量", "诊断报告阅读位置")
@@ -6936,7 +6937,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 		copy_feedback.add_theme_color_override("font_color", Color(0.11, 0.42, 0.24))
 	# Keep copy feedback beside its action. The report range status owns the lane
 	# above the footer, so a copy result cannot be mistaken for health status.
-	apply_rect(copy_feedback, rect_full(0.050, 0.822, 0.245, 0.922))
+	apply_rect(copy_feedback, rect_full(0.050, 0.822, 0.340, 0.922))
 	copy_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	copy_feedback.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	copy_feedback.tooltip_text = diagnostic_copy_feedback_full
@@ -6957,7 +6958,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	mark_ui_optimization(copy_button, "F-501")
 	mark_ui_optimization(copy_button, "F-915")
 	panel.add_child(copy_button)
-	apply_rect(copy_button, rect_full(0.260, 0.822, 0.485, 0.922))
+	apply_rect(copy_button, rect_full(0.365, 0.822, 0.635, 0.922))
 	var close_button = make_small_button("关闭", Color(0.30, 0.42, 0.38), Callable(self, "dismiss_diagnostic_dialog"))
 	close_button.name = "DiagnosticCloseButton"
 	close_button.focus_mode = Control.FOCUS_ALL
@@ -6966,7 +6967,7 @@ func show_diagnostic_dialog(lines: Array) -> void:
 	set_ui_full_text(close_button, close_button.tooltip_text, "关闭诊断报告")
 	mark_ui_optimization(close_button, "F-502")
 	panel.add_child(close_button)
-	apply_rect(close_button, rect_full(0.515, 0.822, 0.740, 0.922))
+	apply_rect(close_button, rect_full(0.665, 0.822, 0.950, 0.922))
 	style_guofeng_reading_tree(panel)
 	style_guofeng_secondary_action(copy_button, true)
 	style_guofeng_secondary_action(close_button)
@@ -7047,6 +7048,8 @@ func normalize_diagnostic_scroll_viewport(content_scroll: ScrollContainer, conte
 	var preserved_scroll := content_scroll.scroll_vertical
 	var previous_width := float(content_scroll.get_meta("diagnostic_measurement_width", -1.0))
 	var measured_width := diagnostic_content_viewport_width(content_scroll, content_list)
+	if not is_equal_approx(content_list.custom_minimum_size.x, measured_width):
+		content_list.custom_minimum_size.x = measured_width
 	var width_changed := previous_width < 0.0 or absf(previous_width - measured_width) > 1.0
 	refresh_diagnostic_line_measurements(content_scroll, content_list)
 	rebuild_diagnostic_height_index(content_list, measured_width)
@@ -7099,20 +7102,18 @@ func restore_diagnostic_scroll_position(content_scroll_id: int, desired_scroll: 
 
 func diagnostic_content_viewport_width(content_scroll: ScrollContainer, content_list: Control = null) -> float:
 	var width := 0.0
-	if content_list != null and is_instance_valid(content_list) and content_list.size.x > 1.0:
-		# The scroll child width is the post-scrollbar content width, which is the
-		# width the wrapped labels actually receive.
-		width = content_list.size.x
-	elif content_scroll != null and is_instance_valid(content_scroll) and content_scroll.size.x > 1.0:
+	if content_scroll != null and is_instance_valid(content_scroll) and content_scroll.size.x > 1.0:
 		width = content_scroll.size.x
 		var scrollbar := content_scroll.get_v_scroll_bar()
-		if scrollbar != null and scrollbar.visible:
-			width -= scrollbar.size.x
+		var bar_gutter := maxf(float(UI_MIN_TOUCH_TARGET), scrollbar.size.x) if scrollbar != null and scrollbar.visible else float(UI_MIN_TOUCH_TARGET)
+		width -= bar_gutter + 8.0
+	elif content_list != null and is_instance_valid(content_list) and content_list.size.x > 1.0:
+		width = content_list.size.x
 	if width <= 1.0:
 		# Conservative first pass; the deferred measurement replaces this once
 		# anchors and the native scrollbar have resolved.
-		width = effective_viewport_size().x * 0.640
-	return maxf(180.0, width - 6.0)
+		width = effective_viewport_size().x * 0.760
+	return maxf(240.0, width - 4.0)
 
 
 func refresh_diagnostic_line_measurements(content_scroll: ScrollContainer, content_list: Control) -> void:

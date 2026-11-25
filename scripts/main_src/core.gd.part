@@ -4442,7 +4442,7 @@ func pending_claim_action_content_height(count: int, viewport_snapshot: Vector2 
 	return float(rows) * button_height + float(maxi(0, rows - 1) * v_separation)
 
 func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
-	var base_rect = pending_claim_action_dock_base_rect()
+	var base_rect: Rect2 = pending_claim_action_dock_base_rect()
 	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var content_width := maxf(1.0, resolved_content_size.x)
@@ -4456,7 +4456,7 @@ func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vec
 	# lower reserve prevents the first response row from touching its last tile.
 	var dock_bottom := minf(base_rect.size.y, HAND_TRAY_RECT.position.y - 14.0 / content_height)
 	var top = maxf(compact_min_top, dock_bottom - dock_height)
-	var dock_left := base_rect.position.x
+	var dock_left: float = base_rect.position.x
 	if pending_claim_response_count(count) == 1 and mode != "online_game":
 		var sep := action_button_separation_for_count(count, resolved_viewport)
 		var single_w := pending_claim_response_button_width(count, sep, resolved_viewport, resolved_content_size)
@@ -4464,8 +4464,8 @@ func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vec
 	return Rect2(Vector2(dock_left, top), Vector2(base_rect.size.x, dock_bottom))
 
 func pending_claim_action_bar_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
-	var dock_rect = pending_claim_action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
-	var base_rect = pending_claim_action_base_rect()
+	var dock_rect: Rect2 = pending_claim_action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
+	var base_rect: Rect2 = pending_claim_action_base_rect()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var content_width := maxf(1.0, resolved_content_size.x)
 	var content_height := maxf(1.0, resolved_content_size.y)
