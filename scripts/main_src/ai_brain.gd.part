@@ -1060,9 +1060,12 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "", h
 		if offline_sim_quiet:
 			ai_sim_stats["ron_passes"] = int(ai_sim_stats.get("ron_passes", 0)) + 1
 		return report
-	# 残墙短、多威胁、防守型、守成：优先落袋为安
+	# 残墙短、多威胁、防守型、守成：优先落袋为安；困难档面对近听玩家绝不轻易放过荣和。
 	if wall <= wall_phase_threshold(18) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必胡"
+		return report
+	if ron_diff == AI_DIFFICULTY_HARD and seat != 0 and human_readiness_for_defense(wall) >= 9.0:
+		report["reason"] = "防反转必胡"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
 		report["reason"] = "查听落袋"
@@ -1079,13 +1082,13 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "", h
 		if points >= chase_need:
 			report["reason"] = "追分落袋"
 			return report
-	# 更优听口显著更大，且替代张还够厚，才考虑留听
+	# 更优听口显著更大，且替代张还够厚，才考虑留听；困难档仅大牌型（raw_wait>=1.25）舍小搏大，均衡/进攻型稳拿荣和。
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
 	var depth_ok = wall >= wall_phase_threshold(26) and alt_remaining >= 3
 	var value_ok = points_gap >= float(score_points_for_fan(max(1, fan + 1)) - points) or avg_gap >= 260.0
-	var raw_wait = float(ai_profile_source(seat).get("wait", 1.0))
-	var profile_ok = wait_focus >= 1.12 or attack >= 1.12 or raw_wait >= 1.30
+	var raw_wait: float = float(ai_profile_source(seat).get("wait", 1.0))
+	var profile_ok: bool = (raw_wait >= 1.25) if ron_diff == AI_DIFFICULTY_HARD else (wait_focus >= 1.12 or attack >= 1.12 or raw_wait >= 1.30)
 	# 当前张本身已很厚时，不赌更远的高番
 	if current_remaining >= 3 and points_gap < float(score_points_for_fan(3)):
 		report["reason"] = "厚听稳胡"
@@ -1247,8 +1250,12 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	var wait_focus = ai_wait_value_focus(seat)
 	var attack = ai_total_attack_multiplier(seat)
 	var defense = ai_profile_value(seat, "defense")
+	var diff := clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	if wall <= wall_phase_threshold(20) or multi_threat or threat_rank >= 3 or readiness >= 12.5:
 		report["reason"] = "高压必摸"
+		return report
+	if diff == AI_DIFFICULTY_HARD and seat != 0 and human_readiness_for_defense(wall) >= 9.0:
+		report["reason"] = "防反转必摸"
 		return report
 	if should_force_accept_for_wall_draw_ba(seat, points, wall):
 		report["reason"] = "查听落袋"
@@ -1259,17 +1266,17 @@ func ai_tsumo_decision_report(seat: int, drawn_tile: String) -> Dictionary:
 	if strategy == "追分" and points >= score_points_for_fan(3):
 		report["reason"] = "追分落袋"
 		return report
-	# 自摸门槛严于荣和：需要更深的牌墙与更大分差才留听。
+	# 自摸门槛严于荣和：需要更深的牌墙与更大分差才留听；困难档仅大牌型（raw_wait>=1.25）放自摸搏大牌。
 	var points_gap = float(alt_best_points - points)
 	var avg_gap = alt_average - float(points)
 	var depth_ok = wall >= wall_phase_threshold(30) and alt_remaining >= 4
 	var value_ok = points_gap >= float(score_points_for_fan(min(SCORE_LIMIT_FAN, max(2, fan + 1)))) or avg_gap >= 360.0
-	var profile_ok = wait_focus >= 1.15 or attack >= 1.15
+	var raw_wait_tsumo: float = float(ai_profile_source(seat).get("wait", 1.0))
+	var profile_ok: bool = (raw_wait_tsumo >= 1.25) if diff == AI_DIFFICULTY_HARD else (wait_focus >= 1.15 or attack >= 1.15)
 	if current_remaining >= 2 and points_gap < float(score_points_for_fan(4)):
 		report["reason"] = "厚听稳摸"
 		return report
 	# 简单难度几乎总是自摸落袋
-	var diff := clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	if diff == AI_DIFFICULTY_EASY:
 		report["reason"] = "简单必摸"
 		return report
@@ -1751,6 +1758,11 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 		if diff == AI_DIFFICULTY_HARD or readiness >= 10.0:
 			decline = true
 			reason = "残局拒吃"
+	# 4) 困难档未听副露后被迫直切高危喂玩家牌：即使降向听（如2->1）也绝不为了加速而直接送玩家大炮。
+	if (not decline) and diff == AI_DIFFICULTY_HARD and claim != "gang" and after_shanten >= 1:
+		if forced_safety != "安" and forced_safety != "现" and feed_human >= 26.0 and forced_risk >= AI_DANGER_RISK_SOFT + 8.0 and readiness >= 8.0:
+			decline = true
+			reason = "防点玩家"
 	out["decline"] = decline
 	out["reason"] = reason
 	return out
@@ -2111,9 +2123,13 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 				cheap += 180.0
 			elif shanten == 1:
 				cheap += 40.0
-			# 困难档快评也更厌恶危险张
-			if diff == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_SOFT:
-				cheap -= (risk - 12.0) * 1.35
+			# 困难档快评也更厌恶高总危与单家定点重危张（如对手主色染手/三副露炮弹）
+			var fast_max_opp_risk: float = float(fast_risk_vector.get("max_opponent_risk", 0.0))
+			if diff == AI_DIFFICULTY_HARD:
+				if risk >= AI_DANGER_RISK_SOFT:
+					cheap -= (risk - 12.0) * 1.35
+				if fast_max_opp_risk >= 18.0:
+					cheap -= (fast_max_opp_risk - 16.0) * 1.50
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
 			var fast_safety_value := 0.0
@@ -2126,7 +2142,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 					var fast_kabe := ai_kabe_strength(idx, ai_context_known_counts(eval_context, seat, visible_counts_snapshot)) if fast_safety == "壁" else 1.0
 					var fast_emergency_defense := emergency_defense_adjustment(seat, shanten, fast_safety, risk, float(fast_feed_report.get("score", 0.0)), pressure_context, eval_context, fast_kabe)
 					fast_safety_value += max(0.0, fast_emergency_defense) * 0.12
-			var safety_rank = risk + human_pressure * 0.72 - fast_safety_value
+			var safety_rank: float = risk + human_pressure * 0.72 + (fast_max_opp_risk * 0.45 if diff == AI_DIFFICULTY_HARD else 0.0) - fast_safety_value
 			item["fast_safety_rank"] = safety_rank
 			if ai_sim_trace_enabled:
 				var trace_feed_report: Dictionary = discard_feed_risk_report(cand, seat, visible_counts_snapshot, eval_context, idx)
@@ -2266,6 +2282,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 	var best: Dictionary = reports[0]
 	var best_shanten = int(best.get("shanten", 8))
 	var best_risk = float(best.get("risk", 0.0))
+	var best_max_opp_risk: float = float(best.get("max_opponent_risk", 0.0))
 	var best_feed = float(best.get("feed_risk", 0.0))
 	var best_human_pressure = float(best.get("human_target_pressure", 0.0))
 	var best_human_exposure = float(best.get("human_target_exposure", best_human_pressure))
@@ -2305,6 +2322,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		and best_feed >= AI_DANGER_FEED_SOFT + 32.0 \
 		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
 		and best_wait_remaining > 0 and best_wait_remaining <= 4
+	var focused_tenpai_bomb: bool = best_shanten <= 0 \
+		and best_max_opp_risk >= 26.0 \
+		and best_risk >= AI_DANGER_RISK_HIGH + 12.0 \
+		and best_wait_points > 0 and best_wait_points <= score_points_for_fan(2) \
+		and best_wait_remaining > 0 and best_wait_remaining <= 5
 	var catastrophe_tenpai = thin_catastrophe_tenpai or human_catastrophe_tenpai
 	# 一向听仍有极端风险时，若同向听候选只损失极少效率却确实更安全，
 	# 不应被通用 14 分防守阈值卡住。该例外不允许增加向听。
@@ -2320,11 +2342,12 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		best["hard_guard_extreme_one_away"] = extreme_one_away
 	if best_shanten > 1 and not two_away_emergency:
 		return
-	if best_shanten <= 0 and not catastrophe_tenpai and not human_exposure_tenpai:
+	if best_shanten <= 0 and not catastrophe_tenpai and not human_exposure_tenpai and not focused_tenpai_bomb:
 		return
 	if best_risk < AI_DANGER_RISK_HIGH + 6.0 \
 		and best_feed < AI_DANGER_FEED_SOFT + 24.0 \
-		and best_human_pressure < 30.0:
+		and best_human_pressure < 30.0 \
+		and best_max_opp_risk < 23.0:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
@@ -2351,16 +2374,24 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 				best["hard_guard_safe_score_gap"] = score_gap
 				best["hard_guard_safe_pressure_gain"] = pressure_gain
 		var severe_table_one_away_fold: bool = false
+		var focused_tenpai_safe_escape: bool = false
 		if rejection_reason.is_empty() and shanten_delta > 0:
 			var cand_safety_lbl: String = str(candidate.get("safety_label", ""))
+			var cand_max_opp_risk: float = float(candidate.get("max_opponent_risk", 0.0))
 			severe_table_one_away_fold = best_shanten == 1 \
-				and best_risk >= AI_DANGER_RISK_HIGH + 9.0 \
+				and (best_risk >= AI_DANGER_RISK_HIGH + 9.0 or best_max_opp_risk >= 23.0) \
 				and (cand_safety_lbl == "安" or cand_safety_lbl == "现" or cand_safety_lbl == "熟") \
 				and float(candidate.get("risk", 0.0)) <= 14.0 \
-				and pressure_gain >= 24.0
-			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai and not severe_table_one_away_fold:
+				and cand_max_opp_risk <= 8.0 \
+				and pressure_gain >= 22.0
+			focused_tenpai_safe_escape = focused_tenpai_bomb \
+				and (cand_safety_lbl == "安" or cand_safety_lbl == "现") \
+				and float(candidate.get("risk", 0.0)) <= 10.0 \
+				and cand_max_opp_risk <= 6.0 \
+				and pressure_gain >= 32.0
+			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai and not severe_table_one_away_fold and not focused_tenpai_safe_escape:
 				rejection_reason = "human_pressure_gate"
-			elif not severe_table_one_away_fold:
+			elif not severe_table_one_away_fold and not focused_tenpai_safe_escape:
 				if human_exposure_tenpai:
 					var materially_safer = candidate_human_exposure <= best_human_exposure - 8.0
 					var near_equal_exposure = candidate_human_exposure <= best_human_exposure + 3.0 and pressure_gain >= 35.0
@@ -2372,6 +2403,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		if best_risk >= AI_DANGER_RISK_HIGH + 18.0:
 			max_gap += 140.0
 		if severe_table_one_away_fold:
+			max_gap = maxf(max_gap, 720.0)
+		if focused_tenpai_safe_escape:
 			max_gap = maxf(max_gap, 680.0)
 		# Two-away cannot justify paying a material point-push premium into a
 		# near-zero same-shanten fold once the existing emergency signal is live.
@@ -5435,7 +5468,7 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 		var cache = eval_context.get("risk_vectors", {})
 		if typeof(cache) == TYPE_DICTIONARY and cache.has(cache_key):
 			return cache[cache_key] if quiet_read_only else duplicate_risk_vector(cache[cache_key])
-	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "danger_source": {}, "opponent_risks": {}}
+	var vector: Dictionary = {"score": 0.0, "threat": 0.0, "visible": 0, "max_opponent_risk": 0.0, "max_opponent_seat": -1, "danger_source": {}, "opponent_risks": {}}
 	if tile == "" or seat < 0 or seat >= players.size():
 		return vector
 	var known_counts = ai_context_known_counts(eval_context, seat, visible_counts_snapshot)
@@ -5463,6 +5496,8 @@ func tile_risk_vector(tile: String, seat: int, visible_counts_snapshot: Array = 
 			best_opponent = other
 	vector["score"] = risk
 	vector["threat"] = threat
+	vector["max_opponent_risk"] = best_risk
+	vector["max_opponent_seat"] = best_opponent
 	vector["opponent_risks"] = opponent_risks
 	if best_opponent >= 0 and best_risk >= 10.0 and not quiet_read_only:
 		vector["danger_source"] = {
