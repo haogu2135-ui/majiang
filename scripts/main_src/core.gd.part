@@ -10174,9 +10174,6 @@ func top_hud_status_tooltip_text() -> String:
 
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
-	# r215: GPT chrome conversion
-	# Keep the decorative texture behind the content. A TextureRect parent would
-	# multiply its tint and alpha into the text, weakening the reading contrast.
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
@@ -10185,13 +10182,13 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var line_count := int(lines.size())
 	var section_viewport := effective_viewport_size()
 	section.set_meta("viewport_snapshot", section_viewport)
 	section.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	var wide_typography := section_viewport.x >= 1600.0
 	var line_gap := 6.0 if wide_typography else 5.0
-	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
+	var body_size := commercial_ui_font_size(15 if section_viewport.x <= 960.0 else 17, 2)
+	var line_font_size := accessibility_font_size(body_size)
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
@@ -10202,10 +10199,6 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		required_text_height += line_height + line_gap
 	required_text_height += 44.0 if wide_typography else 38.0
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
-	var section_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
-	section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
-	section_plate.self_modulate = Color(0.93, 0.89, 0.81)
-	section.add_child(section_plate)
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045
@@ -10214,10 +10207,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
-	var numbered_title := "%02d · %s" % [section_index + 1, title_text] if section_index >= 0 else title_text
-	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(20, 3), Color(1.00, 0.91, 0.60), true)
+	var title_label = make_heading(vbox, title_text, commercial_ui_font_size(23, 3), Color(0.11, 0.23, 0.18))
 	style_guofeng_label(title_label)
-	title_label.add_theme_font_override("font", ui_heading_font())
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
 	title_label.tooltip_text = title_text
 	title_label.custom_minimum_size = Vector2(0, 30 if wide_typography else 28)
@@ -10235,7 +10226,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_guofeng_label(group_title)
 			group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
-		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
+		var line_label = make_label(vbox, str(line), body_size, Color(0.11, 0.23, 0.18), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
 		line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])

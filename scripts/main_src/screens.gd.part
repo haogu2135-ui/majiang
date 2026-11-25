@@ -437,6 +437,7 @@ func _show_menu_impl() -> void:
 	menu_parallax_enabled = false
 
 	var content_size = safe_content_pixel_size()
+	var compact_home := content_size.y <= 560.0
 	var tutorial_available := tutorial_is_available()
 	var tutorial_detail_text := tutorial_entry_detail_text()
 
@@ -444,7 +445,7 @@ func _show_menu_impl() -> void:
 	var header = Control.new()
 	header.name = "MenuTitleTextLayer"
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(header, rect_full(0.070, 0.075, 0.420, 0.205))
+	apply_rect(header, rect_full(0.085, 0.075, 0.420, 0.205))
 	root_layer.add_child(header)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		header.modulate = Color(1, 1, 1, 0)
@@ -454,10 +455,9 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_heading(header, "云桌麻将", commercial_ui_font_size(52, 8), Color(0.98, 0.94, 0.80), true)
+	var title = make_heading(header, "云桌麻将", commercial_ui_font_size(48 if compact_home else 64, 12), Color(0.98, 0.94, 0.80), true)
 	title.name = "MenuTitleLabel"
-	apply_rect(title, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(title, rect_full(0.0, 0.0, 1.0, 0.0))
 	title.set_meta("header_reserved_right", 0.445)
 	title.set_meta("full_text_route", "MenuTitleDetail")
 	title.tooltip_text = "云桌麻将 · 当前规则：" + rule_variant_label()
@@ -469,9 +469,9 @@ func _show_menu_impl() -> void:
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_theme_constant_override("outline_size", 1)
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.10, 0.08, 0.80))
-	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.88, 0.89, 0.78), false)
+	var title_rule = make_label(header, "当前规则 · %s" % rule_variant_label(), commercial_ui_font_size(15, 3), Color(0.94, 0.92, 0.82), false)
 	title_rule.name = "MenuTitleRule"
-	apply_rect(title_rule, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(title_rule, rect_full(0.0, 0.0, 1.0, 0.0))
 	title_rule.set_meta("header_reserved_right", 0.445)
 	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_rule.set_meta("wrap_policy", "two_line_when_rule_name_long")
@@ -519,63 +519,67 @@ func _show_menu_impl() -> void:
 		tutorial_face.self_modulate = Color(0.88, 0.82, 0.70)
 
 	if tutorial_available:
-		var tutorial_banner = add_optional_gpt_illustration_texture(root_layer, "menu_card_readable_gpt", rect_full(0.445, 0.205, 0.940, 0.385), 1.0, false)
+		var learning_left := 0.445 if compact_home else 0.085
+		var learning_top := ceilf(content_size.y * header.anchor_top if compact_home else content_size.y * header.anchor_top + header.offset_bottom + 8.0)
+		var learning_height := 70.0 if large_text_enabled else 64.0
+		var learning_width := 464.0 if large_text_enabled else 432.0
+		var tutorial_banner := make_gpt_plate_rect(rect_full(learning_left, 0.0, learning_left, 0.0), Color.WHITE, "menu_card_readable_gpt")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
-		tutorial_banner.self_modulate = Color(0.92, 0.88, 0.78)
+		tutorial_banner.offset_right = minf(learning_width, content_size.x * (0.965 - learning_left))
+		tutorial_banner.offset_top = learning_top
+		tutorial_banner.offset_bottom = learning_top + learning_height
+		root_layer.add_child(tutorial_banner)
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
 		tutorial_banner.set_meta("action_owner", "MenuTutorialStartButton")
 		# Only the two child buttons are actions. Let clicks on copy or ornament
 		# fall through instead of presenting a non-functional full-banner target.
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var tutorial_title = make_label(tutorial_banner, "新手教学", commercial_ui_font_size(15, 4), Color(0.10, 0.15, 0.12), true)
+		var tutorial_title = make_heading(tutorial_banner, "新手教学", 16, Color(0.10, 0.15, 0.12))
 		tutorial_title.name = "MenuTutorialEntryTitle"
-		tutorial_title.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-		tutorial_title.add_theme_constant_override("outline_size", 0)
-		tutorial_title.add_theme_constant_override("shadow_offset_x", 0)
-		tutorial_title.add_theme_constant_override("shadow_offset_y", 0)
-		apply_rect(tutorial_title, rect_full(0.050, 0.095, 1.0, 0.360))
-		tutorial_title.offset_right = -224.0
+		style_guofeng_label(tutorial_title)
+		apply_rect(tutorial_title, rect_full(0.045, 0.10, 1.0, 0.46))
+		tutorial_title.offset_right = -216.0
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, commercial_ui_font_size(12, 4), Color(0.24, 0.29, 0.23), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 13, Color(0.11, 0.23, 0.18), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
-		tutorial_detail.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-		tutorial_detail.add_theme_constant_override("outline_size", 0)
-		tutorial_detail.add_theme_constant_override("shadow_offset_x", 0)
-		tutorial_detail.add_theme_constant_override("shadow_offset_y", 0)
-		apply_rect(tutorial_detail, rect_full(0.050, 0.390, 1.0, 0.880))
-		tutorial_detail.offset_right = -224.0
+		style_guofeng_label(tutorial_detail)
+		apply_rect(tutorial_detail, rect_full(0.045, 0.46, 1.0, 0.91))
+		tutorial_detail.offset_right = -216.0
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		configure_clipped_label(tutorial_detail)
+		var tutorial_text_width := maxf(1.0, tutorial_banner.offset_right * 0.955 - 216.0)
+		configure_wrapped_label(tutorial_detail, tutorial_text_width, 0.0, 2.0)
+		tutorial_detail.max_lines_visible = 2
+		tutorial_detail.set_meta("max_visible_lines", 2)
 		set_ui_full_text(tutorial_detail, tutorial_detail_text, "新手教学进度详情")
-		if tutorial_detail_text.length() > 16 or large_text_enabled:
-			configure_wrapped_label(tutorial_detail, maxf(160.0, content_size.x * 0.245), 0.0, 2.0)
-			tutorial_detail.max_lines_visible = 2
-			tutorial_detail.set_meta("max_visible_lines", 2)
 		mark_ui_optimization(tutorial_detail, "F-453")
 		mark_ui_optimization(tutorial_detail, "F-225")
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
-		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
+		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
 		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
-		apply_guofeng_button_face(tutorial_action)
-		apply_rect(tutorial_action, rect_full(1.0, 0.205, 1.0, 0.800))
-		tutorial_action.offset_left = -212.0
+		apply_guofeng_button_face(tutorial_action, true)
+		apply_rect(tutorial_action, rect_full(1.0, 0.5, 1.0, 0.5))
+		tutorial_action.offset_left = -204.0
 		tutorial_action.offset_right = -92.0
+		tutorial_action.offset_top = -22.0
+		tutorial_action.offset_bottom = 22.0
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
 		tutorial_skip.name = "MenuTutorialSkipButton"
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
-		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
+		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
 		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_guofeng_button_face(tutorial_skip)
-		apply_rect(tutorial_skip, rect_full(1.0, 0.205, 1.0, 0.800))
-		tutorial_skip.offset_left = -84.0
-		tutorial_skip.offset_right = -8.0
+		apply_rect(tutorial_skip, rect_full(1.0, 0.5, 1.0, 0.5))
+		tutorial_skip.offset_left = -86.0
+		tutorial_skip.offset_right = -10.0
+		tutorial_skip.offset_top = -22.0
+		tutorial_skip.offset_bottom = 22.0
 		tutorial_banner.add_child(tutorial_skip)
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
@@ -586,8 +590,8 @@ func _show_menu_impl() -> void:
 	var card_gap := 32 if wide_menu else 28
 	row.add_theme_constant_override("separation", card_gap)
 	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
-	var available_card_width = max(720.0, content_size.x * 0.78)
-	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 340.0 if wide_menu else 290.0)
+	var available_card_width = max(720.0, content_size.x * 0.83)
+	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 470.0 if wide_menu else 338.0)
 	var card_height = clamp(floor(content_size.y * (0.225 if not wide_menu else 0.190)), 120.0, 198.0 if wide_menu else 176.0)
 	var quick_rail_top_px: float = content_size.y * 0.704
 	var card_row_top_px: float = content_size.y * 0.430
@@ -8649,7 +8653,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return false
 	var cached_row: Dictionary = settings_local_row_controls.get(setting_key, {}) if typeof(settings_local_row_controls.get(setting_key, {})) == TYPE_DICTIONARY else {}
-	for control_key in ["panel", "button", "status", "overview_summary", "overview_fill"]:
+	for control_key in ["panel", "button", "status", "overview_summary"]:
 		if not is_instance_valid(cached_row.get(control_key, null)):
 			cached_row = {}
 			break
@@ -8657,20 +8661,17 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	var button := cached_row.get("button", null) as Button
 	var status_label := cached_row.get("status", null) as Label
 	var overview_summary := cached_row.get("overview_summary", null) as Label
-	var overview_fill := cached_row.get("overview_fill", null) as Control
-	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary) or not is_current_ui_control(overview_fill):
+	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary):
 		settings_panel = root_layer.find_child("SettingsPanel", true, false) as Control
 		button = root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
 		status_label = root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
 		if settings_panel != null and button != null and status_label != null:
 			overview_summary = settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
-			overview_fill = settings_panel.find_child("SettingsOverviewFill", true, false) as Control
 			settings_local_row_controls[setting_key] = {
 				"panel": settings_panel,
 				"button": button,
 				"status": status_label,
 				"overview_summary": overview_summary,
-				"overview_fill": overview_fill,
 			}
 	if settings_panel == null or button == null or status_label == null or not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label):
 		return false
@@ -8780,13 +8781,8 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	button.set_meta("local_update_revision", settings_panel.get_meta("settings_local_update_revision", 0))
 
 	if overview_summary != null:
-		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
-		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_summary.text = "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play]
-		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
-	if overview_fill != null:
-		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_fill.anchor_right = 0.030 + 0.920 * clampf(float(enabled_total) / 6.0, 0.0, 1.0)
+		overview_summary.text = settings_overview_text()
+		set_ui_full_text(overview_summary, overview_summary.text, "设置总览")
 	return true
 
 func toggle_ai_assist_setting() -> void:

@@ -16612,10 +16612,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	# Every category owns the same reading area. Hidden categories retain their
 	# native controls, while focus and input only visit the selected category.
 	var audio_section_rect = rect_full(0.040, 0.290, 0.960, 0.875)
-	if not compact_settings and not large_text_enabled:
-		audio_section_rect = rect_full(0.040, 0.275, 0.965, 0.915)
 	var play_section_rect = audio_section_rect
-	var maint_section_rect = audio_section_rect
+	if not compact_settings and not large_text_enabled:
+		audio_section_rect = rect_full(0.040, 0.295, 0.700, 0.915)
+		play_section_rect = rect_full(0.040, 0.295, 0.965, 0.915)
+	var maint_section_rect = play_section_rect
 	var settings_content_parent: Control = null
 	var settings_grid_compact := compact_settings or large_text_enabled
 	var settings_large_text_scroll: ScrollContainer = null
@@ -16768,13 +16769,14 @@ func draw_settings_overlay(parent: Control) -> void:
 	var rule_activation_visible := rule_activation_full.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
 	var rule_variant_status_text := "%s · %s" % [rule_activation_visible, rule_difference_short]
 	var rule_variant_full_status_text := "%s · %s" % [rule_activation_full, rule_difference]
-	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.13, 0.17, 0.12, 0.98), true)
+	var rule_status_font_size := accessibility_font_size(13)
+	var rule_variant_status = make_label(panel, rule_variant_status_text, 13, Color(0.13, 0.17, 0.12, 0.98), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
 	rule_variant_status.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	rule_variant_status.add_theme_constant_override("outline_size", 0)
 	rule_variant_status.add_theme_constant_override("shadow_offset_x", 0)
 	rule_variant_status.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(rule_variant_status, rect_full(0.480, 0.140, 0.815, 0.172))
+	apply_rect(rule_variant_status, rect_full(0.350, 0.140, 0.815, 0.178))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
 	mark_ui_optimization(rule_variant_status, "F-080")
 	rule_variant_status.set_meta("status_summary_contract", "当前档案 · 关键规则差异")
@@ -16783,7 +16785,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_variant_status.tooltip_text = rule_variant_full_status_text
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(rule_variant_status)
-	fit_label_font_size(rule_variant_status, maxf(120.0, settings_viewport.x * 0.22), 11, 9)
+	fit_label_font_size(rule_variant_status, panel.size.x * 0.465, rule_status_font_size, accessibility_font_size(11))
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
 	# all fit in the compact panel while preserving readable setting rows.
@@ -17055,15 +17057,18 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 	mark_ui_optimization(status_label, "F-115")
 
 
+func settings_overview_text() -> String:
+	var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
+	return "声音已启用 %d 项 · 出牌辅助%s" % [enabled_audio, "开启" if ai_assist_enabled else "关闭"]
+
+
 func draw_settings_overview_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.540, 0.178, 0.965, 0.238))
 	parent.add_child(art)
-	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
-	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-	var summary = make_label(art, "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play], 12, Color(0.11, 0.23, 0.18), true)
+	var summary = make_label(art, settings_overview_text(), 12, Color(0.11, 0.23, 0.18), true)
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -17072,6 +17077,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	summary.add_theme_constant_override("shadow_offset_x", 0)
 	summary.add_theme_constant_override("shadow_offset_y", 0)
 	configure_clipped_label(summary)
+	set_ui_full_text(summary, summary.text, "设置总览")
 	return art
 
 
@@ -20422,18 +20428,8 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	section.set_meta("visual_contract", "transparent_group_on_one_authored_paper_surface")
+	set_ui_full_text(section, title_text, "设置分类")
 	parent.add_child(section)
-	var section_title = make_label(section, title_text, 14, Color(0.12, 0.25, 0.18), true)
-	section_title.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
-	section_title.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.70))
-	section_title.add_theme_constant_override("outline_size", 0)
-	section_title.add_theme_constant_override("shadow_offset_x", 0)
-	section_title.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
-	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	section_title.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
-	section_title.set_meta("section_status_lane", "title_reserved_above_grid")
-	mark_ui_optimization(section_title, "F-223")
 	var grid = GridContainer.new()
 	grid.name = "SettingsSectionGrid_%s" % title_text
 	configure_passive_container(grid)
@@ -20442,10 +20438,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	grid.add_theme_constant_override("h_separation", 16)
 	grid.add_theme_constant_override("v_separation", 8)
 	section.add_child(grid)
-	apply_rect(section_title, rect_full(0.0, 0.0, 1.0, 0.0))
-	section_title.offset_bottom = section_title.get_combined_minimum_size().y
 	apply_rect(grid, rect_full(0.0, 0.0, 1.0, 0.0))
-	grid.offset_top = section_title.get_combined_minimum_size().y + 10.0
 
 	return grid
 

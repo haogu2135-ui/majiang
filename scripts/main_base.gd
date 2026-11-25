@@ -1993,13 +1993,13 @@ func add_rules_background(parent: Control) -> void:
 	codex.name = "RulesBackgroundLowFrequencyBackdrop"
 
 func add_battle_background(parent: Control) -> void:
-	# A flat authored jade-felt table keeps the tile geometry visually aligned.
-	# The narrow wood rim stays peripheral, leaving every seat a quiet playing area.
-	var bright = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
-	if bright != null:
-		bright.name = "OfflineBattleBrightGPTTable"
-		bright.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		bright.self_modulate = Color.WHITE
+	# Keep the authored wooden rim in frame even when the viewport is wider than
+	# the artwork. The interior remains a quiet, continuous surface under play.
+	var table = add_optional_gpt_illustration_texture(parent, "table_scholar_archive", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if table == null:
+		table = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if table != null:
+		table.name = "OfflineBattleBrightGPTTable"
 		return
 	var battle_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
 	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.62, 0.82, 0.62, 0.84), battle_key, 0.82)
