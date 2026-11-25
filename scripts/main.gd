@@ -41681,6 +41681,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	quick_actions.clip_contents = false
 	quick_actions.set_meta("wrap_policy", "native_flow_all_quick_actions_reachable")
 	var latest := make_label(content, str(chat_messages.back()) if not chat_messages.is_empty() else "等待房间消息", 10 if compact else 11, Color(0.11, 0.23, 0.18), false)
+	latest.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	style_guofeng_label(latest)
 	latest.name = "ChatPanelLatestPreview"
 	latest.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
