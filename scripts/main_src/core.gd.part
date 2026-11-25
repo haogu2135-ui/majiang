@@ -4568,6 +4568,8 @@ func advisor_panel_occupancy_snapshot(viewport_snapshot: Vector2 = Vector2.ZERO,
 	var center_rect := battle_table_anchor_root_rect(CENTER_PANEL_RECT, resolved_viewport)
 	occupied.append(Rect2(center_rect.position, center_rect.size - center_rect.position))
 	occupied.append(Rect2(TOP_HUD_RECT.position, TOP_HUD_RECT.size - TOP_HUD_RECT.position))
+	if not has_pending_claim_window():
+		occupied.append(Rect2(Vector2(0.014, 0.112), Vector2(0.335, 0.132)))
 	occupied.append(Rect2(HAND_TRAY_RECT.position, HAND_TRAY_RECT.size - HAND_TRAY_RECT.position))
 	var action_rect := action_bar_dock_layout_rect(resolved_viewport, resolved_content_size)
 	occupied.append(Rect2(action_rect.position, action_rect.size - action_rect.position))
@@ -10287,7 +10289,7 @@ func add_rules_goal_hand_showcase(section: Control) -> void:
 	var card_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
 	var card_plate := add_optional_gpt_illustration_texture(card, card_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if card_plate != null:
-		card_plate.name = "RuleGoalHandShowcasePlate"
+		card_plate.name = "RuleGoalHandExampleFrame"
 		card_plate.self_modulate = Color(0.99, 0.97, 0.92)
 		configure_guofeng_button_slice(card_plate, true, 104 if card_key == "guofeng_card_frame_gpt" else 96, 0.22 if card_key == "guofeng_card_frame_gpt" else 0.125)
 	var showcase_box := VBoxContainer.new()

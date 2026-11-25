@@ -195,7 +195,7 @@ func _show_achievements_screen_impl() -> void:
 	panel.add_child(achievements_scroll_gutter)
 	var gutter_plate := add_optional_gpt_illustration_texture(achievements_scroll_gutter, "battle_ink_plaque_20261112", rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)
 	if gutter_plate != null:
-		gutter_plate.name = "AchievementsScrollGutterPlate"
+		gutter_plate.name = "AchievementsScrollGutterFrame"
 		configure_guofeng_button_slice(gutter_plate, true, 32, 0.25)
 	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.10, 0.008, 0.90, 0.048), Color(0.16, 0.28, 0.22, 0.85))
 	if achievements_scroll_up != null:
@@ -231,15 +231,15 @@ func _show_achievements_screen_impl() -> void:
 	var achievements_empty := achievement_total_count <= 0
 	var achievement_initial_last := mini(achievement_total_count, maxi(1, visible_row_count))
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
-	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.18, 0.27, 0.22), true)
+	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.14, 0.23, 0.18), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.942, 0.250))
+	apply_rect(achievements_browse_status, rect_full(0.055, 0.202, 0.942, 0.248))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(achievements_browse_status)
-	achievements_browse_status.add_theme_color_override("font_color", Color(0.18, 0.27, 0.22))
+	achievements_browse_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
 	achievements_browse_status.set_meta("preserve_semantic_color", true)
 	configure_clipped_label(achievements_browse_status)
-	achievements_browse_status.custom_minimum_size = Vector2(0, 24)
+	achievements_browse_status.custom_minimum_size = Vector2(0, 22)
 	set_ui_full_text(achievements_browse_status, "暂无可浏览的成就记录" if achievements_empty else "当前成就列表浏览位置", "成就浏览位置")
 	achievements_browse_status.set_meta("empty_state", achievements_empty)
 	achievements_browse_status.set_meta("range_contract", "current_visible_count_and_remaining")
@@ -1685,12 +1685,12 @@ func _show_online_lobby_impl() -> void:
 	empty_state_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(empty_state_title)
 	configure_clipped_label(empty_state_title)
-	var empty_state_hint = make_label(empty_state_backplate, "连接后显示房间、席位和日志", commercial_ui_font_size(13, 1), Color(0.20, 0.30, 0.25), false)
+	var empty_state_hint = make_label(empty_state_backplate, "连接后显示房间、席位和日志", commercial_ui_font_size(13, 1), Color(0.15, 0.24, 0.19), false)
 	empty_state_hint.name = "OnlineLobbyRoomOfflineHint"
 	apply_rect(empty_state_hint, rect_full(0.10, 0.52, 0.90, 0.68))
 	empty_state_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(empty_state_hint)
-	empty_state_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
+	empty_state_hint.add_theme_color_override("font_color", Color(0.15, 0.24, 0.19))
 	empty_state_hint.set_meta("preserve_semantic_color", true)
 	configure_clipped_label(empty_state_hint)
 	var log_title = make_label(log_panel, "四方雅集" if room_first_layout else "房间状态", commercial_ui_font_size(24 if room_first_layout else 20, 3), Color(0.11, 0.23, 0.18), true)
@@ -1720,7 +1720,7 @@ func _show_online_lobby_impl() -> void:
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var room_badge_plate := add_optional_gpt_illustration_texture(room_badge, "button_face_jiangnan_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if room_badge_plate != null:
-		room_badge_plate.name = "OnlineLobbyRoomBadgePlate"
+		room_badge_plate.name = "OnlineLobbyRoomFrame"
 		room_badge_plate.self_modulate = Color(0.97, 0.95, 0.90)
 		configure_guofeng_button_slice(room_badge_plate, true, 96, 0.125)
 		room_badge.move_child(room_badge_plate, 0)
@@ -4963,7 +4963,7 @@ func show_chat_panel() -> void:
 	input_shield.set_meta("modal_input_shield", true)
 	input_shield.set_meta("layout_role", "chat_modal_background")
 	var chat_scrim := make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.50), "ui_dark_scrim")
-	chat_scrim.name = "ChatPanelBackdropScrim"
+	chat_scrim.name = "ChatOverlayBackdrop"
 	chat_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	input_shield.add_child(chat_scrim)
 	input_shield.gui_input.connect(func(event: InputEvent) -> void:
@@ -7023,7 +7023,7 @@ func _show_replay_import_screen_impl() -> void:
 	panel.add_child(archive_pane)
 	var archive_pane_plate := add_optional_gpt_illustration_texture(archive_pane, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if archive_pane_plate != null:
-		archive_pane_plate.name = "ReplayArchivePanePlate"
+		archive_pane_plate.name = "ReplayArchiveFrame"
 		archive_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
 		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.11, 0.23, 0.18), true)
@@ -7132,7 +7132,7 @@ func _show_replay_import_screen_impl() -> void:
 	panel.add_child(timeline)
 	var timeline_pane_plate := add_optional_gpt_illustration_texture(timeline, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if timeline_pane_plate != null:
-		timeline_pane_plate.name = "ReplayImportTimelinePlate"
+		timeline_pane_plate.name = "ReplayImportTimelineFrame"
 		timeline_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
 		configure_guofeng_button_slice(timeline_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.11, 0.23, 0.18), true)
