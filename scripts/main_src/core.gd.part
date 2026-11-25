@@ -4650,7 +4650,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
-		context_height_px = 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	# Keep every viewport in the same upper-left reading lane. It sits below the
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.

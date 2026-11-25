@@ -27998,7 +27998,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.tooltip_text = "%s打出的%s · 点击行动按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
 	var narrow_context := viewport_size.x <= 960.0
-	var compact_large_context := narrow_context and large_text_enabled
+	var compact_large_context := large_text_enabled
 	apply_rect(tile_preview, rect_full(0.025, 0.040, 0.165 if narrow_context else 0.210, 0.960))
 	var text_left := 0.195 if narrow_context else 0.240
 	var panel_px_width := maxf(180.0, safe_content_pixel_size().x * maxf(0.10, context_rect.size.x - context_rect.position.x))
@@ -28057,7 +28057,7 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var content_size := safe_content_pixel_size()
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
-		var context_offset_px := 62.0 if (timer_viewport.x <= 960.0 and large_text_enabled) else 56.0
+		var context_offset_px := 62.0 if large_text_enabled else 56.0
 		var timer_top := 0.108 + context_offset_px / content_size.y
 		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
@@ -28105,9 +28105,10 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var content_height := countdown_height + line_gap + warning_height
 		var countdown_top := maxf(2.0, floorf((resolved_timer_h - content_height) * 0.5))
 		var warning_top := countdown_top + countdown_height + line_gap
+		var h_pad := 2.0 if (large_text_enabled and effective_viewport_size().x <= 960.0) else 8.0
 		apply_rect(timer_label, rect_full(0.0, 0.0, 1.0, 0.0))
-		timer_label.offset_left = 8.0
-		timer_label.offset_right = -8.0
+		timer_label.offset_left = h_pad
+		timer_label.offset_right = -h_pad
 		timer_label.offset_top = countdown_top
 		timer_label.offset_bottom = countdown_top + countdown_height
 		timer_label.add_theme_color_override("font_color", Color(0.62, 0.16, 0.13))
@@ -51928,7 +51929,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
-		context_height_px = 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	# Keep every viewport in the same upper-left reading lane. It sits below the
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.
