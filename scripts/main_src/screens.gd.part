@@ -5140,8 +5140,11 @@ func show_chat_panel() -> void:
 	chat_input.clear_button_enabled = true
 	chat_input.add_theme_font_override("font", ui_cjk_font())
 	chat_input.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	chat_input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
-	chat_input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	chat_input.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
+	chat_input.add_theme_color_override("font_placeholder_color", Color(0.30, 0.39, 0.33))
+	chat_input.add_theme_color_override("caret_color", Color(0.11, 0.23, 0.18))
+	chat_input.add_theme_color_override("font_selected_color", Color(0.10, 0.12, 0.10))
+	chat_input.add_theme_color_override("selection_color", Color(0.56, 0.70, 0.48, 0.72))
 	configure_line_edit_input(chat_input, "聊天", CHAT_MESSAGE_MAX_LENGTH)
 	chat_input.tooltip_text = "输入聊天消息，最多%d字；Enter发送" % CHAT_MESSAGE_MAX_LENGTH
 	chat_input.set_meta("ui_full_text", chat_input.tooltip_text)
@@ -5151,9 +5154,11 @@ func show_chat_panel() -> void:
 	mark_ui_optimization(chat_input, "F-616")
 	mark_ui_optimization(chat_input, "F-120")
 	var input_styles := input_style_set()
-	chat_input.add_theme_stylebox_override("normal", input_styles["normal"])
-	chat_input.add_theme_stylebox_override("focus", input_styles["focus"])
-	chat_input.add_theme_stylebox_override("read_only", input_styles["read_only"])
+	for style_name in ["normal", "focus", "read_only"]:
+		var chat_field_style := input_styles[style_name].duplicate() as StyleBox
+		chat_field_style.content_margin_left = maxf(chat_field_style.content_margin_left, 10.0)
+		chat_field_style.content_margin_right = maxf(chat_field_style.content_margin_right, float(UI_MIN_TOUCH_TARGET) + 4.0)
+		chat_input.add_theme_stylebox_override(style_name, chat_field_style)
 	draw_line_edit_input_art(chat_input, "聊天")
 	chat_input.text_submitted.connect(func(_value: String) -> void:
 		send_chat_input()
@@ -5214,6 +5219,14 @@ func show_chat_panel() -> void:
 		chat_panel.add_child(chat_input)
 	var chat_clear_proxy := add_line_edit_clear_proxy(chat_panel, chat_input, "ChatInputClearButton", Callable(self, "refresh_chat_send_button_state"))
 	if chat_clear_proxy != null:
+		chat_clear_proxy.flat = true
+		var chat_clear_empty := StyleBoxEmpty.new()
+		for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
+			chat_clear_proxy.add_theme_stylebox_override(style_key, chat_clear_empty)
+		chat_clear_proxy.add_theme_color_override("icon_normal_color", Color(0.24, 0.34, 0.28, 0.86))
+		chat_clear_proxy.add_theme_color_override("icon_hover_color", Color(0.58, 0.16, 0.13, 1.0))
+		chat_clear_proxy.add_theme_color_override("icon_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
+		chat_clear_proxy.add_theme_color_override("icon_focus_color", Color(0.11, 0.23, 0.18, 1.0))
 		chat_clear_proxy.set_meta("chat_clear_contract", "44px_input_clear_fixed_gap_to_send")
 		chat_clear_proxy.set_meta("clear_send_gap_px", 8.0 if compact_chat else 6.0)
 		mark_ui_optimization(chat_clear_proxy, "F-178")
@@ -5395,16 +5408,23 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			text_color = Color(0.92, 0.94, 0.86, 0.98)
 
 		var indicator: Control
+		var day_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+		var active_day_key := "button_face_jiangnan_active_gpt" if optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null else "battle_ink_plaque_20261112"
 		if is_current:
-			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, "battle_ink_plaque_20261112")
+			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, active_day_key)
 			indicator.self_modulate = Color.WHITE
-			configure_guofeng_button_slice(indicator as TextureRect, true, 32, 0.25)
+			if active_day_key == "button_face_jiangnan_active_gpt":
+				configure_guofeng_button_slice(indicator as TextureRect, true, 96, 0.125)
+			else:
+				configure_guofeng_button_slice(indicator as TextureRect, true, 32, 0.25)
 		elif is_milestone and not is_claimed:
-			indicator = make_gpt_center_crop_plate_rect(indicator_rect, Color.WHITE, "quiet_gold_accent", 0.65)
-			indicator.self_modulate = Color(0.96, 0.92, 0.80)
+			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, day_frame_key)
+			indicator.self_modulate = Color(1.0, 0.96, 0.84)
+			configure_guofeng_button_slice(indicator as TextureRect, true, 104 if day_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if day_frame_key == "guofeng_card_frame_gpt" else 0.125)
 		else:
-			indicator = make_gpt_center_crop_plate_rect(indicator_rect, Color.WHITE, "menu_card_readable_gpt", 0.65)
-			indicator.self_modulate = Color(0.95, 0.92, 0.85) if is_claimed else Color(0.84, 0.80, 0.72)
+			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, day_frame_key)
+			indicator.self_modulate = Color(0.98, 0.96, 0.91) if is_claimed else Color(0.92, 0.89, 0.82)
+			configure_guofeng_button_slice(indicator as TextureRect, true, 104 if day_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if day_frame_key == "guofeng_card_frame_gpt" else 0.125)
 		indicator.name = "DailyLoginDayNode_%d" % day_num
 		var day_reward_text := "双倍" if is_milestone else "+100"
 		var day_state_text := "第%d天 · %s · %s" % [day_num, ("已领取" if is_claimed else ("今日可领" if is_current else "待签到")), day_reward_text]
@@ -5451,15 +5471,21 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			icon_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(icon_label)
 
-		# 已签到的天数添加对勾
+		# 已签到的天数添加对勾；第7天未领时在右上角展示双倍铜钱符小徽章
 		if is_claimed:
 			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.790, 0.075, 0.945, 0.255), Color(0.76, 0.20, 0.14, 0.95))
 			if claimed_check != null:
 				claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
+		elif is_milestone:
+			var milestone_charm := add_optional_gpt_illustration_texture(indicator, "shop_charm_bei", rect_full(0.750, 0.055, 0.955, 0.295), 0.92, false)
+			if milestone_charm != null:
+				milestone_charm.name = "DailyLoginMilestoneCharm_%d" % day_num
+				milestone_charm.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				milestone_charm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		if is_current:
 			indicator.modulate = Color.WHITE
-		var day_focus_rail := make_gpt_center_crop_plate_rect(rect_full(0.140, 0.030, 0.860, 0.062), Color.WHITE, "quiet_gold_accent", 0.50)
+		var day_focus_rail := make_gpt_center_crop_plate_rect(rect_full(0.220, 0.905, 0.780, 0.940), Color.WHITE, "quiet_gold_accent", 0.50)
 		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
 		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		day_focus_rail.modulate.a = 0.46 if is_current else 0.0
@@ -5549,13 +5575,15 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	progress_panel.set_meta("bottom_lane_top", claim_top)
 	mark_ui_optimization(progress_panel, "F-234")
 	panel.add_child(progress_panel)
-	var progress_rail = make_gpt_center_crop_plate_rect(rect_full(0.180, 0.680, 0.820, 0.940), Color.WHITE, "menu_card_readable_gpt", 0.35)
+	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.680, 0.820, 0.940), Color.WHITE, "battle_ink_plaque_20261112")
 	progress_rail.name = "DailyLoginProgressRail"
-	progress_rail.self_modulate = Color(0.86, 0.82, 0.72)
+	progress_rail.self_modulate = Color(1.0, 1.0, 1.0, 0.28)
+	configure_guofeng_button_slice(progress_rail as TextureRect, true, 32, 0.25)
 	progress_panel.add_child(progress_rail)
 	var progress_ratio := 0.0 if progress <= 0 else clampf(float(progress) / 7.0, 0.0, 1.0)
-	var progress_fill = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, progress_ratio, 1.0), Color.WHITE, "menu_ink_primary", 0.35)
+	var progress_fill = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, progress_ratio, 1.0), Color.WHITE, "table_gpt_backdrop_bright", 0.35)
 	progress_fill.name = "DailyLoginProgressFill"
+	progress_fill.self_modulate = Color(0.95, 1.0, 0.94, 0.96)
 	progress_fill.set_meta("progress_value", progress_ratio)
 	progress_fill.set_meta("animated_role", "daily_login_progress_flow")
 	progress_rail.add_child(progress_fill)
@@ -5583,6 +5611,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var claim_button := confirm_button_ref.get("button") as Button
 		if claim_button != null and is_instance_valid(claim_button):
 			claim_button.disabled = true
+			sync_guofeng_button_face_state(claim_button)
 			claim_button.text = "领取中"
 			claim_button.tooltip_text = "签到请求处理中，请勿重复点击"
 			claim_button.set_meta("claim_state", "in_flight")
@@ -5599,11 +5628,13 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 					claim_button.set_meta("claim_state", "claimed")
 					claim_button.set_meta("disabled_reason", "今日奖励已领取")
 					set_ui_full_text(claim_button, claim_button.tooltip_text, "签到奖励操作：已领取")
+					sync_guofeng_button_face_state(claim_button)
 				show_toast("今日奖励已领取。", 1800)
 				return
 			claim_in_flight["active"] = false
 			if claim_button != null and is_instance_valid(claim_button):
 				claim_button.disabled = false
+				sync_guofeng_button_face_state(claim_button)
 				claim_button.text = "领取奖励"
 				claim_button.tooltip_text = "领取今日签到奖励；领取后奖励立即入账"
 				claim_button.set_meta("claim_state", "available")
@@ -5633,6 +5664,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			claimed_button.visible = true
 			claimed_button.focus_mode = Control.FOCUS_NONE
 			claimed_button.modulate = Color.WHITE
+			sync_guofeng_button_face_state(claimed_button)
 		var claimed_status := panel.find_child("DailyLoginClaimedStatusSurface", true, false) as Control
 		if claimed_status != null:
 			claimed_status.visible = true
@@ -5676,6 +5708,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	)
 	confirm_btn.custom_minimum_size = Vector2(220, 50)
 	confirm_btn.name = "DailyLoginClaimButton"
+	confirm_btn.add_theme_font_override("font", ui_heading_font())
+	confirm_btn.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(20, 2)))
 	set_ui_full_text(confirm_btn, "今日奖励已领取" if claimed_today else "领取今日签到奖励", "签到奖励操作：" + ("已领取" if claimed_today else "可领取"))
 	confirm_btn.set_meta("claim_state", "claimed" if claimed_today else "available")
 	confirm_btn.tooltip_text = "今日奖励已领取" if claimed_today else "领取今日签到奖励；领取后奖励立即入账"
@@ -5689,7 +5723,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	confirm_button_ref["button"] = confirm_btn
 	style_guofeng_secondary_action(confirm_btn, true)
 	panel.add_child(confirm_btn)
-	apply_rect(confirm_btn, rect_full(0.315, claim_top, 0.685, claim_bottom))
+	apply_rect(confirm_btn, rect_full(0.380, claim_top, 0.620, claim_bottom))
 	var claimed_status_surface := make_layout_host(rect_full(0.20, 0.805, 0.80, 0.860))
 	claimed_status_surface.name = "DailyLoginClaimedStatusSurface"
 	claimed_status_surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -5706,6 +5740,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		confirm_btn.visible = true
 		confirm_btn.focus_mode = Control.FOCUS_NONE
 		confirm_btn.modulate = Color.WHITE
+		sync_guofeng_button_face_state(confirm_btn)
 		confirm_btn.set_meta("status_surface_policy", "disabled_claim_button_remains_visible")
 	# Keep the passive status plate behind the disabled native button so the
 	# visible "已领取" command remains the stable state owner.
@@ -5714,8 +5749,10 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var days_to_bonus = max(0, 7 - progress)
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
-	var forecast_panel = make_gpt_center_crop_plate_rect(rect_full(0.06, forecast_top, 0.94, forecast_bottom), Color.WHITE, "menu_card_readable_gpt", 0.65)
-	forecast_panel.self_modulate = Color(0.93, 0.89, 0.80)
+	var forecast_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var forecast_panel = make_gpt_plate_rect(rect_full(0.06, forecast_top, 0.94, forecast_bottom), Color.WHITE, forecast_frame_key)
+	forecast_panel.self_modulate = Color(0.98, 0.96, 0.91)
+	configure_guofeng_button_slice(forecast_panel as TextureRect, true, 104 if forecast_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if forecast_frame_key == "guofeng_card_frame_gpt" else 0.125)
 	forecast_panel.name = "DailyLoginForecastPanel"
 	forecast_panel.set_meta("body_owner", "DailyLoginForecastBody")
 	forecast_panel.set_meta("tip_policy", "legacy_tip_anchor_hidden")
@@ -6452,8 +6489,10 @@ func show_exit_confirm() -> void:
 			live_status.set_meta("save_state", "saving")
 		if continue_btn != null and is_instance_valid(continue_btn):
 			continue_btn.disabled = true
+			sync_guofeng_button_face_state(continue_btn)
 		if exit_btn != null and is_instance_valid(exit_btn):
 			exit_btn.disabled = true
+			sync_guofeng_button_face_state(exit_btn)
 		save_offline_progress(false)
 		if mode == "offline" and not offline_progress_last_save_ok:
 			exit_confirm_decision_locked = false
@@ -6463,8 +6502,10 @@ func show_exit_confirm() -> void:
 				live_status.set_meta("save_state", "failed")
 			if continue_btn != null and is_instance_valid(continue_btn):
 				continue_btn.disabled = false
+				sync_guofeng_button_face_state(continue_btn)
 			if exit_btn != null and is_instance_valid(exit_btn):
 				exit_btn.disabled = false
+				sync_guofeng_button_face_state(exit_btn)
 			return
 		if live_status != null:
 			set_dynamic_label_text(live_status, "已保存，正在返回", "当前牌局已保存，正在返回主菜单")
@@ -6477,8 +6518,8 @@ func show_exit_confirm() -> void:
 	exit_btn.name = "ExitConfirmLeaveButton"
 	exit_btn.focus_mode = Control.FOCUS_ALL
 	exit_btn.custom_minimum_size = Vector2(144, 52)
-	exit_btn.set_meta("ui_danger_action", true)
-	style_guofeng_secondary_action(exit_btn)
+	mark_guofeng_danger_button(exit_btn, false)
+	style_guofeng_secondary_action(exit_btn, false)
 	button_row.add_child(exit_btn)
 	continue_btn.focus_neighbor_left = exit_btn.get_path()
 	continue_btn.focus_neighbor_right = exit_btn.get_path()
@@ -6541,7 +6582,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		loading_view_state = view_state.duplicate(true)
 	if loading_view_state.is_empty():
 		loading_view_state = {
-			"status": "正在加载中",
+			"status": "正在布置牌桌",
 			"progress_ratio": -1.0,
 		}
 	clear_screen()
@@ -6561,12 +6602,12 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	var paper_rect := rect_full(0.5 - paper_width / content_size.x * 0.5, 0.5 - paper_height / content_size.y * 0.5, 0.5 + paper_width / content_size.x * 0.5, 0.5 + paper_height / content_size.y * 0.5)
 	var center_panel := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	center_panel.name = "LoadingCenterPanel"
-	center_panel.self_modulate = Color(0.92, 0.88, 0.78)
+	center_panel.self_modulate = Color.WHITE
 	center_panel.set_meta("guofeng_surface_key", "settings_readable_gpt")
 	bg.add_child(center_panel)
 
 	# 游戏标题
-	var title = make_heading(center_panel, "云桌麻将", 40, GOLD_BRIGHT, true)
+	var title = make_heading(center_panel, "云桌麻将", 40, Color(0.08, 0.16, 0.12), true)
 	title.name = "LoadingTitleLabel"
 	apply_rect(title, rect_full(0.10, 0.080, 0.90, 0.240))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -6574,19 +6615,22 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	fit_label_font_size(title, paper_width * 0.80, 40, 32)
 	set_ui_full_text(title, "云桌麻将", "加载页标题：云桌麻将")
 	mark_ui_optimization(title, "F-493")
-	title.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.95))
-	title.add_theme_constant_override("outline_size", 5)
+	style_guofeng_label(title)
+	title.add_theme_color_override("font_color", Color(0.08, 0.16, 0.12))
+	title.set_meta("preserve_semantic_color", true)
 
 	# 副标题
-	var subtitle = make_label(center_panel, "国风雅韵 · 智慧博弈", 18, Color(0.96, 0.97, 0.90, 1.0), false)
+	var subtitle = make_label(center_panel, "国风雅韵 · 智慧博弈", 18, Color(0.14, 0.23, 0.19), false)
 	subtitle.name = "LoadingSubtitleLabel"
-	apply_rect(subtitle, rect_full(0.15, 0.255, 0.85, 0.335))
+	subtitle.add_theme_font_override("font", ui_heading_font())
+	apply_rect(subtitle, rect_full(0.15, 0.255, 0.85, 0.340))
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.clip_text = true
 	set_ui_full_text(subtitle, "国风雅韵 · 智慧博弈", "加载页副标题")
 	mark_ui_optimization(subtitle, "F-494")
-	subtitle.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
-	subtitle.add_theme_constant_override("outline_size", 3)
+	style_guofeng_label(subtitle)
+	subtitle.add_theme_color_override("font_color", Color(0.14, 0.23, 0.19))
+	subtitle.set_meta("preserve_semantic_color", true)
 	var loading_shuffle_art := draw_loading_shuffle_art(center_panel)
 	var loading_progress_art := draw_loading_progress_feedback(center_panel, float(loading_view_state.get("progress_ratio", -1.0)))
 	if loading_error:
@@ -6600,11 +6644,11 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	center_panel.add_child(loading_area)
 
 	# 加载文字
-	var loading_status_text := str(loading_view_state.get("status", "正在加载中"))
+	var loading_status_text := str(loading_view_state.get("status", "正在布置牌桌"))
 	if loading_error and loading_status_text.strip_edges() == "":
 		loading_status_text = "加载失败，请选择恢复动作"
 	var loading_status_display := "加载失败，请选择恢复动作" if loading_error else loading_status_text
-	var loading_text = make_label(loading_area, loading_status_display, 20, Color(1.0, 0.98, 0.92, 1.0), true)
+	var loading_text = make_label(loading_area, loading_status_display, 20, Color(0.09, 0.19, 0.14), true)
 	loading_text.name = "LoadingStatusLabel"
 	apply_rect(loading_text, rect_full(0.0, 0.0, 1.0, 1.0))
 	loading_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -6612,11 +6656,12 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	configure_wrapped_label(loading_text, maxf(260.0, loading_viewport_size.x * 0.300), 0.0, 3.0)
 	set_ui_full_text(loading_text, loading_status_text, "加载状态：" + loading_status_text)
 	mark_ui_optimization(loading_text, "F-430")
-	loading_text.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.90))
-	loading_text.add_theme_constant_override("outline_size", 3)
+	style_guofeng_label(loading_text)
+	loading_text.add_theme_color_override("font_color", Color(0.46, 0.13, 0.10) if loading_error else Color(0.09, 0.19, 0.14))
+	loading_text.set_meta("preserve_semantic_color", true)
 	loading_area.move_to_front()
 	if loading_error:
-		var error_hint := make_label(center_panel, "加载失败 · 可重试或返回主菜单", 12, Color(1.0, 0.76, 0.62), false)
+		var error_hint := make_label(center_panel, "加载失败 · 可重试或返回主菜单", 12, Color(0.46, 0.13, 0.10), false)
 		error_hint.name = "LoadingErrorHint"
 		apply_rect(error_hint, rect_full(0.110, 0.610, 0.890, 0.725))
 		error_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -6627,6 +6672,9 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 		configure_wrapped_label(error_hint, maxf(220.0, loading_viewport_size.x * 0.62), 0.0, 2.0)
 		error_hint.max_lines_visible = 2
 		error_hint.set_meta("max_visible_lines", 2)
+		style_guofeng_label(error_hint)
+		error_hint.add_theme_color_override("font_color", Color(0.46, 0.13, 0.10))
+		error_hint.set_meta("preserve_semantic_color", true)
 		mark_ui_optimization(error_hint, "F-495")
 		mark_ui_optimization(error_hint, "F-236")
 		var error_action_lane := Control.new()
@@ -6672,7 +6720,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	if tip_text == "":
 		tip_text = tips[randi() % tips.size()]
 		loading_view_state["tip"] = tip_text
-	var tip_label = make_label(center_panel, tip_text, 15, Color(0.96, 0.96, 0.90, 1.0), false)
+	var tip_label = make_label(center_panel, tip_text, 15, Color(0.15, 0.24, 0.19), false)
 	tip_label.name = "LoadingTipLabel"
 	apply_rect(tip_label, rect_full(0.10, 0.765, 0.90, 0.885))
 	tip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -6680,8 +6728,9 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	configure_wrapped_label(tip_label, maxf(260.0, loading_viewport_size.x * 0.340), 0.0, 3.0)
 	tip_label.set_meta("accessible_name", "加载提示：" + tip_text)
 	mark_ui_optimization(tip_label, "F-431")
-	tip_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.03, 0.85))
-	tip_label.add_theme_constant_override("outline_size", 2)
+	style_guofeng_label(tip_label)
+	tip_label.add_theme_color_override("font_color", Color(0.15, 0.24, 0.19))
+	tip_label.set_meta("preserve_semantic_color", true)
 	tip_label.move_to_front()
 	if loading_error:
 		tip_label.visible = false
@@ -6691,15 +6740,17 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 			error_tip_art.visible = false
 
 	# 版本信息
-	var version_label = make_label(center_panel, "v%s" % app_version_short(), 13, Color(0.88, 0.88, 0.78, 0.94), false)
+	var version_label = make_label(center_panel, "v%s" % app_version_short(), 13, Color(0.17, 0.24, 0.20), false)
 	version_label.name = "LoadingVersionLabel"
 	apply_rect(version_label, rect_full(0.25, 0.915, 0.75, 0.980))
 	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	version_label.clip_text = true
 	version_label.tooltip_text = app_version()
-	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	set_ui_full_text(version_label, app_version(), "应用版本")
 	mark_ui_optimization(version_label, "F-498")
+	style_guofeng_label(version_label)
+	version_label.add_theme_color_override("font_color", Color(0.17, 0.24, 0.20))
+	version_label.set_meta("preserve_semantic_color", true)
 
 	style_guofeng_reading_tree(center_panel)
 
@@ -6859,8 +6910,19 @@ func _show_replay_import_screen_impl() -> void:
 	if input_paper != null:
 		input_paper.name = "ReplayFieldPaperFace"
 		input_paper.show_behind_parent = true
-		input_paper.self_modulate = Color(0.99, 0.98, 0.94)
-		configure_guofeng_button_slice(input_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 24, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.5)
+		input_paper.self_modulate = Color.WHITE
+		configure_guofeng_button_slice(input_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 40, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.25)
+		var input_focus_tex := optional_gpt_illustration_texture("input_field_paper_focus_gpt")
+		var input_normal_tex := optional_gpt_illustration_texture("input_field_paper_normal_gpt")
+		if input_focus_tex != null and input_normal_tex != null:
+			input.focus_entered.connect(func() -> void:
+				if is_instance_valid(input_paper):
+					configure_guofeng_button_slice(input_paper, true, 40, 0.25, input_focus_tex)
+			)
+			input.focus_exited.connect(func() -> void:
+				if is_instance_valid(input_paper):
+					configure_guofeng_button_slice(input_paper, true, 40, 0.25, input_normal_tex)
+			)
 	input.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	input.add_theme_color_override("font_placeholder_color", Color(0.32, 0.40, 0.34))
 	input.add_theme_color_override("caret_color", Color(0.11, 0.23, 0.18))
@@ -6962,8 +7024,8 @@ func _show_replay_import_screen_impl() -> void:
 	var archive_pane_plate := add_optional_gpt_illustration_texture(archive_pane, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if archive_pane_plate != null:
 		archive_pane_plate.name = "ReplayArchivePanePlate"
-		archive_pane_plate.self_modulate = Color(0.97, 0.95, 0.90)
-		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.25)
+		archive_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
+		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.11, 0.23, 0.18), true)
 	archive_title.name = "ReplayArchiveTitle"
 	archive_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -6997,8 +7059,19 @@ func _show_replay_import_screen_impl() -> void:
 	if search_paper != null:
 		search_paper.name = "ReplayFieldPaperFace"
 		search_paper.show_behind_parent = true
-		search_paper.self_modulate = Color(0.99, 0.98, 0.94)
-		configure_guofeng_button_slice(search_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 24, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.5)
+		search_paper.self_modulate = Color.WHITE
+		configure_guofeng_button_slice(search_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 40, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.25)
+		var search_focus_tex := optional_gpt_illustration_texture("input_field_paper_focus_gpt")
+		var search_normal_tex := optional_gpt_illustration_texture("input_field_paper_normal_gpt")
+		if search_focus_tex != null and search_normal_tex != null:
+			search.focus_entered.connect(func() -> void:
+				if is_instance_valid(search_paper):
+					configure_guofeng_button_slice(search_paper, true, 40, 0.25, search_focus_tex)
+			)
+			search.focus_exited.connect(func() -> void:
+				if is_instance_valid(search_paper):
+					configure_guofeng_button_slice(search_paper, true, 40, 0.25, search_normal_tex)
+			)
 	search.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	search.add_theme_color_override("font_placeholder_color", Color(0.32, 0.40, 0.34))
 	search.add_theme_color_override("caret_color", Color(0.11, 0.23, 0.18))
@@ -7060,8 +7133,8 @@ func _show_replay_import_screen_impl() -> void:
 	var timeline_pane_plate := add_optional_gpt_illustration_texture(timeline, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if timeline_pane_plate != null:
 		timeline_pane_plate.name = "ReplayImportTimelinePlate"
-		timeline_pane_plate.self_modulate = Color(0.97, 0.95, 0.90)
-		configure_guofeng_button_slice(timeline_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.25)
+		timeline_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
+		configure_guofeng_button_slice(timeline_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.11, 0.23, 0.18), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
 	timeline_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -7131,7 +7204,14 @@ func _show_replay_import_screen_impl() -> void:
 	for action in [paste_button, clear_button, import_button, copy_code_button]:
 		style_guofeng_secondary_action(action, action == import_button)
 	if search_clear_proxy != null:
-		style_guofeng_secondary_action(search_clear_proxy)
+		search_clear_proxy.flat = true
+		var search_clear_empty := StyleBoxEmpty.new()
+		for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
+			search_clear_proxy.add_theme_stylebox_override(style_key, search_clear_empty)
+		search_clear_proxy.add_theme_color_override("icon_normal_color", Color(0.24, 0.34, 0.28, 0.86))
+		search_clear_proxy.add_theme_color_override("icon_hover_color", Color(0.58, 0.16, 0.13, 1.0))
+		search_clear_proxy.add_theme_color_override("icon_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
+		search_clear_proxy.add_theme_color_override("icon_focus_color", Color(0.11, 0.23, 0.18, 1.0))
 	configure_button_focus_navigation(panel, "ReplayImportCodeInput")
 	call_deferred("focus_named_control", "ReplayImportCodeInput")
 	render_replay_archive_list()
@@ -7254,10 +7334,12 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 		import_button.disabled = not valid_shape
 		import_button.tooltip_text = "请输入有效格式的回放码后校验并导入" if not valid_shape else "校验并打开回放时间线"
 		import_button.set_meta("replay_input_valid", valid_shape)
+		sync_guofeng_button_face_state(import_button)
 	var copy_code_button := root_layer.find_child("ReplayImportCopyCodeButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if copy_code_button != null:
 		copy_code_button.disabled = code == ""
 		copy_code_button.tooltip_text = "复制输入框中的完整回放码，不使用首尾摘要" if code != "" else "输入回放码后可复制完整值"
+		sync_guofeng_button_face_state(copy_code_button)
 
 
 func replay_import_shape_error_text(value: String) -> String:
@@ -7579,7 +7661,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	if row_plate != null:
 		row_plate.name = "ReplayArchiveRowPlate"
 		row_plate.self_modulate = Color(0.99, 0.97, 0.93)
-		configure_guofeng_button_slice(row_plate, true, 96 if row_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if row_frame_key == "button_face_jiangnan_gpt" else 0.25)
+		configure_guofeng_button_slice(row_plate, true, 96 if row_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if row_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
 	# visible labels make favorite state discoverable without relying on a glyph.
 	# Keep the row height stable while confirmation text occupies the metadata

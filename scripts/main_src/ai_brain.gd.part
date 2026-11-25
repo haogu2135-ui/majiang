@@ -396,7 +396,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 	elif allow and exposed_melds == 0 and rule_min_fan() >= 3 and after_plan_label_now == "标准":
 		# 高起胡番规则（如广东3番起胡）：首副露会失去门清(+1番)，若无大牌路线或足够底番，
 		# 避免远听脏开门锁死成无法起胡的低番手牌。
-		var guaranteed_open_fan := 1 + own_flowers + (1 if seat == dealer_seat else 0) + (1 if claim == "gang" else 0)
+		var guaranteed_open_fan: int = 1 + own_flowers + (1 if seat == dealer_seat else 0) + (1 if claim == "gang" else 0)
 		if guaranteed_open_fan < rule_min_fan() and (after_shanten > 0 or claim_diff != AI_DIFFICULTY_EASY):
 			allow = false
 			reason = "起胡番不足"
@@ -1028,7 +1028,8 @@ func ai_ron_decision_report(seat: int, tile: String, win_context: String = "", h
 	var defense = ai_profile_value(seat, "defense")
 	var ron_diff := clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	# 末局非庄家大幅落后：若当前廉价荣和仍无法翻盘、且存在可逆转的厚高番听口，允许搏翻盘留听。
-	var final_hand_must_chase := strategy == "追分" and offline_hand_number >= MATCH_MAX_HANDS and seat != dealer_seat and ron_diff >= AI_DIFFICULTY_NORMAL and target_gap < 0 and points < abs(target_gap) and alt_best_points >= abs(target_gap) and alt_remaining >= 2 and wall >= wall_phase_threshold(14)
+	var abs_target_gap: int = absi(int(target_gap))
+	var final_hand_must_chase: bool = strategy == "追分" and int(offline_hand_number) >= int(MATCH_MAX_HANDS) and seat != int(dealer_seat) and ron_diff >= AI_DIFFICULTY_NORMAL and int(target_gap) < 0 and int(points) < abs_target_gap and int(alt_best_points) >= abs_target_gap and int(alt_remaining) >= 2 and int(wall) >= wall_phase_threshold(14)
 	if final_hand_must_chase and not multi_threat and not should_force_accept_for_wall_draw_ba(seat, points, wall):
 		report["accept"] = false
 		report["reason"] = "末局追番留听"
@@ -1921,9 +1922,9 @@ func choose_ai_discard_for_seat(seat: int) -> String:
 	var decision_difficulty := ai_decision_difficulty_for_seat(seat)
 	if decision_difficulty == AI_DIFFICULTY_EASY and reports.size() >= 2:
 		var best_score = float(reports[0].get("score", 0.0))
-		var best_shanten = int(reports[0].get("shanten", 8))
-		var mistake_prob := 0.22 if best_shanten <= 0 else 0.34
-		var mistake_gap := 48.0 if best_shanten <= 0 else 95.0
+		var best_shanten: int = int(reports[0].get("shanten", 8))
+		var mistake_prob: float = 0.22 if best_shanten <= 0 else 0.34
+		var mistake_gap: float = 48.0 if best_shanten <= 0 else 95.0
 		if randf() < mistake_prob:
 			var pick_index := 1
 			if best_shanten >= 1 and reports.size() >= 3 and best_score - float(reports[2].get("score", 0.0)) <= 70.0 and randf() < 0.35:
@@ -2777,8 +2778,8 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var feed_risk = float(feed_report.get("score", 0.0))
 	var threat = opponent_tile_threat_score(tile, seat, visible_counts, risk_vector, eval_context)
 	var safety = tile_safety_label(tile, seat, visible_counts, eval_context, candidate_tile_index_snapshot)
-	var known_counts_for_kabe: Array = ai_context_known_counts(eval_context, seat, visible_counts) if safety == "壁" else []
-	var kabe_strength := ai_kabe_strength(candidate_tile_index_snapshot, known_counts_for_kabe) if safety == "壁" else 1.0
+	var known_counts_for_kabe: Array = ai_context_known_counts(eval_context, seat, visible_counts) if str(safety) == "壁" else []
+	var kabe_strength: float = ai_kabe_strength(candidate_tile_index_snapshot, known_counts_for_kabe) if str(safety) == "壁" else 1.0
 	var danger_source: Dictionary = risk_summary.get("danger_source", {})
 	var defense = ai_defense_weight(seat, shanten, pressure_context, eval_context)
 	var diff_idx = int(eval_context.get("discard_report_difficulty", -1)) if context_matches_seat else -1
@@ -5293,9 +5294,9 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 				if sc >= 2:
 					other_suits_with_discards += 1
 				other_suit_discards += sc
-			var min_other_discards := 5 if honor_melds > 0 else 6
+			var min_other_discards: int = 5 if int(honor_melds) > 0 else 6
 			if other_suits_with_discards >= 2 and other_suit_discards >= min_other_discards:
-				var closed_flush_threat := 2.8 + minf(3.6, float(other_suit_discards - min_other_discards) * 0.55)
+				var closed_flush_threat: float = 2.8 + minf(3.6, float(other_suit_discards - min_other_discards) * 0.55)
 				if honor_melds > 0:
 					closed_flush_threat += float(honor_melds) * 1.4
 				if tile_rank >= 2 and tile_rank <= 6:
@@ -5338,7 +5339,7 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 			if not eval_context.is_empty():
 				toitoi_cache[opponent] = triplet_melds
 		if triplet_melds >= 2:
-			var toitoi_threat := (3.2 if visible == 0 else 1.6) + float(triplet_melds - 2) * 2.0
+			var toitoi_threat: float = (3.2 if visible == 0 else 1.6) + float(triplet_melds - 2) * 2.0
 			if index >= 27 or (index < 27 and (index % 9 == 0 or index % 9 == 8)):
 				toitoi_threat += 1.2
 			threat += toitoi_threat
