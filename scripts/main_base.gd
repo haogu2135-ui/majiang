@@ -1522,7 +1522,7 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.800), Vector2(0.57, 0.894)),
+	Rect2(Vector2(0.43, 0.778), Vector2(0.57, 0.894)),
 	Rect2(Vector2(0.755, 0.415), Vector2(0.882, 0.565)),
 	Rect2(Vector2(0.43, 0.110), Vector2(0.57, 0.230)),
 	Rect2(Vector2(0.118, 0.415), Vector2(0.245, 0.565)),
