@@ -3395,6 +3395,36 @@ func _make_guofeng_focus_ring_style(left_aligned: bool = false, ink_face: bool =
 	return ring
 
 
+func _make_guofeng_high_contrast_border_style(left_aligned: bool = false, ink_face: bool = false) -> StyleBox:
+	var border_tex: Texture2D = optional_gpt_illustration_texture("quiet_gold_accent")
+	if border_tex == null:
+		var fallback_empty := StyleBoxEmpty.new()
+		if left_aligned:
+			fallback_empty.content_margin_left = 14.0
+			fallback_empty.content_margin_right = 12.0
+		return fallback_empty
+	var border := StyleBoxTexture.new()
+	border.texture = border_tex
+	border.draw_center = false
+	var tex_size: Vector2 = border_tex.get_size()
+	if tex_size.x >= 384.0 and tex_size.y >= 384.0:
+		border.region_rect = Rect2(Vector2(64.0, 64.0), Vector2(256.0, 256.0))
+	border.modulate_color = Color(0.98, 0.88, 0.44, 0.94) if ink_face else Color(0.06, 0.14, 0.10, 0.96)
+	border.texture_margin_left = 2.0
+	border.texture_margin_top = 2.0
+	border.texture_margin_right = 2.0
+	border.texture_margin_bottom = 2.0
+	border.expand_margin_left = 0.0
+	border.expand_margin_top = 0.0
+	border.expand_margin_right = 0.0
+	border.expand_margin_bottom = 0.0
+	border.content_margin_left = 14.0 if left_aligned else 0.0
+	border.content_margin_right = 12.0 if left_aligned else 0.0
+	border.content_margin_top = 0.0
+	border.content_margin_bottom = 0.0
+	return border
+
+
 func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
 	var action_role := str(button.get_meta("action_role", "")) if button != null else ""
@@ -3466,8 +3496,11 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 		empty_style.content_margin_left = 14.0
 		empty_style.content_margin_right = 12.0
 	var focus_style: StyleBox = empty_style if is_battle_action_role else _make_guofeng_focus_ring_style(left_aligned, ink_face or filled_danger_visual)
-	for state in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
-		button.add_theme_stylebox_override(state, empty_style)
+	var use_hc_border: bool = high_contrast_enabled and not is_battle_action_role and not is_menu_quick
+	var idle_style: StyleBox = _make_guofeng_high_contrast_border_style(left_aligned, ink_face or filled_danger_visual) if use_hc_border else empty_style
+	for state in ["normal", "hover", "pressed", "hover_pressed"]:
+		button.add_theme_stylebox_override(state, idle_style)
+	button.add_theme_stylebox_override("disabled", empty_style)
 	button.add_theme_stylebox_override("focus", focus_style)
 	button.add_theme_color_override("font_color", text_color)
 	button.add_theme_color_override("font_focus_color", text_color)
@@ -3866,6 +3899,8 @@ func configure_button_focus_navigation(root: Control, default_focus_name: String
 		if button != null and root.is_ancestor_of(button):
 			controls.append(button)
 	configure_ordered_focus_navigation(root, controls, default_focus_name, grab_default_focus)
+	if mode == "menu":
+		apply_wide_menu_scale(root)
 
 func center_touch_button_pivot_by_id(button_id: int) -> void:
 	var button = node_from_instance_id(button_id) as Button
@@ -4412,6 +4447,195 @@ func guofeng_card_title_font_size(base_size: int = 16) -> int:
 
 func guofeng_high_contrast_card_tint() -> Color:
 	return Color(1.0, 0.99, 0.95, 1.0) if high_contrast_enabled else Color.WHITE
+
+
+func is_wide_desktop_viewport() -> bool:
+	var vp: Vector2 = Vector2.ZERO
+	if has_method("effective_viewport_size"):
+		var raw_vp: Variant = call("effective_viewport_size")
+		if raw_vp is Vector2:
+			vp = raw_vp as Vector2
+	elif get_viewport() != null:
+		vp = get_viewport().get_visible_rect().size
+	return vp.x >= 1600.0 and vp.y >= 900.0
+
+
+func menu_wide_font_size(base_size: int, wide_delta: int = 0) -> int:
+	if not is_wide_desktop_viewport():
+		return base_size
+	return base_size + wide_delta
+
+
+func menu_quick_dock_metrics() -> Dictionary:
+	var vp: Vector2 = Vector2(1280.0, 720.0)
+	if has_method("effective_viewport_size"):
+		var raw_vp: Variant = call("effective_viewport_size")
+		if raw_vp is Vector2:
+			vp = raw_vp as Vector2
+	var compact: bool = vp.y <= 560.0 or vp.x <= 960.0
+	var wide: bool = vp.x >= 1600.0 and vp.y >= 900.0
+	if wide:
+		return {
+			"icon_left": -56.0,
+			"icon_right": -10.0,
+			"icon_top": -23.0,
+			"icon_bottom": 23.0,
+			"claim_left": -20.0,
+			"claim_right": 0.0,
+			"claim_top": -30.0,
+			"claim_bottom": -10.0,
+			"claim_min_size": Vector2(20.0, 20.0),
+			"claim_font_size": 11,
+			"label_left": 0.0,
+			"label_right": 68.0,
+			"label_font_size": 22,
+		}
+	if compact:
+		return {
+			"icon_left": -33.0,
+			"icon_right": -7.0,
+			"icon_top": -13.0,
+			"icon_bottom": 13.0,
+			"claim_left": -12.0,
+			"claim_right": 2.0,
+			"claim_top": -18.0,
+			"claim_bottom": -4.0,
+			"claim_min_size": Vector2(14.0, 14.0),
+			"claim_font_size": 8,
+			"label_left": 2.0,
+			"label_right": 46.0,
+			"label_font_size": 16,
+		}
+	return {
+		"icon_left": -36.0,
+		"icon_right": -4.0,
+		"icon_top": -16.0,
+		"icon_bottom": 16.0,
+		"claim_left": -11.0,
+		"claim_right": 3.0,
+		"claim_top": -21.0,
+		"claim_bottom": -7.0,
+		"claim_min_size": Vector2(14.0, 14.0),
+		"claim_font_size": 8,
+		"label_left": 2.0,
+		"label_right": 46.0,
+		"label_font_size": 16,
+	}
+
+
+func apply_wide_menu_scale(menu_root: Control) -> void:
+	if menu_root == null or not is_instance_valid(menu_root) or not is_wide_desktop_viewport():
+		return
+	var quick_rail: Control = menu_root.find_child("MenuQuickActionRail", false, false) as Control
+	if quick_rail == null or bool(quick_rail.get_meta("wide_menu_scale_applied", false)):
+		return
+	quick_rail.set_meta("wide_menu_scale_applied", true)
+	var content_size: Vector2 = Vector2(1872.0, 1032.0)
+	if has_method("safe_content_pixel_size"):
+		var raw_cs: Variant = call("safe_content_pixel_size")
+		if raw_cs is Vector2 and (raw_cs as Vector2).x > 1.0:
+			content_size = raw_cs as Vector2
+	# 1. Header rule subtitle proportional scale (+preserve tutorial banner clearance).
+	var header: Control = menu_root.find_child("MenuTitleTextLayer", false, false) as Control
+	var title_rule: Label = menu_root.find_child("MenuTitleRule", true, false) as Label
+	if header != null and title_rule != null:
+		var old_header_bottom: float = header.offset_bottom
+		title_rule.add_theme_font_size_override("font_size", accessibility_font_size(22))
+		if title_rule.autowrap_mode != TextServer.AUTOWRAP_OFF:
+			configure_wrapped_label(title_rule, content_size.x * 0.35 * 0.93, 0.0, 3.0)
+		var rule_h: float = ceilf(title_rule.get_combined_minimum_size().y)
+		title_rule.offset_bottom = title_rule.offset_top + rule_h
+		header.offset_bottom = title_rule.offset_bottom + 8.0
+		var delta_h: float = header.offset_bottom - old_header_bottom
+		if delta_h > 0.5:
+			var tutorial_banner: Control = menu_root.find_child("MenuTutorialEntryBanner", false, false) as Control
+			if tutorial_banner != null:
+				tutorial_banner.offset_top += delta_h
+				tutorial_banner.offset_bottom += delta_h
+	# 2. Corner action buttons (新手教学 / 设置).
+	var tutorial_btn: Button = menu_root.find_child("MenuTutorialButton", false, false) as Button
+	if tutorial_btn != null:
+		tutorial_btn.add_theme_font_size_override("font_size", accessibility_font_size(22))
+	var settings_btn: Button = menu_root.find_child("MenuSettingsButton", true, false) as Button
+	if settings_btn != null:
+		settings_btn.add_theme_font_size_override("font_size", accessibility_font_size(23))
+	# 3. Three hero entry cards (入席开局 / 联机房间 / 商店).
+	for card_name in ["MenuPrimaryOfflineCard", "MenuPrimaryOnlineCard", "MenuPrimaryShopCard"]:
+		var card: Button = menu_root.find_child(str(card_name), true, false) as Button
+		if card == null:
+			continue
+		var card_w: float = maxf(card.size.x, card.custom_minimum_size.x)
+		var lane_w: float = maxf(180.0, card_w * 0.58 - 8.0)
+		var card_title: Label = card.find_child("MenuCardTitleLabel", true, false) as Label
+		if card_title != null:
+			fit_label_font_size(card_title, lane_w, 38 if not large_text_enabled else 36, 24)
+		var card_sub: Label = card.find_child("MenuCardSubtitleLabel", true, false) as Label
+		if card_sub != null:
+			var sub_target: int = 21 if not large_text_enabled else 23
+			fit_label_font_size(card_sub, lane_w, sub_target, 16)
+			if card_sub.autowrap_mode != TextServer.AUTOWRAP_OFF:
+				configure_wrapped_label(card_sub, lane_w, 0.0, 2.0)
+	# 4. Quick action dock icons, labels, and daily seal badge.
+	var metrics: Dictionary = menu_quick_dock_metrics()
+	var icon_left: float = float(metrics.get("icon_left", -56.0))
+	var icon_right: float = float(metrics.get("icon_right", -10.0))
+	var icon_top: float = float(metrics.get("icon_top", -23.0))
+	var icon_bottom: float = float(metrics.get("icon_bottom", 23.0))
+	var label_left: float = float(metrics.get("label_left", 0.0))
+	var label_right: float = float(metrics.get("label_right", 68.0))
+	var label_size: int = accessibility_font_size(int(metrics.get("label_font_size", 22)))
+	for suffix in ["Rules", "Stats", "Achievements", "DailyLogin", "Replay"]:
+		var q_icon: Control = quick_rail.find_child("MenuQuick%sIcon" % str(suffix), true, false) as Control
+		if q_icon != null:
+			q_icon.offset_left = icon_left
+			q_icon.offset_right = icon_right
+			q_icon.offset_top = icon_top
+			q_icon.offset_bottom = icon_bottom
+		var q_label: Label = quick_rail.find_child("MenuQuick%sLabel" % str(suffix), true, false) as Label
+		if q_label != null:
+			q_label.offset_left = label_left
+			q_label.offset_right = label_right
+			q_label.add_theme_font_size_override("font_size", label_size)
+	var claim_dot: Control = quick_rail.find_child("MenuQuickDailyClaimDot", true, false) as Control
+	if claim_dot != null:
+		var claim_min: Vector2 = metrics.get("claim_min_size", Vector2(20.0, 20.0)) as Vector2
+		claim_dot.custom_minimum_size = claim_min
+		claim_dot.offset_left = float(metrics.get("claim_left", -20.0))
+		claim_dot.offset_right = float(metrics.get("claim_right", 0.0))
+		claim_dot.offset_top = float(metrics.get("claim_top", -30.0))
+		claim_dot.offset_bottom = float(metrics.get("claim_bottom", -10.0))
+		var claim_glyph: Label = claim_dot.find_child("MenuQuickDailyClaimGlyph", true, false) as Label
+		if claim_glyph != null:
+			claim_glyph.add_theme_font_size_override("font_size", int(metrics.get("claim_font_size", 11)))
+	# 5. Bottom status bar chips (version / currency / rank / stats).
+	var footer_w: float = content_size.x * 0.890
+	var footer_chips: Array = [
+		["version", "MenuVersionBadge"],
+		["currency", "MenuCurrencyBadge"],
+		["rank", "MenuRankBadge"],
+		["stats", "MenuStatsBadge"],
+	]
+	for entry in footer_chips:
+		var chip_id: String = str(entry[0])
+		var badge_name: String = str(entry[1])
+		var chip: Control = menu_root.find_child("MenuFooterStatusChip_%s" % chip_id, true, false) as Control
+		var badge_lbl: Label = menu_root.find_child(badge_name, true, false) as Label
+		if badge_lbl != null:
+			var chip_span: float = maxf(0.10, chip.anchor_right - chip.anchor_left) if chip != null else 0.16
+			var lbl_span: float = (badge_lbl.anchor_right - badge_lbl.anchor_left) if badge_lbl.anchor_right > badge_lbl.anchor_left + 0.01 else 0.88
+			var offset_reserve: float = maxf(0.0, badge_lbl.offset_left - badge_lbl.offset_right)
+			var avail_w: float = maxf(96.0, footer_w * chip_span * lbl_span - offset_reserve - 6.0)
+			if badge_lbl.size.x > 40.0:
+				avail_w = minf(avail_w, badge_lbl.size.x - 4.0)
+			fit_label_font_size(badge_lbl, avail_w, accessibility_font_size(20), 15)
+		if chip_id == "currency" and chip != null:
+			for sub_node in chip.find_children("*", "", true, false):
+				if sub_node is Label and sub_node != badge_lbl:
+					(sub_node as Label).add_theme_font_size_override("font_size", accessibility_font_size(20))
+				elif sub_node is TextureRect:
+					var icon_tr: TextureRect = sub_node as TextureRect
+					if icon_tr.custom_minimum_size.x > 0.0 and icon_tr.custom_minimum_size.x <= 20.0:
+						icon_tr.custom_minimum_size = Vector2(24.0, 24.0)
 
 
 func table_tile_back_texture() -> Texture2D:
