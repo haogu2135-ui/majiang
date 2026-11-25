@@ -3206,7 +3206,9 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
 				safest_kept = true
 				break
-		if high_pressure and not safest_candidate.is_empty() and not safest_kept:
+		var preserve_safest: bool = high_pressure \
+			or (diff == AI_DIFFICULTY_HARD and (danger_risk_peak >= AI_DANGER_RISK_HIGH + 4.0 or (fast_wall_count <= wall_phase_threshold(26) and float(pressure_context.get("readiness_pressure", 0.0)) >= 8.5)))
+		if preserve_safest and not safest_candidate.is_empty() and not safest_kept:
 			var replace_index = -1
 			var replace_rank = -1.0
 			for j in range(keep.size()):
@@ -4012,20 +4014,20 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			AI_DIFFICULTY_EASY:
 				danger_pen *= 0.72
 		if risk >= AI_DANGER_RISK_HIGH:
-			danger_pen += 28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0
-		# 困难档中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张炮弹」与「两见幺九/字牌」（高危张>=31不予减免）。
+			danger_pen += 34.0 if diff_idx == AI_DIFFICULTY_HARD else (28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0)
+		# 困难档中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张」与「两见幺九/字牌」（权重低于真实花色危险差，不倒挂已知副露危险）。
 		if safety == "" and risk >= 20.0 and diff_idx == AI_DIFFICULTY_HARD and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
 			var tile_vis: int = int(risk_vector.get("visible", -1))
 			if tile_vis == 0:
 				var is_mid_num: bool = candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and (candidate_tile_index_snapshot % 9) >= 2 and (candidate_tile_index_snapshot % 9) <= 6
 				if is_mid_num:
-					danger_pen += 22.0
+					danger_pen += 12.0
 				else:
-					danger_pen += 10.0
+					danger_pen += 5.0
 			elif tile_vis >= 2 and risk < AI_DANGER_RISK_HIGH:
 				var is_term_or_hon: bool = candidate_tile_index_snapshot >= 27 or (candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and ((candidate_tile_index_snapshot % 9) == 0 or (candidate_tile_index_snapshot % 9) == 8))
 				if is_term_or_hon:
-					danger_pen = maxf(0.0, danger_pen - 6.0)
+					danger_pen = maxf(0.0, danger_pen - 5.0)
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure, diff_idx)
@@ -4895,9 +4897,9 @@ func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: i
 			tenpai_keep *= 0.30
 		return tenpai_keep
 	if shanten == 1:
-		# 一向听：极残墙（<=16张）面对高危张不再追加追听奖励。
+		# 一向听：极残墙（<=16张）面对高危张果断放弃追听，避免赔大炮。
 		if wall <= wall_phase_threshold(16) and diff == AI_DIFFICULTY_HARD and risk >= AI_DANGER_RISK_HIGH:
-			return 0.0
+			return -28.0 * urgency * diff_scale
 		var chase = 28.0 + ba * 0.016 + float(clamp(ukeire, 0, 8)) * 1.8
 		return chase * urgency * diff_scale
 	if shanten >= 2 and wall <= wall_phase_threshold(14) and diff == AI_DIFFICULTY_HARD:
