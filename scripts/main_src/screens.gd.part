@@ -1744,7 +1744,8 @@ func _show_online_lobby_impl() -> void:
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
 	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.475, 0.018, 0.610, 0.102)
-	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else rect_full(0.790, 0.008, 0.950, 0.098))
+	var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if compact_room_badge else rect_full(0.790, 0.008, 0.950, 0.098)
+	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else disconnected_chat_rect)
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
@@ -2014,7 +2015,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
 		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.475, 0.018, 0.610, 0.102)
-		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else rect_full(0.790, 0.008, 0.950, 0.098))
+		var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if lobby_viewport_size.x <= 960.0 else rect_full(0.790, 0.008, 0.950, 0.098)
+		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else disconnected_chat_rect)
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -7152,7 +7154,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.905 if not compact_replay_layout else 0.935))
+	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.929 if not compact_replay_layout else 0.935))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -7230,7 +7232,7 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.set_meta("timeline_measurement_pending", false)
 	event_scroll.set_meta("timeline_range_update_count", 0)
 	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
-	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.918 if not compact_replay_layout else 0.935))
+	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.841 if not compact_replay_layout else 0.935))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
 	if event_scrollbar != null:

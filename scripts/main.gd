@@ -23497,11 +23497,13 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	configure_clipped_label(risk_caption)
 	var compact_reason := ""
 	var danger_source = report.get("danger_source", {})
-	if typeof(danger_source) == TYPE_DICTIONARY and str(danger_source.get("reason", "")) != "":
-		compact_reason = str(danger_source.get("reason", ""))
-	elif str(report.get("feed_text", "")) != "":
-		compact_reason = str(report.get("feed_text", ""))
-	var detail_slot_width := maxf(84.0, safe_content_pixel_size().x * (DANGER_DISCARD_CONFIRMATION_RECT.size.x - DANGER_DISCARD_CONFIRMATION_RECT.position.x) * 0.60)
+	var source_reason := str(danger_source.get("reason", "")).strip_edges() if typeof(danger_source) == TYPE_DICTIONARY else ""
+	var feed_reason := str(report.get("feed_text", "")).strip_edges()
+	if source_reason != "" and source_reason != "牌路危险" and source_reason != "危险":
+		compact_reason = source_reason
+	elif feed_reason != "" and feed_reason != "牌路危险" and feed_reason != "危险":
+		compact_reason = "%s，慎打" % feed_reason
+	var detail_slot_width := maxf(84.0, safe_content_pixel_size().x * (DANGER_DISCARD_CONFIRMATION_RECT.size.x - DANGER_DISCARD_CONFIRMATION_RECT.position.x) * 0.61)
 	var detail_display := danger_discard_detail_display_text(compact_reason, detail_slot_width)
 	var detail := make_label(panel, detail_display, 12, Color(0.96, 0.91, 0.80), true)
 	detail.name = "DangerDiscardDetailText"
@@ -23518,25 +23520,24 @@ func danger_discard_detail_display_text(reason: String, max_width_px: float = 12
 	var clean := reason.strip_edges()
 	var font := ui_cjk_font()
 	var font_size := accessibility_font_size(12)
-	if clean == "":
-		var rich_default := "警惕放铳 · 建议改打"
-		if font != null and font.get_string_size(rich_default, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
-			return rich_default
+	if clean == "" or clean == "牌路危险" or clean == "危险":
+		for rich_default in ["警惕放铳，建议改打", "警惕放铳，慎打", "警惕放铳"]:
+			if font == null or font.get_string_size(rich_default, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+				return rich_default
 		return "牌路危险"
-	if font != null and font.get_string_size(clean, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+	if font == null or font.get_string_size(clean, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
 		return clean
 	# Preserve the leading clause or fit as many real characters as the measured
 	# lane holds instead of unconditionally erasing every >6-char reason.
 	var first_clause := clean.split("，")[0].split("·")[0].strip_edges()
-	if first_clause != "" and font != null and font.get_string_size(first_clause, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+	if first_clause != "" and font.get_string_size(first_clause, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
 		return first_clause
 	var candidate := first_clause if first_clause != "" else clean
-	if font != null:
-		while candidate.length() > 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_width_px:
-			candidate = candidate.left(candidate.length() - 1)
-		if candidate.length() >= 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
-			return candidate + "…"
-	return "牌路危险"
+	while candidate.length() > 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_width_px:
+		candidate = candidate.left(candidate.length() - 1)
+	if candidate.length() >= 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+		return candidate + "…"
+	return "警惕放铳"
 
 
 func draw_deal_cascade_completion_art(parent: Control, dealer: int, center: Vector2, accent: Color) -> Control:
@@ -37958,7 +37959,8 @@ func _show_online_lobby_impl() -> void:
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
 	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.475, 0.018, 0.610, 0.102)
-	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else rect_full(0.790, 0.008, 0.950, 0.098))
+	var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if compact_room_badge else rect_full(0.790, 0.008, 0.950, 0.098)
+	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else disconnected_chat_rect)
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
@@ -38228,7 +38230,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
 		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.475, 0.018, 0.610, 0.102)
-		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else rect_full(0.790, 0.008, 0.950, 0.098))
+		var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if lobby_viewport_size.x <= 960.0 else rect_full(0.790, 0.008, 0.950, 0.098)
+		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else disconnected_chat_rect)
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -43366,7 +43369,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.905 if not compact_replay_layout else 0.935))
+	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.929 if not compact_replay_layout else 0.935))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -43444,7 +43447,7 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.set_meta("timeline_measurement_pending", false)
 	event_scroll.set_meta("timeline_range_update_count", 0)
 	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
-	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.918 if not compact_replay_layout else 0.935))
+	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.841 if not compact_replay_layout else 0.935))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
 	if event_scrollbar != null:
