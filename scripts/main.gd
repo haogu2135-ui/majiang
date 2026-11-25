@@ -37058,7 +37058,7 @@ func _show_menu_impl() -> void:
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(tutorial_action_width, 44)
-		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(15 if tutorial_step == TUTORIAL_STEP_NEW else 16))
+		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
 		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_guofeng_button_face(tutorial_action, true)
@@ -37071,7 +37071,7 @@ func _show_menu_impl() -> void:
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
 		tutorial_skip.name = "MenuTutorialSkipButton"
 		tutorial_skip.custom_minimum_size = Vector2(tutorial_skip_width, 44)
-		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(15))
+		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
 		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
