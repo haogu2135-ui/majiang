@@ -15423,8 +15423,19 @@ func round_summary_body_text() -> String:
 			continue
 		if idx == 0 and (clause.contains("%d番" % fan) or clause.contains("自摸") or clause.contains("点炮") or clause.contains("胡")):
 			continue
-		if reasons_joined != "" and (clause == reasons_joined or (reasons_arr.size() >= 2 and clause.begins_with(str(reasons_arr[0]) + "、" + str(reasons_arr[1])))):
-			continue
+		if reasons_joined != "":
+			if clause == reasons_joined:
+				continue
+			if clause.begins_with(reasons_joined):
+				clause = clause.substr(reasons_joined.length()).strip_edges()
+				while clause.begins_with("，") or clause.begins_with("；") or clause.begins_with("：") or clause.begins_with("·"):
+					clause = clause.substr(1).strip_edges()
+				if clause == "":
+					continue
+			elif reasons_arr.size() >= 2 and clause.contains(reasons_joined):
+				clause = clause.replace(reasons_joined, "").strip_edges()
+				if clause == "":
+					continue
 		var is_pkg := clause.contains("包三搭") or clause.contains("包赔")
 		if is_pkg:
 			if seen_package:

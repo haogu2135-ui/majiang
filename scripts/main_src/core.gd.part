@@ -10821,7 +10821,17 @@ func chat_panel_rect() -> Rect2:
 		# when no side drawer fits. The existing shield owns table input until close.
 		var visible_melds: Dictionary = occupancy_snapshot.get("visible_meld_seats", {})
 		if visible_melds.has(0) or visible_melds.has(3):
-			return rect_full(0.300, 0.200, 0.700, 0.690)
+			var seat_viewport := effective_viewport_size()
+			var top_seat_rect := battle_seat_layout_rect(2, SEAT_LAYOUTS[0][1], seat_viewport)
+			var modal_top := maxf(0.245, top_seat_rect.size.y + 0.010)
+			if visible_melds.has(2):
+				var top_meld_rect := seat_meld_rect(2, seat_viewport)
+				modal_top = maxf(modal_top, top_meld_rect.size.y + 0.010)
+			var modal_bottom := 0.695
+			if visible_melds.has(0):
+				var bottom_meld_rect := seat_meld_rect(0, seat_viewport)
+				modal_bottom = minf(modal_bottom, bottom_meld_rect.position.y - 0.008)
+			return rect_full(0.300, modal_top, 0.700, maxf(modal_top + 0.240, modal_bottom))
 		return rect_full(0.115, 0.460, left_route_right, 0.720)
 	return best
 
@@ -10929,7 +10939,7 @@ func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
 	var rect := chat_panel_rect()
-	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.position.y, 0.200)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
+	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
 		return "center_table_modal"
 	if rect.position.x < 0.30:
 		if rect.position.y < 0.40:
