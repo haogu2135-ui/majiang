@@ -2550,9 +2550,15 @@ func draw_center(parent: Control) -> void:
 		last_label.set_meta("tile_code", last)
 		last_label.set_meta("stable_two_line_summary", true)
 		set_ui_full_text(last_label, last_label_text, str(last_discard_model.get("accessible_text", last_label_text)))
-		fit_label_font_size(last_label, maxf(140.0, center_content_size.x * 0.145) if wide_center else maxf(72.0, center_content_size.x * 0.105), last_label_font, 11 if wide_center else 9)
+		var table_content_size := game_table_pixel_size()
+		var center_size_px := Vector2(
+			table_content_size.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x),
+			table_content_size.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y)
+		)
+		var last_label_max_width := maxf(110.0, center_size_px.x * 0.46) if wide_center else maxf(72.0, center_content_size.x * 0.105)
+		fit_label_font_size(last_label, last_label_max_width, 13 if wide_center else last_label_font, 10 if wide_center else 9)
 		mark_ui_optimization(last_label, "F-041")
-		apply_rect(last_label, rect_full(0.25, 0.600, 0.75, 0.730) if compact_center else (rect_full(0.16, 0.545, 0.84, 0.640) if wide_center else CENTER_LAST_LABEL_RECT))
+		apply_rect(last_label, rect_full(0.25, 0.600, 0.75, 0.730) if compact_center else (rect_full(0.255, 0.545, 0.745, 0.640) if wide_center else CENTER_LAST_LABEL_RECT))
 		last_label.anchor_top = wall_text.anchor_bottom
 		last_label.offset_top = wall_text.offset_bottom + (1.0 if compact_center else 2.0)
 		last_label.anchor_bottom = last_label.anchor_top
@@ -2563,17 +2569,16 @@ func draw_center(parent: Control) -> void:
 		# The center shell is nested inside the authored table surface. Size the
 		# preview from that same table pixel budget so its face cannot outgrow the
 		# shell on compact or wide viewports.
-		var table_content_size := game_table_pixel_size()
-		var center_size_px := Vector2(
-			table_content_size.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x),
-			table_content_size.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y)
-		)
+		var tile_bottom_limit_anchor: float = CENTER_WIND_RECTS[0].position.y - 0.025
+		var prelim_label_bottom_anchor: float = last_label.anchor_top + (last_label.offset_bottom + 4.0) / maxf(1.0, center_size_px.y)
 		var center_slot_px := Vector2(
 			center_size_px.x * (CENTER_LAST_TILE_RECT.size.x - CENTER_LAST_TILE_RECT.position.x),
 			center_size_px.y * (CENTER_LAST_TILE_RECT.size.y - CENTER_LAST_TILE_RECT.position.y)
 		)
 		var center_clip_gutter_px := 6.0
-		var center_safe_slot_px := Vector2(maxf(1.0, center_slot_px.x - center_clip_gutter_px * 2.0), maxf(1.0, center_slot_px.y - center_clip_gutter_px * 2.0))
+		var available_tile_height_px: float = maxf(1.0, (tile_bottom_limit_anchor - prelim_label_bottom_anchor) * center_size_px.y - 4.0)
+		var safe_slot_height_px: float = minf(maxf(1.0, center_slot_px.y - center_clip_gutter_px * 2.0), available_tile_height_px) if wide_center else maxf(1.0, center_slot_px.y - center_clip_gutter_px * 2.0)
+		var center_safe_slot_px := Vector2(maxf(1.0, center_slot_px.x - center_clip_gutter_px * 2.0), safe_slot_height_px)
 		var center_tile_width := minf(minf(center_safe_slot_px.x, center_safe_slot_px.y / DISCARD_TILE_ASPECT), DISCARD_TILE_MAX_SIZE.x) * 0.96
 		var center_min_face_possible := center_safe_slot_px.x >= DISCARD_TILE_MIN_SIZE.x and center_safe_slot_px.y / DISCARD_TILE_ASPECT >= DISCARD_TILE_MIN_SIZE.x
 		if center_min_face_possible:
@@ -2603,12 +2608,19 @@ func draw_center(parent: Control) -> void:
 			set_ui_full_text(last_label, compact_discard_label, str(last_discard_model.get("accessible_text", compact_discard_label)) + "；牌面请看牌河")
 			center.set_meta("center_last_discard_fallback", "tile_identity_in_latest_discard_label")
 		last_label.offset_bottom = last_label.offset_top + last_label.get_combined_minimum_size().y
-		# Compact labels consume real pixel height beyond their normalized anchor;
-		# reserve a measured reading gap before centering the face.
-		var label_gap_anchor := (last_label.get_minimum_size().y + 5.0) / maxf(1.0, center_size_px.y)
-		var tile_top_anchor := maxf(CENTER_LAST_TILE_RECT.position.y, last_label.anchor_top + (last_label.offset_top / maxf(1.0, center_size_px.y)) + label_gap_anchor)
+		# Reserve measured reading clearance below the summary label and keep the
+		# tile bottom strictly above the lower wind glyph (CENTER_WIND_RECTS[0]).
+		var label_bottom_anchor: float = last_label.anchor_top + (last_label.offset_bottom + 4.0) / maxf(1.0, center_size_px.y)
 		center.set_meta("center_last_discard_label_gap_px", float(last_label.get_theme_font_size("font_size")) + 5.0)
-		var tile_center_anchor := tile_top_anchor + (center_last_tile_size.y / maxf(1.0, center_size_px.y)) * 0.5
+		var tile_half_anchor: float = (center_last_tile_size.y / maxf(1.0, center_size_px.y)) * 0.5
+		var min_tile_center_anchor: float = label_bottom_anchor + tile_half_anchor
+		var max_tile_center_anchor: float = tile_bottom_limit_anchor - tile_half_anchor
+		var tile_center_anchor: float
+		if center_min_face_possible and max_tile_center_anchor >= min_tile_center_anchor:
+			tile_center_anchor = (min_tile_center_anchor + max_tile_center_anchor) * 0.5
+		else:
+			var tile_top_anchor: float = maxf(label_bottom_anchor, minf(CENTER_LAST_TILE_RECT.position.y, maxf(label_bottom_anchor, tile_bottom_limit_anchor - tile_half_anchor * 2.0)))
+			tile_center_anchor = tile_top_anchor + tile_half_anchor
 		apply_centered_rect(tile, Vector2(0.5, tile_center_anchor), center_last_tile_size)
 		tile.set_meta("river_face_size", center_last_tile_size)
 		tile.set_meta("river_face_aspect", DISCARD_TILE_ASPECT)
@@ -11335,7 +11347,7 @@ func discard_archive_button_focus_visual_by_id(button_id: int, focused: bool) ->
 	if archive_label != null:
 		archive_label.z_index = 2
 		archive_label.modulate = Color.WHITE
-		archive_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.90, 1.0) if focused else Color(0.99, 0.96, 0.84, 1.0))
+		archive_label.add_theme_color_override("font_color", Color(1.0, 1.0, 0.96, 1.0) if focused else Color(1.0, 0.99, 0.92, 1.0))
 
 
 func clear_discard_archive_button_visuals(archive_button: Button) -> void:
@@ -11438,8 +11450,8 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		var archive_plaque_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
 		if archive_face != null and archive_plaque_tex != null:
 			archive_face.texture = archive_plaque_tex
-			configure_guofeng_button_slice(archive_face, true, 32, 0.25)
-			archive_face.self_modulate = Color(0.88, 0.95, 0.90, 0.98)
+			configure_guofeng_button_slice(archive_face, true, 32, 0.20)
+			archive_face.self_modulate = Color(0.80, 0.94, 0.86, 0.98)
 		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.z_index = 12
 		archive_button.custom_minimum_size = Vector2(44, 44)
@@ -11507,18 +11519,23 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		archive_label.set_meta("ui_full_text", archive_button.tooltip_text)
 		archive_label.set_meta("window_range_text", page_text)
 		archive_label.add_theme_font_override("font", ui_heading_font())
-		archive_label.add_theme_color_override("font_color", Color(0.99, 0.96, 0.84, 1.0))
-		archive_label.add_theme_color_override("font_outline_color", Color(0.05, 0.11, 0.09, 0.95))
-		archive_label.add_theme_constant_override("outline_size", 1)
+		archive_label.add_theme_color_override("font_color", Color(1.0, 0.99, 0.92, 1.0))
+		archive_label.add_theme_constant_override("outline_size", 0)
+		archive_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.06, 0.04, 0.88))
+		archive_label.add_theme_constant_override("shadow_offset_x", 0)
+		archive_label.add_theme_constant_override("shadow_offset_y", 1)
+		if detached_top_archive:
+			archive_label.add_theme_constant_override("line_spacing", -1)
 		archive_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		archive_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		# Each short line remains within the full native hit cell.
-		apply_rect(archive_label, rect_full(0.04, 0.08, 0.96, 0.94))
+		apply_rect(archive_label, rect_full(0.05, 0.11, 0.95, 0.89) if detached_top_archive else rect_full(0.04, 0.08, 0.96, 0.94))
 		archive_label.set_meta("visual_hit_contract", "label_inside_archive_hit_rect")
 		# Keep the final native target and label rows inside the river's
 		# trailing edge. A compact top river is shorter than a touch target; its
 		# pager grows upward into its reserved columns, away from the side rivers.
-		archive_button.custom_minimum_size.y = maxf(UI_MIN_TOUCH_TARGET, ceilf(archive_label.get_combined_minimum_size().y / 0.86) + 1.0)
+		var archive_label_height_divisor: float = 0.78 if detached_top_archive else 0.86
+		archive_button.custom_minimum_size.y = maxf(UI_MIN_TOUCH_TARGET, ceilf(archive_label.get_combined_minimum_size().y / archive_label_height_divisor) + (2.0 if detached_top_archive else 1.0))
 		archive_button.offset_left = 3.0
 		archive_button.offset_right = -4.0 if seat == 1 else -3.0
 		var archive_height := maxf(archive_button.get_combined_minimum_size().y, (archive_button.anchor_bottom - archive_button.anchor_top) * overlay.size.y - 6.0)
@@ -12759,7 +12776,9 @@ func draw_hand(parent: Control) -> void:
 	var hand_has_pending_danger_discard := hand_ai_assist_enabled and has_pending_danger_discard()
 	var hand_viewport_size := effective_viewport_size()
 	var hand_tray_size := safe_content_pixel_size() * (HAND_TRAY_RECT.size - HAND_TRAY_RECT.position)
-	var header_bottom := HAND_TRAY_TILES_RECT.position.y - 10.5 / maxf(1.0, hand_tray_size.y)
+	var wood_deck_tex := guofeng_hand_rail_texture()
+	var wide_hand_rail := wood_deck_tex != null and hand_viewport_size.y >= 900.0
+	var header_bottom := HAND_TRAY_TILES_RECT.position.y - (22.0 if wide_hand_rail else 10.5) / maxf(1.0, hand_tray_size.y)
 	var header_height := maxf(24.0, float(accessibility_font_size(12)) * 1.45 + 4.0)
 	var header_top := header_bottom - header_height / maxf(1.0, hand_tray_size.y)
 	var tray := make_layout_host(HAND_TRAY_RECT)
@@ -12770,9 +12789,9 @@ func draw_hand(parent: Control) -> void:
 	tray.set_meta("bottom_gutter_px", 8.0)
 	tray.set_meta("tile_bottom_clearance_px", 8.0)
 	parent.add_child(tray)
-	var wood_deck_tex := guofeng_hand_rail_texture()
-	var deck_bottom_anchor := 0.960 if (wood_deck_tex != null and hand_viewport_size.y >= 900.0) else 1.0
-	var paper_rect := rect_full(0.0, 0.145, 1.0, deck_bottom_anchor) if wood_deck_tex != null else rect_full(0.0, minf(0.0, header_top), 1.0, 1.0)
+	var deck_top_anchor := 0.155 if wide_hand_rail else 0.145
+	var deck_bottom_anchor := 0.948 if wide_hand_rail else 1.0
+	var paper_rect := rect_full(0.0, deck_top_anchor, 1.0, deck_bottom_anchor) if wood_deck_tex != null else rect_full(0.0, minf(0.0, header_top), 1.0, 1.0)
 	var tray_paper := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "hand_tray_jiangnan_gpt", 1.0)
 	tray_paper.self_modulate = Color.WHITE
 	tray_paper.name = "HandTrayPaper"
@@ -12785,7 +12804,7 @@ func draw_hand(parent: Control) -> void:
 		wood_deck.stretch_mode = TextureRect.STRETCH_SCALE
 		wood_deck.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		wood_deck.z_index = 1
-		apply_rect(wood_deck, rect_full(0.0, 0.145, 1.0, deck_bottom_anchor))
+		apply_rect(wood_deck, rect_full(0.0, deck_top_anchor, 1.0, deck_bottom_anchor))
 		tray.add_child(wood_deck)
 		configure_guofeng_button_slice(wood_deck, true, 56, 0.25, wood_deck_tex, false)
 	set_ui_full_text(tray, "手牌区：点击或按 Enter 打出选中的牌；当前状态和教学提示位于上方", "玩家手牌区")
@@ -16508,11 +16527,12 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 	var score_strip_current_seat := get_current_seat()
 	strip.set_meta("current_seat_snapshot", score_strip_current_seat)
 	strip.set_meta("current_seat_snapshot_policy", "one_current_seat_snapshot_per_draw")
+	var score_strip_tex_key := "table_log_dark_jade_gpt" if optional_gpt_illustration_texture("table_log_dark_jade_gpt") != null else "battle_ink_plaque_20261112"
 	for seat in range(4):
 		var active = score_strip_current_seat == seat
 		var player = get_player_info(seat)
-		var chip_fill = Color(0.22, 0.48, 0.36, 0.94) if active else Color(0.18, 0.38, 0.30, 0.86)
-		var chip = make_gpt_center_crop_plate_rect(SCORE_STRIP_CHIP_RECTS[seat], chip_fill, "ui_jade_reading_plate", 0.48)
+		var chip_fill = Color(1.0, 1.35, 1.15, 0.96) if active else Color(0.95, 1.12, 1.02, 0.92)
+		var chip = make_gpt_center_crop_plate_rect(SCORE_STRIP_CHIP_RECTS[seat], chip_fill, score_strip_tex_key, 0.55)
 		chip.name = "ScoreStripChip_%d" % seat
 		chip.set_meta("active_snapshot", active)
 		strip.add_child(chip)
@@ -16524,6 +16544,9 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		var compact_score_strip := viewport_size.x <= 960.0 or viewport_size.y <= 560.0
 		var wide_score_strip := viewport_size.x >= 1600.0 and viewport_size.y >= 900.0
 		var stacked_score_strip := narrow_score_strip and large_text_enabled
+		var delta_text := score_delta_text(seat)
+		var has_live_delta := delta_text != ""
+		var score_right_anchor: float = 0.94 if compact_score_strip else 0.92
 		var full_name_text := ""
 		if mode == "offline":
 			full_name_text = "我" if seat == 0 else ai_profile_short_label(seat)
@@ -16542,23 +16565,26 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		var empty_name := StyleBoxEmpty.new()
 		empty_name.set_content_margin_all(0 if narrow_score_strip else 4)
 		name.add_theme_stylebox_override("normal", empty_name)
-		apply_rect(name, rect_full(0.04, 0.00, 0.96, 0.50) if stacked_score_strip else rect_full(0.08, 0.14, 0.33, 0.62))
+		var name_rect := rect_full(0.04, 0.00, 0.96, 0.50) if stacked_score_strip else (rect_full(0.08, 0.12, 0.33, 0.60) if has_live_delta else rect_full(0.08, 0.16, 0.33, 0.84))
+		apply_rect(name, name_rect)
 		if stacked_score_strip:
 			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		configure_clipped_label(name)
-		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 14 if wide_score_strip else (9 if compact_score_strip else 12), Color(0.96, 0.94, 0.88), true)
+		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 14 if wide_score_strip else (9 if compact_score_strip else 12), Color(0.98, 0.96, 0.90), true)
 		score.name = "ScoreStripScore_%d" % seat
 		score.z_index = 2
-		apply_rect(score, rect_full(0.04, 0.50, 0.96, 1.00) if stacked_score_strip else rect_full(0.37, 0.12, 0.94, 0.64))
+		var score_rect := rect_full(0.04, 0.50, 0.96, 1.00) if stacked_score_strip else (rect_full(0.37, 0.10, score_right_anchor, 0.62) if has_live_delta else rect_full(0.37, 0.14, score_right_anchor, 0.86))
+		apply_rect(score, score_rect)
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if stacked_score_strip else HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
-		var delta_text := score_delta_text(seat)
-		var delta_detail_text := "暂无本局结算变化" if delta_text == "" else delta_text
-		var delta_visible_text := "—" if delta_text == "" else ("变化" + delta_text)
-		var delta = make_label(chip, delta_visible_text, 11 if wide_score_strip else (9 if compact_score_strip else 10), Color(0.86, 0.94, 0.84, 0.94), false)
+		var delta_detail_text := "暂无本局结算变化" if not has_live_delta else delta_text
+		var delta_visible_text := "—" if not has_live_delta else ("变化" + delta_text)
+		var delta_color := Color(0.56, 0.96, 0.72, 1.0) if delta_text.begins_with("+") else (Color(1.0, 0.64, 0.58, 1.0) if has_live_delta else Color(0.86, 0.94, 0.84, 0.94))
+		var delta = make_label(chip, delta_visible_text, 11 if wide_score_strip else (9 if compact_score_strip else 10), delta_color, false)
 		delta.name = "ScoreStripDelta_%d" % seat
 		delta.z_index = 2
-		apply_rect(delta, rect_full(0.08, 0.62, 0.93, 0.95))
+		delta.modulate.a = 1.0 if has_live_delta else 0.0
+		apply_rect(delta, rect_full(0.08, 0.62, score_right_anchor, 0.95))
 		delta.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		delta.tooltip_text = "分数变化：" + delta_detail_text
 		delta.visible = not stacked_score_strip
