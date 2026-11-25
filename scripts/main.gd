@@ -27192,8 +27192,24 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	set_ui_full_text(warning, "到0秒将自动选择过；可用吃碰杠胡按钮响应", "不响应的默认后果")
 	mark_ui_optimization(warning, "F-065")
 	if root_slot:
-		apply_rect(timer_label, rect_full(0.06, 0.04, 0.94, 0.50))
-		apply_rect(warning, rect_full(0.06, 0.50, 0.94, 0.96))
+		# The serif countdown and the body text have different font heights,
+		# especially in large text. Position both using their measured minima.
+		var countdown_height := ceilf(timer_label.get_minimum_size().y)
+		var warning_height := ceilf(warning.get_minimum_size().y)
+		var line_gap := 2.0
+		var content_height := countdown_height + line_gap + warning_height
+		var countdown_top := maxf(0.0, floorf((timer.size.y - content_height) * 0.5))
+		var warning_top := countdown_top + countdown_height + line_gap
+		apply_rect(timer_label, rect_full(0.0, 0.0, 1.0, 0.0))
+		timer_label.offset_left = 3.0
+		timer_label.offset_right = -3.0
+		timer_label.offset_top = countdown_top
+		timer_label.offset_bottom = countdown_top + countdown_height
+		apply_rect(warning, rect_full(0.0, 0.0, 1.0, 0.0))
+		warning.offset_left = timer_label.offset_left
+		warning.offset_right = timer_label.offset_right
+		warning.offset_top = warning_top
+		warning.offset_bottom = warning_top + warning_height
 		warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	return timer
 
@@ -38492,7 +38508,7 @@ func _show_shop_screen_impl() -> void:
 	var exchange_rate := "%d铜钱可兑换%d玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var footer_body_text := exchange_rate + "。"
 	if affordable_items <= 0:
-		footer_body_text += " 购买道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
+		footer_body_text += " 最便宜的道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
 	apply_rect(footer_body, rect_full(0.000, 0.400, 0.600, 0.960))

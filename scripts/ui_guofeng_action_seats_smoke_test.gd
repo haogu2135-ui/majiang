@@ -66,7 +66,9 @@ func action_seat_state(scene: Node) -> Dictionary:
 	state["intent_surface"] = intent.get_meta("guofeng_surface_key", "") if intent != null else ""
 	state["pending_seconds"] = scene.pending_claim_remaining_seconds()
 	state["timer_text"] = timer.text if timer != null else ""
+	state["timer_rect"] = advisor_reading_rect(timer) if timer != null else []
 	state["warning_text"] = warning.text if warning != null else ""
+	state["warning_rect"] = advisor_reading_rect(warning) if warning != null else []
 	state["scores"] = []
 	for seat in range(4):
 		var score := scene.find_child("SeatCompactScore_%d" % seat, true, false) as Label

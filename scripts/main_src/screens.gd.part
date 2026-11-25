@@ -3554,7 +3554,7 @@ func _show_shop_screen_impl() -> void:
 	var exchange_rate := "%d铜钱可兑换%d玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var footer_body_text := exchange_rate + "。"
 	if affordable_items <= 0:
-		footer_body_text += " 购买道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
+		footer_body_text += " 最便宜的道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
 	apply_rect(footer_body, rect_full(0.000, 0.400, 0.600, 0.960))
