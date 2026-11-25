@@ -2712,7 +2712,16 @@ func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int,
 	var content_w: float = float(used_cols) * tile_size.x + float(maxi(0, used_cols - 1) * DISCARD_GRID_SEPARATION)
 	var zone_w: float = maxf(0.0, (zone_rect.size.x - zone_rect.position.x) * table_size.x)
 	var max_right_px: float = zone_w
-	if seat == 2 and archive_reserved_start >= 0 and not top_discard_archive_uses_side_gutter(effective_viewport_size()):
+	if seat == 0 and archive_reserved_start >= 0:
+		var vp := effective_viewport_size()
+		if vp.x <= 960.0:
+			var content := safe_content_pixel_size_for_margins(vp, safe_area_margins)
+			var zone_root := battle_table_anchor_root_rect(zone_rect, vp)
+			var dock_left_px: float = action_bar_dock_layout_rect(vp, content).position.x * content.x
+			var archive_left_px: float = dock_left_px - 10.0 - 50.0
+			var local_limit_px: float = archive_left_px - zone_root.position.x * content.x - 6.0
+			max_right_px = minf(max_right_px, maxf(0.0, local_limit_px))
+	elif seat == 2 and archive_reserved_start >= 0 and not top_discard_archive_uses_side_gutter(effective_viewport_size()):
 		if archive_reserved_start >= columns or archive_reserved_start <= 0:
 			return 0.0
 		max_right_px = minf(max_right_px, float(archive_reserved_start) / float(columns) * zone_w - 6.0)
