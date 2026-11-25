@@ -1587,9 +1587,9 @@ const ACTION_BUTTON_HEIGHT := 44.0
 const ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.615, 0.688), Vector2(0.972, 0.792))
 const ACTION_BAR_RECT := Rect2(Vector2(0.625, 0.698), Vector2(0.960, 0.782))
 const PENDING_CLAIM_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.632, 0.588), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.598), Vector2(0.964, 0.778))
 const PENDING_CLAIM_ACTION_BAR_COMPACT_DOCK_RECT := Rect2(Vector2(0.615, 0.558), Vector2(0.972, 0.790))
-const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.972, 0.790))
+const PENDING_CLAIM_ACTION_BAR_COMPACT_RECT := Rect2(Vector2(0.625, 0.568), Vector2(0.964, 0.778))
 const DANGER_ACTION_BAR_DOCK_RECT := Rect2(Vector2(0.528, 0.700), Vector2(0.972, 0.792))
 const DANGER_ACTION_BAR_RECT := Rect2(Vector2(0.640, 0.710), Vector2(0.960, 0.782))
 # Keep the warning in the clear channel between the center surface and the
@@ -1605,12 +1605,12 @@ const SAFE_CONTENT_MAX_BOTTOM_FRACTION := 0.18
 const TOP_HUD_RECT := Rect2(Vector2(0.014, 0.014), Vector2(0.986, 0.105))
 const TOP_HUD_TITLE_RECT := Rect2(Vector2(0.106, 0.10), Vector2(0.300, 0.88))
 const TOP_HUD_STATUS_RECT := Rect2(Vector2(0.310, 0.10), Vector2(0.432, 0.50))
-const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.274, 0.600), Vector2(0.584, 0.975))
+const TOP_HUD_HAND_PROGRESS_RECT := Rect2(Vector2(0.106, 0.600), Vector2(0.272, 0.975))
 const TOP_HUD_SCORE_STRIP_RECT := Rect2(Vector2(0.438, 0.15), Vector2(0.686, 0.85))
 const TOP_HUD_WALL_RECT := Rect2(Vector2(0.696, 0.14), Vector2(0.778, 0.86))
-const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.790, 0.05), Vector2(0.850, 0.95))
-const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.858, 0.05), Vector2(0.916, 0.95))
-const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.924, 0.05), Vector2(0.984, 0.95))
+const TOP_HUD_SETTINGS_BUTTON_RECT := Rect2(Vector2(0.790, 0.06), Vector2(0.850, 0.94))
+const TOP_HUD_BACK_BUTTON_RECT := Rect2(Vector2(0.858, 0.06), Vector2(0.916, 0.94))
+const TOP_HUD_UPDATE_BUTTON_RECT := Rect2(Vector2(0.924, 0.06), Vector2(0.984, 0.94))
 const SCORE_STRIP_CHIP_RECTS := [
 	Rect2(Vector2(0.006, 0.0), Vector2(0.244, 1.0)),
 	Rect2(Vector2(0.256, 0.0), Vector2(0.494, 1.0)),

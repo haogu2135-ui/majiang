@@ -86,7 +86,7 @@ func discard_zone_tile_size_for_table_size(zone_rect: Rect2, columns: int, rows:
 	if height > 0.0 and width > 0.0 and height / width < min_aspect:
 		width = maxf(minf(available_width, DISCARD_TILE_MIN_SIZE.x), minf(available_width, height / min_aspect))
 	if width > 0.0 and height / width > max_aspect:
-		height = maxf(minf(available_height, DISCARD_TILE_MIN_SIZE.y), minf(available_height, width * max_aspect))
+		height = minf(available_height, width * max_aspect)
 	return Vector2(max(1.0, floor(width)), max(1.0, floor(height)))
 
 func discard_zone_visible_rows(zone_rect: Rect2, columns: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> int:
@@ -283,16 +283,28 @@ func draw_achievements_completion_convergence_art(parent: Control) -> Control:
 
 
 func draw_achievements_dashboard_art(parent: Control) -> Control:
-	var art := make_layout_host(rect_full(0.055, 0.120, 0.940, 0.185))
+	var art := make_layout_host(rect_full(0.055, 0.118, 0.940, 0.188))
 	art.name = "AchievementsDashboardArt"
 	parent.add_child(art)
 	var total := achievements.size()
 	var unlocked := unlocked_achievement_count()
-	var summary := make_label(art, "已解锁 %d/%d" % [unlocked, total], 18, Color.WHITE, true)
+	var ratio := 0.0 if total <= 0 else clampf(float(unlocked) / float(total), 0.0, 1.0)
+	var pct := int(round(ratio * 100.0))
+	var summary := make_label(art, "已解锁 %d/%d · 完成度 %d%%" % [unlocked, total, pct], 17, Color.WHITE, true)
 	summary.name = "AchievementsProgressLabel"
-	apply_rect(summary, rect_full(0.0, 0.0, 0.46, 1.0))
+	apply_rect(summary, rect_full(0.0, 0.02, 0.52, 0.56))
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(summary)
+	var progress_rail := add_optional_gpt_illustration_texture(art, "battle_ink_plaque_20261112", rect_full(0.0, 0.66, 0.50, 0.88), 0.22, false)
+	if progress_rail != null:
+		progress_rail.name = "AchievementsDashboardProgressRail"
+		configure_guofeng_button_slice(progress_rail, true, 32, 0.125)
+		if ratio > 0.001:
+			var fill_key := "quiet_gold_accent" if ratio >= 1.0 else "table_gpt_backdrop_bright"
+			var progress_fill := add_optional_gpt_illustration_texture(progress_rail, fill_key, rect_full(0.0, 0.0, ratio, 1.0), 0.94, false)
+			if progress_fill != null:
+				progress_fill.name = "AchievementsDashboardProgressFill"
+				progress_fill.self_modulate = Color(0.96, 0.82, 0.42) if ratio >= 1.0 else Color(0.88, 0.96, 0.92)
 	var next_key := ""
 	# Prefer a cumulative milestone with useful measured progress, then the
 	# first locked entry. The gallery order and saved unlock flags stay stable.
@@ -307,7 +319,7 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 				break
 	if next_key != "":
 		var target_key := next_key
-		var next_button := make_small_button("下一目标 · %s · %s" % [achievement_display_name(next_key), achievement_progress_text(next_key).trim_prefix("进度 ")], Color.WHITE, func() -> void:
+		var next_button := make_small_button("下一目标 · %s (%s)" % [achievement_display_name(next_key), achievement_progress_text(next_key).trim_prefix("进度 ")], Color.WHITE, func() -> void:
 			var row := parent.find_child("AchievementRow_%s" % target_key, true, false) as Control
 			if row != null:
 				var focus_target := row.find_child("AchievementRowFocusTarget", true, false) as Control
@@ -317,17 +329,21 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 		)
 		next_button.name = "AchievementsNextTargetButton"
 		next_button.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET)
+		next_button.add_theme_font_size_override("font_size", accessibility_font_size(14))
 		next_button.set_meta("achievement_target_key", next_key)
 		set_ui_full_text(next_button, achievement_goal_text(next_key) + "；" + achievement_progress_text(next_key) + "；点击定位", "下一成就目标")
 		art.add_child(next_button)
-		apply_rect(next_button, rect_full(0.40, 0.0, 1.0, 1.0))
+		apply_rect(next_button, rect_full(0.55, 0.5, 1.0, 0.5))
+		next_button.offset_top = -22.0
+		next_button.offset_bottom = 22.0
 		style_guofeng_secondary_action(next_button)
 	else:
-		var detail := make_label(art, "全部成就已收录", 13, Color.WHITE, false)
+		var detail := make_label(art, "全部成就已收录", 14, Color.WHITE, true)
 		detail.name = "AchievementsProgressDetailLabel"
-		apply_rect(detail, rect_full(0.48, 0.0, 1.0, 1.0))
+		apply_rect(detail, rect_full(0.55, 0.0, 1.0, 1.0))
 		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_guofeng_label(detail)
+		detail.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	return art
 
 
@@ -462,8 +478,9 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.480, 0.080, 0.945, 0.380))
+		apply_rect(shortcut_label, rect_full(0.500, 0.140, 0.860, 0.420))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		shortcut_label.modulate = Color(1.0, 1.0, 1.0, 0.78)
 	var focus_marker := make_label(art, "•", 14, Color.WHITE, false)
 	focus_marker.name = "ActionButtonFocusMarker"
 	focus_marker.add_theme_font_size_override("font_size", 14)
@@ -482,18 +499,32 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 
 func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var group := str(button.get_meta("normal_action_group", ""))
-	var ink_face := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
+	var role := str(button.get_meta("action_role", ""))
+	var is_danger := role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false))
+	var face_key_meta := str(button.get_meta("guofeng_button_face_key", ""))
+	var has_cinnabar_face := face_key_meta == "button_face_danger_cinnabar_gpt" and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
+	var ink_face := face_key_meta == "menu_ink_primary" or has_cinnabar_face
 	var on_ink := (not focused and group != "play") if group != "" else (focused or ink_face)
 	var text_color := Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18)
-	if group == "tools" and not focused:
+	if is_danger:
+		if has_cinnabar_face:
+			text_color = Color(0.99, 0.95, 0.84)
+			on_ink = true
+		elif focused:
+			text_color = Color(1.0, 0.88, 0.74)
+			on_ink = true
+		else:
+			text_color = Color(0.62, 0.16, 0.13)
+			on_ink = false
+	elif group == "tools" and not focused:
 		text_color = Color(0.85, 0.82, 0.66)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if focus_plate != null:
-		var focus_key := "button_face_jiangnan_gpt" if group != "" else "battle_ink_plaque_20261112"
+		var focus_key := "button_face_jiangnan_gpt" if group != "" else ("button_face_danger_cinnabar_gpt" if is_danger and has_cinnabar_face else "battle_ink_plaque_20261112")
 		var source := optional_gpt_illustration_texture(focus_key)
 		if source != null:
 			focus_plate.texture = source
-			if group != "":
+			if group != "" or focus_key == "button_face_danger_cinnabar_gpt":
 				configure_guofeng_button_slice(focus_plate, true, 96, 0.125)
 			else:
 				configure_guofeng_button_slice(focus_plate, true, 32, 0.25)
@@ -507,10 +538,14 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	if focus_marker != null:
 		focus_marker.visible = focused
 		style_guofeng_label(focus_marker, on_ink)
+		if is_danger and focused:
+			focus_marker.add_theme_color_override("font_color", Color(1.0, 0.82, 0.62))
 		position_button_focus_marker(button, focus_marker)
 	var shortcut_label := button.find_child("ActionButtonShortcutHint", true, false) as Label
 	if shortcut_label != null:
 		style_guofeng_label(shortcut_label, on_ink)
+		if is_danger and not focused and not has_cinnabar_face:
+			shortcut_label.add_theme_color_override("font_color", Color(0.62, 0.16, 0.13))
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		button.add_theme_color_override(state, text_color)
 
@@ -1562,7 +1597,34 @@ func advisor_panel_card_payloads() -> Array:
 	payloads.append({"heading": "守", "main": advisor_defense_text_from_summary({}, [], threat_summary), "sub": threat_summary, "accent": Color(0.84, 0.62, 0.54)})
 	return payloads
 
+func advisor_readable_safety_text(report: Dictionary) -> String:
+	match str(report.get("safety_label", "")):
+		"安":
+			return "安全·全现"
+		"现":
+			return "安全·现物"
+		"熟":
+			return "较稳·熟张"
+		"筋":
+			return "较稳·筋线"
+		"壁":
+			return "较稳·壁牌"
+	var risk := str(report.get("risk_label", "中"))
+	if risk == "":
+		risk = "中"
+	return "风险%s" % risk
+
+
 func advisor_compact_conclusion_text() -> String:
+	if can_self_discard():
+		var reports := ai_discard_reports_for_render()
+		if not reports.is_empty():
+			var best: Dictionary = reports[0]
+			var best_tile_text := tile_label(str(best.get("tile", "")))
+			var shanten_text := shanten_label(int(best.get("shanten", 8)))
+			if bool(best.get("wait_discard_furiten", false)):
+				return "打%s · %s仅自摸" % [best_tile_text, shanten_text]
+			return "推荐打 %s · %s" % [best_tile_text, shanten_text]
 	var payloads := advisor_panel_card_payloads()
 	return "牌势 · " + str(payloads[1].get("main", "等待")) if payloads.size() > 1 else "牌势 · 等待"
 
@@ -1582,6 +1644,17 @@ func advisor_narrow_conclusion_text() -> String:
 
 
 func advisor_compact_context_text() -> String:
+	if can_self_discard():
+		var reports := ai_discard_reports_for_render()
+		if not reports.is_empty():
+			var best: Dictionary = reports[0]
+			var safety_text := advisor_readable_safety_text(best)
+			var variety := int(best.get("variety", 0))
+			if int(best.get("shanten", 8)) == 0:
+				var wait_total := int(best.get("wait_total_remaining", best.get("ukeire", 0)))
+				return "待牌%d张(%d种) · %s" % [wait_total, variety, safety_text]
+			var ukeire := int(best.get("ukeire", 0))
+			return "进张%d张(%d种) · %s" % [ukeire, variety, safety_text]
 	var payloads := advisor_panel_card_payloads()
 	if payloads.size() < 3:
 		return advisor_context_summary()
@@ -1655,6 +1728,9 @@ func refresh_advisor_panel_cards(panel: Control) -> void:
 	var recommendation := root_layer.find_child("AdvisorDetailRecommendedTileButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if recommendation != null:
 		refresh_advisor_recommendation_button(recommendation)
+	var detail_hero := root_layer.find_child("AdvisorDetailHeroCard", true, false) as Control if root_layer != null and is_instance_valid(root_layer) else null
+	if detail_hero != null:
+		refresh_advisor_detail_hero_card(detail_hero)
 
 
 func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
@@ -1712,33 +1788,108 @@ func draw_advisor_panel(parent: Control, force_visible: bool = false) -> void:
 	var title := make_label(panel, advisor_narrow_conclusion_text() if detail_only else advisor_compact_conclusion_text(), 16, Color.WHITE, true)
 	title.name = "AdvisorPanelTitle"
 	style_guofeng_label(title)
-	apply_rect(title, rect_full(0.04, 0.08, 0.72, 0.49))
+	apply_rect(title, rect_full(0.04, 0.08, 1.0, 0.49))
+	title.offset_right = -82.0
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
 	set_ui_full_text(title, advisor_compact_conclusion_text(), "牌势主结论")
 	var context := make_label(panel, advisor_compact_context_text(), 13, Color.WHITE, false)
 	context.name = "AdvisorPanelContext"
 	style_guofeng_label(context)
-	apply_rect(context, rect_full(0.04, 0.52, 0.72, 0.93))
+	apply_rect(context, rect_full(0.04, 0.52, 1.0, 0.93))
+	context.offset_right = -82.0
 	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(context)
 	context.visible = not detail_only
 	set_ui_full_text(context, advisor_detail_text(), "牌势与防守完整依据；打开详解阅读")
 	var detail_button := make_small_button("详解", Color(0.48, 0.56, 0.40), Callable(self, "toggle_advisor_detail_panel"))
 	detail_button.name = "AdvisorDetailButton"
-	detail_button.custom_minimum_size = Vector2(44, 44)
+	detail_button.custom_minimum_size = Vector2(64, 44)
 	detail_button.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	detail_button.tooltip_text = "展开完整建议、牌势与防守分析 · Esc收起"
 	apply_guofeng_button_face(detail_button)
-	apply_rect(detail_button, rect_full(0.76, 0.5, 0.97, 0.5))
+	apply_rect(detail_button, rect_full(1.0, 0.5, 1.0, 0.5))
+	detail_button.offset_left = -72.0
+	detail_button.offset_right = -8.0
 	detail_button.offset_top = -22.0
 	detail_button.offset_bottom = 22.0
 	panel.add_child(detail_button)
 	if detail_only:
 		apply_rect(title, rect_full(0.04, 0.0, 0.52, 1.0))
-		detail_button.anchor_left = 0.55
+		title.offset_right = 0.0
+		apply_rect(detail_button, rect_full(0.55, 0.5, 0.97, 0.5))
+		detail_button.offset_left = 0.0
+		detail_button.offset_right = 0.0
+		detail_button.offset_top = -22.0
+		detail_button.offset_bottom = 22.0
 	ai_advisor_fingerprint = JSON.stringify({"advice": current_human_advice, "threats": current_seat_threat_reports})
 	ai_advisor_root_generation = ui_page_generation
+
+
+func refresh_advisor_detail_hero_card(hero: Control) -> void:
+	if hero == null or not is_instance_valid(hero):
+		return
+	for child in hero.get_children():
+		if str(child.name) != "AdvisorDetailHeroPlate":
+			child.queue_free()
+	var vbox := VBoxContainer.new()
+	vbox.name = "AdvisorDetailHeroBody"
+	configure_passive_container(vbox)
+	apply_rect(vbox, rect_full(0.07, 0.06, 0.93, 0.94))
+	vbox.add_theme_constant_override("separation", 6)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hero.add_child(vbox)
+	if can_self_discard():
+		var reports := ai_discard_reports_for_render()
+		if not reports.is_empty():
+			var best: Dictionary = reports[0]
+			var best_tile := str(best.get("tile", ""))
+			var tile_holder := CenterContainer.new()
+			tile_holder.name = "AdvisorDetailHeroTileHolder"
+			tile_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tile_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			vbox.add_child(tile_holder)
+			if best_tile != "":
+				var mini_tile := make_tile_view(best_tile, Vector2(46, 64), false, Callable(), false)
+				mini_tile.name = "AdvisorDetailHeroTile"
+				mini_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				mini_tile.focus_mode = Control.FOCUS_NONE
+				tile_holder.add_child(mini_tile)
+			var headline := make_label(vbox, "推荐打 %s" % tile_label(best_tile), 15, Color.WHITE, true)
+			headline.name = "AdvisorDetailHeroHeadline"
+			headline.add_theme_font_override("font", ui_heading_font())
+			headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			style_guofeng_label(headline)
+			var shanten_num := int(best.get("shanten", 8))
+			var shanten_copy := shanten_label(shanten_num) + (" · 仅自摸" if bool(best.get("wait_discard_furiten", false)) else "")
+			var shanten_lbl := make_label(vbox, shanten_copy, 12, Color.WHITE, false)
+			shanten_lbl.name = "AdvisorDetailHeroShanten"
+			shanten_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			style_guofeng_label(shanten_lbl)
+			var draw_copy := "待牌 %d张 / %d种" % [int(best.get("wait_total_remaining", best.get("ukeire", 0))), int(best.get("variety", 0))] if shanten_num == 0 else "进张 %d张 / %d种" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))]
+			var draw_lbl := make_label(vbox, draw_copy, 12, Color.WHITE, false)
+			draw_lbl.name = "AdvisorDetailHeroDraws"
+			draw_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			style_guofeng_label(draw_lbl)
+			var safety_text := advisor_readable_safety_text(best)
+			var safety_lbl := make_label(vbox, safety_text, 12, Color.WHITE, true)
+			safety_lbl.name = "AdvisorDetailHeroSafety"
+			safety_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			style_guofeng_label(safety_lbl)
+			if safety_text.contains("高"):
+				safety_lbl.add_theme_color_override("font_color", Color(0.58, 0.14, 0.11))
+			elif safety_text.contains("安全") or safety_text.contains("低"):
+				safety_lbl.add_theme_color_override("font_color", Color(0.09, 0.28, 0.21))
+			return
+	var idle_title := make_label(vbox, "观局分析" if offline_phase != "pending_claim" else "响应决策", 15, Color.WHITE, true)
+	idle_title.name = "AdvisorDetailHeroIdleTitle"
+	idle_title.add_theme_font_override("font", ui_heading_font())
+	idle_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	style_guofeng_label(idle_title)
+	var idle_sub := make_label(vbox, "余牌 %d 张" % get_wall_count(), 12, Color.WHITE, false)
+	idle_sub.name = "AdvisorDetailHeroIdleSub"
+	idle_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	style_guofeng_label(idle_sub)
 
 
 func draw_advisor_detail_panel(parent: Control) -> void:
@@ -1748,74 +1899,121 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	input_shield.name = "AdvisorDetailModalShield"
 	input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
 	input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
-	input_shield.z_index = 43
+	input_shield.z_index = 68
 	input_shield.set_meta("layout_role", "advisor_read_only_inspect_shield")
+	var backdrop_scrim := make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.54), "ui_dark_scrim")
+	backdrop_scrim.name = "AdvisorDetailBackdropScrim"
+	input_shield.add_child(backdrop_scrim)
 	parent.add_child(input_shield)
-	var panel := make_layout_host(rect_full(0.100, 0.130, 0.900, 0.620))
+	var panel := make_layout_host(rect_full(0.100, 0.125, 0.900, 0.625))
 	panel.name = "AdvisorDetailPanel"
-	panel.z_index = 44
+	panel.z_index = 69
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.clip_contents = true
 	panel.set_meta("guofeng_surface_key", "settings_readable_gpt")
 	parent.add_child(panel)
+	# Dismiss when clicking the dimmed backdrop outside the modal AND outside
+	# HandTray (clicks over HandTray are absorbed silently without discarding or
+	# closing the read-only inspect view, preserving read-only safety contracts).
+	input_shield.gui_input.connect(func(event: InputEvent) -> void:
+		var click_pos := Vector2.ZERO
+		var triggered := false
+		if event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
+				click_pos = mouse_event.global_position
+				triggered = true
+		elif event is InputEventScreenTouch:
+			var touch_event := event as InputEventScreenTouch
+			if touch_event.pressed:
+				click_pos = touch_event.position
+				triggered = true
+		if not triggered:
+			return
+		input_shield.accept_event()
+		if is_instance_valid(panel) and panel.get_global_rect().has_point(click_pos):
+			return
+		var hand_tray := parent.find_child("HandTray", true, false) as Control
+		if hand_tray != null and is_instance_valid(hand_tray) and hand_tray.get_global_rect().has_point(click_pos):
+			return
+		close_advisor_detail_panel()
+	)
 	var paper := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "settings_readable_gpt", 1.0)
 	paper.name = "AdvisorDetailPaper"
 	paper.self_modulate = Color.WHITE
 	panel.add_child(paper)
-	var title := make_label(panel, "牌势详解", 16, Color.WHITE, true)
+	var title := make_label(panel, "牌势详解", 18, Color.WHITE, true)
 	title.name = "AdvisorDetailTitle"
 	title.add_theme_font_override("font", ui_heading_font())
 	style_guofeng_label(title)
-	apply_rect(title, rect_full(0.05, 0.0, 0.40, 0.0))
+	apply_rect(title, rect_full(0.04, 0.0, 0.36, 0.0))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.offset_top = 6.0
-	title.offset_bottom = 6.0 + title.get_minimum_size().y
+	title.offset_top = 8.0
+	title.offset_bottom = 8.0 + title.get_minimum_size().y
 	var context := make_label(panel, advisor_context_line(), 11, Color.WHITE, false)
 	context.name = "AdvisorDetailContext"
 	style_guofeng_label(context)
-	apply_rect(context, rect_full(0.05, 0.0, 0.56, 0.0))
+	apply_rect(context, rect_full(0.04, 0.0, 0.56, 0.0))
 	context.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	context.offset_top = title.offset_bottom + 2.0
 	context.offset_bottom = context.offset_top + context.get_minimum_size().y
 	configure_clipped_label(context)
-	var read_only_badge := make_label(panel, "只读分析", 10, Color.WHITE, false)
+	var read_only_badge := make_label(panel, "只读分析", 11, Color.WHITE, false)
 	read_only_badge.name = "AdvisorDetailReadOnlyBadge"
 	style_guofeng_label(read_only_badge)
-	apply_rect(read_only_badge, rect_full(0.40, 0.0, 0.56, 0.0))
-	read_only_badge.offset_top = 6.0
-	read_only_badge.offset_bottom = 6.0 + read_only_badge.get_minimum_size().y
+	apply_rect(read_only_badge, rect_full(0.38, 0.0, 0.56, 0.0))
+	read_only_badge.offset_top = 10.0
+	read_only_badge.offset_bottom = 10.0 + read_only_badge.get_minimum_size().y
 	read_only_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	read_only_badge.tooltip_text = "分析层已锁定牌桌操作；关闭后恢复出牌焦点"
 	read_only_badge.set_meta("accessible_name", "牌势详解只读分析")
 	var recommended_button := make_small_button("定位推荐牌", Color.WHITE, Callable())
 	recommended_button.name = "AdvisorDetailRecommendedTileButton"
 	recommended_button.custom_minimum_size = Vector2(120, 44)
-	recommended_button.add_theme_font_size_override("font_size", accessibility_font_size(11))
+	recommended_button.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	refresh_advisor_recommendation_button(recommended_button)
 	connect_immediate_button_action(recommended_button, func() -> void: locate_advisor_recommended_tile(recommended_button))
 	apply_guofeng_button_face(recommended_button, true)
-	apply_rect(recommended_button, rect_full(0.60, 0.0, 0.85, 0.0))
-	recommended_button.offset_top = 6.0
-	recommended_button.offset_bottom = 50.0
+	apply_rect(recommended_button, rect_full(0.59, 0.0, 0.84, 0.0))
+	recommended_button.offset_top = 8.0
+	recommended_button.offset_bottom = 52.0
 	panel.add_child(recommended_button)
 	var close_button := make_small_button("收起", Color.WHITE, Callable(self, "close_advisor_detail_panel"))
 	close_button.name = "AdvisorDetailCloseButton"
 	close_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
-	close_button.add_theme_font_size_override("font_size", accessibility_font_size(11))
+	close_button.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	close_button.tooltip_text = "收起牌势详解 · Esc"
 	apply_guofeng_button_face(close_button)
-	apply_rect(close_button, rect_full(0.89, 0.0, 0.98, 0.0))
-	close_button.offset_top = 6.0
-	close_button.offset_bottom = 50.0
+	apply_rect(close_button, rect_full(0.86, 0.0, 0.96, 0.0))
+	close_button.offset_top = 8.0
+	close_button.offset_bottom = 52.0
 	panel.add_child(close_button)
-	var body_top := maxf(context.offset_bottom, maxf(recommended_button.offset_bottom, close_button.offset_bottom)) + 6.0
+	var header_bottom := maxf(context.offset_bottom, maxf(recommended_button.offset_bottom, close_button.offset_bottom))
+	var header_rule := add_optional_gpt_illustration_texture(panel, "battle_ink_plaque_20261112", rect_full(0.04, 0.0, 0.96, 0.0), 0.22, false)
+	if header_rule != null:
+		header_rule.name = "AdvisorDetailHeaderRule"
+		header_rule.offset_top = header_bottom + 4.0
+		header_rule.offset_bottom = header_bottom + 6.0
+	var body_top := header_bottom + 10.0
+	var hero_card := make_layout_host(rect_full(0.04, 0.0, 0.27, 1.0))
+	hero_card.name = "AdvisorDetailHeroCard"
+	hero_card.offset_top = body_top
+	hero_card.offset_bottom = -34.0
+	panel.add_child(hero_card)
+	var hero_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var hero_plate := add_optional_gpt_illustration_texture(hero_card, hero_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if hero_plate != null:
+		hero_plate.name = "AdvisorDetailHeroPlate"
+		hero_plate.self_modulate = Color(0.99, 0.97, 0.92)
+		configure_guofeng_button_slice(hero_plate, true, 64 if hero_key == "guofeng_card_frame_gpt" else 96, 0.125)
+	refresh_advisor_detail_hero_card(hero_card)
 	var detail_scroll := ScrollContainer.new()
 	detail_scroll.name = "AdvisorDetailScroll"
 	configure_scroll_container(detail_scroll, "上下滚动查看完整牌势详解")
 	detail_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	detail_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	detail_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(detail_scroll, rect_full(0.05, 0.0, 0.95, 1.0))
+	apply_rect(detail_scroll, rect_full(0.29, 0.0, 0.96, 1.0))
 	detail_scroll.offset_top = body_top
 	detail_scroll.offset_bottom = -34.0
 	panel.add_child(detail_scroll)
@@ -1835,7 +2033,7 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	detail_text.add_theme_constant_override("outline_size", 0)
 	detail_text.add_theme_constant_override("shadow_offset_x", 0)
 	detail_text.add_theme_constant_override("shadow_offset_y", 0)
-	detail_text.add_theme_constant_override("line_spacing", 4)
+	detail_text.add_theme_constant_override("line_spacing", 5)
 	detail_text.set_meta("guofeng_text_surface", "paper")
 	detail_text.set_meta("width_policy", "native_scroll_container_content_width")
 	detail_scroll.add_child(detail_text)
@@ -1843,7 +2041,7 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	var hint := make_label(panel, "", 10, Color.WHITE, false)
 	hint.name = "AdvisorDetailHint"
 	style_guofeng_label(hint)
-	apply_rect(hint, rect_full(0.05, 1.0, 0.95, 1.0))
+	apply_rect(hint, rect_full(0.04, 1.0, 0.96, 1.0))
 	hint.offset_top = -29.0
 	hint.offset_bottom = -5.0
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -2273,6 +2471,8 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("wind_label_content_size_snapshot_policy", "one_content_size_snapshot_per_wind_label_pass")
 	var center_current_seat := get_current_seat()
 	var wind_font_size := 15 if compact_center else 17
+	var center_resolved_table_px := game_table_pixel_size()
+	var center_resolved_height_px := maxf(center.size.y, center_resolved_table_px.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y))
 	for i in range(4):
 		var wind_color = Color(1.0, 0.92, 0.55) if i == center_current_seat else Color(0.72, 0.75, 0.70)
 		var wind = make_label(center, str(CENTER_WIND_LABELS[i]), wind_font_size, wind_color, true)
@@ -2286,11 +2486,11 @@ func draw_center(parent: Control) -> void:
 		wind.add_theme_color_override("font_outline_color", Color(0.015, 0.028, 0.018, 0.90))
 		wind.add_theme_constant_override("outline_size", 1)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
-		if i == 2:
+		if CENTER_WIND_RECTS[i].size.y >= 0.95:
 			# The bottom slot is shorter than the authored CJK glyph minimum on
 			# compact viewports. Keep the anchor contract, but spend the overflow
 			# above the slot's bottom edge instead of clipping outside the shell.
-			var wind_slot_height: float = center.size.y * CENTER_WIND_RECTS[i].size.y - center.size.y * CENTER_WIND_RECTS[i].position.y
+			var wind_slot_height: float = center_resolved_height_px * (CENTER_WIND_RECTS[i].size.y - CENTER_WIND_RECTS[i].position.y)
 			var wind_min_height: float = wind.get_combined_minimum_size().y
 			wind.offset_top = -maxf(0.0, wind_min_height - wind_slot_height)
 		fit_label_font_size(wind, maxf(18.0, center_content_size.x * CENTER_PANEL_RECT.size.x * CENTER_WIND_RECTS[i].size.x * 0.82), wind_font_size, 10)
@@ -9757,9 +9957,9 @@ func draw_center_wind_compass(parent: Control) -> Control:
 	if simple_seal_texture != null:
 		simple_seal_texture.name = "CenterWindSimpleSealTexture"
 	var simple_marks := [
-		[rect_full(0.455, 0.040, 0.545, 0.155), "东", 0],
+		[rect_full(0.455, 0.845, 0.545, 0.960), "东", 0],
 		[rect_full(0.845, 0.455, 0.960, 0.545), "南", 1],
-		[rect_full(0.455, 0.845, 0.545, 0.960), "西", 2],
+		[rect_full(0.455, 0.040, 0.545, 0.155), "西", 2],
 		[rect_full(0.040, 0.455, 0.155, 0.545), "北", 3],
 	]
 	for mark in simple_marks:
@@ -9783,7 +9983,7 @@ func draw_center_wind_compass(parent: Control) -> Control:
 	if pointer_texture != null:
 		pointer_texture.name = "CenterWindPointerTexture"
 		pointer_texture.pivot_offset = pointer_texture.size * 0.5
-		pointer_texture.rotation = float(current) * TAU / 4.0
+		pointer_texture.rotation = float((current + 2) % 4) * TAU / 4.0
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			var pointer_tw := create_screen_tween()
 			pointer_tw.set_loops(48)
@@ -9805,9 +10005,9 @@ func draw_center_wind_compass(parent: Control) -> Control:
 	compass.add_child(turn_track)
 	draw_center_wind_direction_beads(compass, current)
 	var wind_marks := [
-		[rect_full(0.45, 0.00, 0.55, 0.15), "东", 0],
+		[rect_full(0.45, 0.85, 0.55, 1.00), "东", 0],
 		[rect_full(0.85, 0.45, 1.00, 0.55), "南", 1],
-		[rect_full(0.45, 0.85, 0.55, 1.00), "西", 2],
+		[rect_full(0.45, 0.00, 0.55, 0.15), "西", 2],
 		[rect_full(0.00, 0.45, 0.15, 0.55), "北", 3],
 	]
 	for mark in wind_marks:
@@ -10362,18 +10562,22 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	var background = add_optional_gpt_illustration_texture(panel, "danger_gpt_discard", rect_full(0.014, 0.030, 0.986, 0.970), 0.24, false)
 	if background != null:
 		background.name = "DangerWarningTexture"
-	var warning_rail := add_optional_gpt_illustration_texture(panel, "ui_progress_signal_strip", rect_full(0.040, 0.032, 0.960, 0.082), 0.92, false)
+	var warning_rail := add_optional_gpt_illustration_texture(panel, "quiet_gold_accent", rect_full(0.040, 0.032, 0.960, 0.072), 0.92, false)
 	if warning_rail != null:
-		warning_rail.modulate = Color(0.95, 0.30, 0.22, 0.92)
-	var danger_tile = make_tile_view(tile, Vector2(32, 44), false, Callable(), true, "", "")
+		warning_rail.modulate = Color(0.86, 0.24, 0.18, 0.92)
+	var danger_tile_slot := CenterContainer.new()
+	danger_tile_slot.name = "DangerDiscardTileSlot"
+	danger_tile_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	apply_rect(danger_tile_slot, rect_full(0.035, 0.105, 0.340, 0.905))
+	panel.add_child(danger_tile_slot)
+	var danger_tile = make_tile_view(tile, Vector2(46, 64), false, Callable(), true, "", "")
 	danger_tile.name = "DangerDiscardTile"
 	danger_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	danger_tile.focus_mode = Control.FOCUS_NONE
 	danger_tile.set_meta("preview_only", true)
 	danger_tile.set_meta("interactive_owner", "HandTrayTiles")
 	danger_tile.tooltip_text = "预览牌，不可点击；请使用下方确认或改打按钮"
-	panel.add_child(danger_tile)
-	apply_rect(danger_tile, rect_full(0.040, 0.120, 0.335, 0.890))
+	danger_tile_slot.add_child(danger_tile)
 	var risk_label := str(report.get("risk_label", "高"))
 	if risk_label == "":
 		risk_label = "高"
@@ -10400,7 +10604,8 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 		compact_reason = str(danger_source.get("reason", ""))
 	elif str(report.get("feed_text", "")) != "":
 		compact_reason = str(report.get("feed_text", ""))
-	var detail := make_label(panel, danger_discard_detail_display_text(compact_reason), 12, Color(0.96, 0.91, 0.80), true)
+	var detail_slot_width := maxf(84.0, safe_content_pixel_size().x * (DANGER_DISCARD_CONFIRMATION_RECT.size.x - DANGER_DISCARD_CONFIRMATION_RECT.position.x) * 0.60)
+	var detail := make_label(panel, danger_discard_detail_display_text(compact_reason, detail_slot_width), 12, Color(0.96, 0.91, 0.80), true)
 	detail.name = "DangerDiscardDetailText"
 	apply_rect(detail, rect_full(0.370, 0.630, 0.980, 0.890))
 	detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -10411,15 +10616,26 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	configure_clipped_label(detail)
 	return panel
 
-func danger_discard_detail_display_text(reason: String) -> String:
+func danger_discard_detail_display_text(reason: String, max_width_px: float = 128.0) -> String:
 	var clean := reason.strip_edges()
 	if clean == "":
 		return "牌路危险"
-	# Keep the visible slot to one scan-friendly line. The report itself is exposed
-	# through the control metadata and tooltip configured by the caller.
-	if clean.length() > 6:
-		return "牌路危险"
-	return clean
+	var font := ui_cjk_font()
+	var font_size := accessibility_font_size(12)
+	if font != null and font.get_string_size(clean, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+		return clean
+	# Preserve the leading clause or fit as many real characters as the measured
+	# lane holds instead of unconditionally erasing every >6-char reason.
+	var first_clause := clean.split("，")[0].split("·")[0].strip_edges()
+	if first_clause != "" and font != null and font.get_string_size(first_clause, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+		return first_clause
+	var candidate := first_clause if first_clause != "" else clean
+	if font != null:
+		while candidate.length() > 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_width_px:
+			candidate = candidate.left(candidate.length() - 1)
+		if candidate.length() >= 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+			return candidate + "…"
+	return "牌路危险"
 
 
 func draw_deal_cascade_completion_art(parent: Control, dealer: int, center: Vector2, accent: Color) -> Control:
@@ -12856,7 +13072,7 @@ func draw_last_discard_focus_marker(parent: Control, seat: int, table_size: Vect
 
 
 func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
-	# r213: GPT chrome conversion
+	# Clean Xuan-paper nine-slice input surface (zero double-dark scrim or 5px glyph noise).
 	var art_id = line_edit_art_id(label_text)
 	var art = Control.new()
 	art.name = "LineEditInputArt_%s" % art_id
@@ -12864,40 +13080,38 @@ func draw_line_edit_input_art(edit: Control, label_text: String) -> Control:
 	art.show_behind_parent = true
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
 	edit.add_child(art)
-	var accent = line_edit_accent(label_text)
-	var field_plate = add_optional_gpt_illustration_texture(art, "ui_online_form_field", rect_full(0.000, 0.000, 1.000, 1.000), 0.32, false)
-	if field_plate == null:
-		field_plate = add_optional_gpt_illustration_texture(art, "ui_chat_lane_plate", rect_full(0.000, 0.000, 1.000, 1.000), 0.28, false)
+	var field_key := "input_field_paper_normal_gpt" if optional_gpt_illustration_texture("input_field_paper_normal_gpt") != null else "button_face_jiangnan_gpt"
+	var field_plate = add_optional_gpt_illustration_texture(art, field_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if field_plate != null:
 		field_plate.name = "LineEditGptFieldPlate_%s" % art_id
-		field_plate.modulate = Color(
-			clampf(0.55 + accent.r * 0.45, 0.30, 1.15),
-			clampf(0.55 + accent.g * 0.45, 0.30, 1.15),
-			clampf(0.55 + accent.b * 0.45, 0.30, 1.15),
-			0.38
+		field_plate.self_modulate = Color(0.99, 0.98, 0.94)
+		configure_guofeng_button_slice(field_plate, true, 48 if field_key == "input_field_paper_normal_gpt" else 96, 0.125)
+	if edit is LineEdit:
+		var line_edit := edit as LineEdit
+		line_edit.focus_entered.connect(func() -> void:
+			if not is_instance_valid(field_plate):
+				return
+			var focus_tex := optional_gpt_illustration_texture("input_field_paper_focus_gpt")
+			if focus_tex != null:
+				field_plate.texture = focus_tex
+				configure_guofeng_button_slice(field_plate, true, 48, 0.125)
+			else:
+				field_plate.self_modulate = Color(1.0, 0.98, 0.90)
 		)
-	var surface = make_gpt_plate_rect(rect_full(0.006, 0.055, 0.994, 0.945), Color(0.018, 0.026, 0.024, 0.64), "ui_dark_scrim")
-	surface.name = "LineEditInputSurface_%s" % art_id
-	art.add_child(surface)
-	var inner = make_gpt_plate_rect(rect_full(0.032, 0.210, 0.968, 0.790), Color(0.010, 0.018, 0.018, 0.46), "ui_dark_scrim")
-	inner.name = "LineEditInputInner_%s" % art_id
-	art.add_child(inner)
-	var accent_wash = make_gpt_edge_rail(rect_full(0.020, 0.320, 0.027, 0.680), Color(accent.r, accent.g, accent.b, 0.12))
-	accent_wash.name = "LineEditInputAccentWash_%s" % art_id
-	art.add_child(accent_wash)
-	var focus_glow = make_gpt_gate(rect_full(0.925, 0.505, 0.950, 0.516), Color(accent.r, accent.g, accent.b, 0.018))
-	focus_glow.name = "LineEditInputFocusGlow_%s" % art_id
-	art.add_child(focus_glow)
-	var corner_seal = make_gpt_gate(rect_full(0.930, 0.275, 0.954, 0.405), Color(accent.r, accent.g, accent.b, 0.026))
-	corner_seal.name = "LineEditInputCornerSeal_%s" % art_id
-	art.add_child(corner_seal)
-	var corner_glyph = make_label(corner_seal, line_edit_corner_glyph(art_id), 5, Color(0.98, 0.92, 0.66, 0.18), true)
-	corner_glyph.name = "LineEditInputCornerGlyph_%s" % art_id
-	apply_rect(corner_glyph, rect_full(0.0, 0.0, 1.0, 1.0))
+		line_edit.focus_exited.connect(func() -> void:
+			if not is_instance_valid(field_plate):
+				return
+			var normal_tex := optional_gpt_illustration_texture("input_field_paper_normal_gpt")
+			if normal_tex != null:
+				field_plate.texture = normal_tex
+				configure_guofeng_button_slice(field_plate, true, 48, 0.125)
+			else:
+				field_plate.self_modulate = Color(0.99, 0.98, 0.94)
+		)
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		art.modulate.a = 0.0
 		var intro := create_screen_tween()
-		intro.tween_property(art, "modulate:a", 1.0, 0.22).from(0.0).set_ease(Tween.EASE_OUT)
+		intro.tween_property(art, "modulate:a", 1.0, 0.18).from(0.0).set_ease(Tween.EASE_OUT)
 	return art
 
 
@@ -12908,33 +13122,49 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = -1.
 	var progress_status := "准备中 · 等待资源" if progress_ratio < 0.0 else "%d%% · 正在加载" % int(round(clampf(progress_ratio, 0.0, 1.0) * 100.0))
 	var progress_label := make_label(art, progress_status, 14, Color.WHITE, true)
 	progress_label.name = "LoadingProgressStatusLabel"
-	apply_rect(progress_label, rect_full(0.0, 0.0, 1.0, 0.70))
+	apply_rect(progress_label, rect_full(0.0, 0.0, 1.0, 0.62))
 	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	progress_label.set_meta("progress_ratio", progress_ratio)
 	set_ui_full_text(progress_label, progress_status, "加载进度：" + progress_status)
 	style_guofeng_label(progress_label)
-	var route := make_gpt_plate_rect(rect_full(0.0, 0.82, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt")
+	var route := add_optional_gpt_illustration_texture(art, "battle_ink_plaque_20261112", rect_full(0.08, 0.80, 0.92, 0.80), 0.24, false)
+	if route == null:
+		route = make_gpt_plate_rect(rect_full(0.08, 0.80, 0.92, 0.80), Color.WHITE, "battle_ink_plaque_20261112")
+		art.add_child(route)
 	route.name = "LoadingProgressRoute"
-	art.add_child(route)
-	var fill := make_gpt_plate_rect(rect_full(0.0, 0.0, clampf(progress_ratio, 0.0, 1.0), 1.0), Color.WHITE, "menu_ink_primary")
+	route.offset_top = -6.0
+	route.offset_bottom = 6.0
+	if route is TextureRect:
+		configure_guofeng_button_slice(route as TextureRect, true, 32, 0.125)
+	var clamped_ratio := clampf(progress_ratio, 0.0, 1.0)
+	var fill := add_optional_gpt_illustration_texture(route, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, clamped_ratio, 1.0), 0.94, false)
+	if fill == null:
+		fill = make_gpt_plate_rect(rect_full(0.0, 0.0, clamped_ratio, 1.0), Color.WHITE, "menu_ink_primary")
+		route.add_child(fill)
 	fill.name = "LoadingProgressFill"
+	fill.self_modulate = Color(0.90, 0.97, 0.92)
 	fill.visible = progress_ratio >= 0.0
 	fill.set_meta("progress_ratio", progress_ratio)
-	route.add_child(fill)
 	return art
 
 
 func draw_loading_shuffle_art(parent: Control) -> Control:
-	var art := make_layout_host(rect_full(0.18, 0.365, 0.82, 0.485))
+	var art := make_layout_host(rect_full(0.18, 0.355, 0.82, 0.495))
 	art.name = "LoadingShuffleArt"
 	parent.add_child(art)
 	var loading_tiles := ["E", "S", "N", "R", "Z"]
+	var row := HBoxContainer.new()
+	row.name = "LoadingShuffleTileRow"
+	configure_passive_container(row)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	apply_rect(row, rect_full(0.0, 0.0, 1.0, 1.0))
+	art.add_child(row)
 	for i in range(loading_tiles.size()):
-		var left := 0.16 + float(i) * 0.15
-		var tile := make_tile_view(str(loading_tiles[i]), Vector2(28, 40), false, Callable())
+		var tile := make_tile_view(str(loading_tiles[i]), Vector2(40, 56), false, Callable())
 		tile.name = "LoadingShuffleTile_%d" % i
-		art.add_child(tile)
-		apply_rect(tile, rect_full(left, 0.05, left + 0.075, 0.95))
+		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(tile)
 	return art
 
 
@@ -13953,6 +14183,11 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 	rail.set_meta("child_buttons_own_input", true)
 	apply_rect(rail, rect_full(0.180, 0.704, 0.820, 0.804))
 	parent.add_child(rail)
+	if not high_contrast_enabled:
+		var rail_backing := add_optional_gpt_illustration_texture(rail, "battle_ink_plaque_20261112", rect_full(0.008, 0.04, 0.992, 0.96), 0.44, false)
+		if rail_backing != null:
+			rail_backing.name = "MenuQuickActionRailBacking"
+			configure_guofeng_button_slice(rail_backing, true, 32, 0.25)
 	var items := [
 		["rules", "规则", "help-circle", Color(0.24, 0.44, 0.36), Callable(self, "show_rules_screen")],
 		["stats", "战绩", "trophy", Color(0.68, 0.28, 0.20), Callable(self, "show_stats_screen")],
@@ -14022,25 +14257,39 @@ func draw_menu_quick_action_rail(parent: Control) -> Control:
 		var quick_icon := add_optional_gpt_illustration_texture(button, "menu_nav_" + quick_id + "_jiangnan_gpt", rect_full(0.5, 0.5, 0.5, 0.5), 1.0, true)
 		if quick_icon != null:
 			quick_icon.name = "MenuQuick%sIcon" % quick_suffix
-			quick_icon.offset_left = -44.0
-			quick_icon.offset_right = -12.0
+			quick_icon.offset_left = -38.0
+			quick_icon.offset_right = -6.0
 			quick_icon.offset_top = -16.0
 			quick_icon.offset_bottom = 16.0
 			quick_icon.z_index = 11
 			quick_icon.set_meta("quick_action_id", quick_id)
+		if quick_id == "daily_login" and not bool(daily_login_view_state.get("claimed_today", false)):
+			var claim_dot := add_optional_gpt_illustration_texture(button, "dealer_seal_carved_gpt", rect_full(0.5, 0.5, 0.5, 0.5), 0.96, true)
+			if claim_dot != null:
+				claim_dot.name = "MenuQuickDailyClaimBadge"
+				claim_dot.offset_left = 34.0
+				claim_dot.offset_right = 46.0
+				claim_dot.offset_top = -18.0
+				claim_dot.offset_bottom = -6.0
+				claim_dot.z_index = 12
 		var quick_label := make_label(rail, str(item[1]), 16, Color(0.11, 0.23, 0.18, 1.0), true)
 		quick_label.name = "MenuQuick%sLabel" % quick_suffix
 		quick_label.add_theme_font_override("font", ui_heading_font())
 		apply_rect(quick_label, rect_full(left + button_width * 0.5, 0.125, left + button_width * 0.5, 0.875))
-		quick_label.offset_left = 2.0
-		quick_label.offset_right = 48.0
-		quick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		quick_label.offset_left = 0.0
+		quick_label.offset_right = 44.0
+		quick_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		quick_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		quick_label.z_index = 11
-		quick_label.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18) if high_contrast_enabled else Color(0.96, 0.93, 0.83))
+		quick_label.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18) if high_contrast_enabled else Color(0.98, 0.95, 0.86))
 		quick_label.add_theme_constant_override("outline_size", 0)
-		quick_label.add_theme_constant_override("shadow_offset_x", 0)
-		quick_label.add_theme_constant_override("shadow_offset_y", 0)
+		if high_contrast_enabled:
+			quick_label.add_theme_constant_override("shadow_offset_x", 0)
+			quick_label.add_theme_constant_override("shadow_offset_y", 0)
+		else:
+			quick_label.add_theme_color_override("font_shadow_color", Color(0.02, 0.05, 0.04, 0.78))
+			quick_label.add_theme_constant_override("shadow_offset_x", 0)
+			quick_label.add_theme_constant_override("shadow_offset_y", 1)
 		configure_clipped_label(quick_label)
 		configure_menu_button_motion(button, 0.12 + float(i) * 0.045, 1.060, 0.0)
 	return rail
@@ -14438,11 +14687,11 @@ func online_lobby_slot_state(entry: Dictionary, slot: int) -> String:
 
 func online_lobby_slot_state_icon(entry: Dictionary, slot: int) -> String:
 	if entry.is_empty():
-		return "circle"
+		return "user"
 	if first_present(entry, ["connected", "online", "isConnected"], true) == false:
 		return "alert-triangle"
 	if bool(entry.get("bot", false)):
-		return "cpu"
+		return "sparkles"
 	if bool(entry.get("ready", false)):
 		return "check"
 	return "user" if slot != 0 else "crown"
@@ -14527,7 +14776,14 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		var row_fill = Color(0.024, 0.048, 0.044, 0.92) if active else Color(0.014, 0.026, 0.026, 0.82)
 		row_fill.a *= 0.82
 		var row_rect := rect_full(0.035, top, 0.965, top + roster_row_height)
-		var row := make_gpt_center_crop_plate_rect(row_rect, Color.WHITE, "menu_card_readable_gpt", 0.65) if use_jiangnan_secondary_composition(roster_viewport) else make_layout_host(row_rect)
+		var row: Control = make_layout_host(row_rect)
+		if use_jiangnan_secondary_composition(roster_viewport):
+			var roster_plate_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+			var roster_plate := add_optional_gpt_illustration_texture(row, roster_plate_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+			if roster_plate != null:
+				roster_plate.name = "OnlineLobbyRosterRowPlate_%d" % i
+				roster_plate.self_modulate = Color(0.99, 0.97, 0.92) if active else Color(0.92, 0.89, 0.83)
+				configure_guofeng_button_slice(roster_plate, true, 64 if roster_plate_key == "guofeng_card_frame_gpt" else 96, 0.125)
 		row.name = "OnlineLobbyRosterRow_%d" % i
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.set_meta("column_contract", "seat|name|ready|status")
@@ -14554,7 +14810,7 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 		set_ui_full_text(name, online_lobby_slot_name(entry), "第%d席完整昵称" % (i + 1))
 		mark_ui_optimization(name, "F-072")
 		var state_icon_tint := Color(0.14, 0.44, 0.26, 0.96) if active and bool(entry.get("ready", false)) else (Color(0.24, 0.36, 0.30, 0.90) if active else Color(0.40, 0.44, 0.40, 0.76))
-		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.635, 0.205, 0.695, 0.795), state_icon_tint)
+		var state_icon = add_lucide_icon(row, online_lobby_slot_state_icon(entry, i), rect_full(0.525, 0.205, 0.585, 0.795), state_icon_tint)
 		if state_icon != null:
 			state_icon.name = "OnlineLobbyRosterStateIcon_%d" % i
 			state_icon.set_meta("column_owner", "ready")
@@ -14736,7 +14992,7 @@ func draw_online_lobby_room_art(parent: Control) -> Control:
 	configure_clipped_label(summary_headline)
 	var summary_context_text := "%s · %s" % [online_endpoint_summary(online_connection_endpoint_text()), online_room_code_summary(selected_room)]
 	var summary_context_full := "服务器 %s · 房间 %s" % [online_connection_endpoint_text(), bounded_online_input(selected_room, ONLINE_ROOM_CODE_MAX_LENGTH) if selected_room != "" else "未创建"]
-	var summary_context := make_label(summary_panel, summary_context_text, 8, Color(0.72, 0.84, 0.76), false)
+	var summary_context := make_label(summary_panel, summary_context_text, 11, Color(0.72, 0.84, 0.76), false)
 	summary_context.name = "OnlineLobbyRoomSummaryContext"
 	apply_rect(summary_context, rect_full(0.500, 0.015, 0.965, 0.40))
 	summary_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

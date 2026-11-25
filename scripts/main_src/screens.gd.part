@@ -9,8 +9,18 @@ func make_guofeng_lobby_action_button(text: String, color: Color, callback: Call
 
 func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> void:
 	apply_guofeng_button_face(button, ink_face)
-	button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.26, 0.31, 0.27))
-	var is_back := str(button.get_meta("ui_navigation_role", "")) == "page_back" or "back" in button.name.to_lower() or "close" in button.name.to_lower() or button.text.strip_edges() == "关闭"
+	var is_danger := bool(button.get_meta("ui_danger_action", false))
+	if is_danger and not ink_face:
+		var danger_color := Color(0.62, 0.16, 0.13)
+		for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+			button.add_theme_color_override(state, danger_color)
+		button.add_theme_color_override("font_disabled_color", Color(0.54, 0.34, 0.30))
+	else:
+		button.add_theme_color_override("font_disabled_color", Color(0.84, 0.83, 0.72) if ink_face else Color(0.26, 0.31, 0.27))
+	var nav_role := str(button.get_meta("ui_navigation_role", ""))
+	var lower_name := button.name.to_lower()
+	var stripped_text := button.text.strip_edges()
+	var is_back := nav_role in ["page_back", "modal_close"] or "back" in lower_name or "close" in lower_name or stripped_text in ["关闭", "收起", "返回", "返回菜单"]
 	if not ink_face and is_back:
 		var old_focus_face := button.get_node_or_null("ButtonFocusPlate")
 		if old_focus_face != null:
@@ -18,13 +28,33 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 			old_focus_face.queue_free()
 	if button.name == "ShopBackButton":
 		return
+	var sync_focus_tint := func() -> void:
+		if not is_instance_valid(button):
+			return
+		var face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
+		if face == null:
+			return
+		var is_ink_surface := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
+		if button.disabled:
+			face.self_modulate = Color(0.88, 0.87, 0.82, 0.82) if not is_ink_surface else Color(0.82, 0.84, 0.80, 0.86)
+		elif button.has_focus():
+			face.self_modulate = Color(1.08, 1.05, 0.96, 1.0) if is_ink_surface else Color(1.04, 1.02, 0.94, 1.0)
+		else:
+			face.self_modulate = Color.WHITE
+	if not bool(button.get_meta("guofeng_focus_tint_connected", false)):
+		button.set_meta("guofeng_focus_tint_connected", true)
+		button.focus_entered.connect(sync_focus_tint)
+		button.focus_exited.connect(sync_focus_tint)
+	sync_focus_tint.call()
 	var is_left_aligned := button.alignment == HORIZONTAL_ALIGNMENT_LEFT
-	if is_left_aligned:
+	if is_left_aligned or is_back:
 		var old_marker := button.get_node_or_null("GuofengActionFocusMarker")
 		if old_marker != null:
 			button.remove_child(old_marker)
 			old_marker.queue_free()
 		return
+	# Keep GuofengActionFocusMarker mounted for smoke-contract compatibility
+	# without painting a misleading right-pointing play arrow next to button text.
 	var marker_glyph := "▸"
 	var marker_color := Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)
 	var marker := button.get_node_or_null("GuofengActionFocusMarker") as Label
@@ -35,24 +65,12 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 		marker.offset_left = 10.0
 		marker.offset_right = 22.0
 		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var focus_marker := marker
-		button.resized.connect(Callable(self, "position_button_focus_marker_by_id").bind(button.get_instance_id(), focus_marker.get_instance_id()))
-		button.focus_entered.connect(func() -> void:
-			if is_instance_valid(focus_marker):
-				focus_marker.visible = true
-				position_button_focus_marker(button, focus_marker)
-		)
-		button.focus_exited.connect(func() -> void:
-			if is_instance_valid(focus_marker):
-				focus_marker.visible = false
-		)
 	else:
 		marker.text = marker_glyph
 		marker.add_theme_color_override("font_color", marker_color)
 	style_guofeng_label(marker, ink_face)
-	marker.visible = button.has_focus()
-	position_button_focus_marker(button, marker)
-	call_deferred("position_button_focus_marker_by_id", button.get_instance_id(), marker.get_instance_id())
+	marker.modulate.a = 0.0
+	marker.visible = false
 
 
 func make_guofeng_secondary_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
@@ -155,7 +173,7 @@ func _show_achievements_screen_impl() -> void:
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+	apply_rect(back, rect_full(0.845, 0.028, 0.945, 0.092))
 
 	draw_achievements_dashboard_art(panel)
 
@@ -164,7 +182,7 @@ func _show_achievements_screen_impl() -> void:
 	configure_scroll_container(scroll, "上下滚动查看完整成就图鉴")
 	scroll.anchor_left = 0.055
 	scroll.anchor_top = achievement_scroll_top
-	scroll.anchor_right = 0.940
+	scroll.anchor_right = 0.942
 	scroll.anchor_bottom = achievement_scroll_bottom
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -175,22 +193,29 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.name = "AchievementsScrollBar"
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_gutter = make_gpt_plate_rect(rect_full(0.950, achievement_scroll_top + 0.012, 0.962, achievement_scroll_bottom - 0.012), Color.WHITE, "menu_card_readable_gpt")
+	var achievements_scroll_gutter := make_layout_host(rect_full(0.952, achievement_scroll_top + 0.008, 0.964, achievement_scroll_bottom - 0.008))
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
-	achievements_scroll_gutter.self_modulate = Color(0.86, 0.82, 0.72, 0.78)
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(achievements_scroll_gutter)
-	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.15, 0.008, 0.85, 0.050), Color(0.11, 0.23, 0.18))
+	var gutter_plate := add_optional_gpt_illustration_texture(achievements_scroll_gutter, "battle_ink_plaque_20261112", rect_full(0.0, 0.0, 1.0, 1.0), 0.24, false)
+	if gutter_plate != null:
+		gutter_plate.name = "AchievementsScrollGutterPlate"
+		configure_guofeng_button_slice(gutter_plate, true, 32, 0.25)
+	var achievements_scroll_up = add_lucide_icon(achievements_scroll_gutter, "chevron-up", rect_full(0.10, 0.008, 0.90, 0.048), Color(0.16, 0.28, 0.22, 0.85))
 	if achievements_scroll_up != null:
 		achievements_scroll_up.name = "AchievementsScrollUpIcon"
-	var achievements_scroll_thumb = make_gpt_plate_rect(rect_full(0.100, 0.055, 0.900, 0.520), Color.WHITE, "menu_ink_primary")
+	var achievements_scroll_thumb := add_optional_gpt_illustration_texture(achievements_scroll_gutter, "menu_ink_primary", rect_full(0.140, 0.055, 0.860, 0.520), 0.82, false)
+	if achievements_scroll_thumb == null:
+		achievements_scroll_thumb = make_gpt_plate_rect(rect_full(0.140, 0.055, 0.860, 0.520), Color.WHITE, "menu_ink_primary")
+		achievements_scroll_gutter.add_child(achievements_scroll_thumb)
 	achievements_scroll_thumb.name = "AchievementsScrollThumb"
 	achievements_scroll_thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	achievements_scroll_thumb.custom_minimum_size = Vector2(8.0, 16.0)
+	achievements_scroll_thumb.set_meta("track_left", 0.140)
+	achievements_scroll_thumb.set_meta("track_right", 0.860)
 	achievements_scroll_thumb.set_meta("min_visible_width_px", 8.0)
 	achievements_scroll_thumb.set_meta("scroll_position_owner", "AchievementsScroll")
-	achievements_scroll_gutter.add_child(achievements_scroll_thumb)
-	var achievements_scroll_down = add_lucide_icon(achievements_scroll_gutter, "chevron-down", rect_full(0.15, 0.935, 0.85, 0.992), Color(0.11, 0.23, 0.18))
+	var achievements_scroll_down = add_lucide_icon(achievements_scroll_gutter, "chevron-down", rect_full(0.10, 0.940, 0.90, 0.992), Color(0.16, 0.28, 0.22, 0.85))
 	if achievements_scroll_down != null:
 		achievements_scroll_down.name = "AchievementsScrollDownIcon"
 	var achievements_scroll_hit_target = Control.new()
@@ -204,17 +229,19 @@ func _show_achievements_screen_impl() -> void:
 	achievements_scroll_hit_target.set_meta("scroll_page_role", "achievements")
 	achievements_scroll_hit_target.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, 0.0)
 	achievements_scroll_hit_target.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(achievements_scroll_hit_target, rect_full(0.938, achievement_scroll_top - 0.005, 0.990, achievement_scroll_bottom + 0.005))
+	apply_rect(achievements_scroll_hit_target, rect_full(0.944, achievement_scroll_top - 0.005, 0.992, achievement_scroll_bottom + 0.005))
 	panel.add_child(achievements_scroll_hit_target)
 	var achievement_total_count := achievements.size()
 	var achievements_empty := achievement_total_count <= 0
 	var achievement_initial_last := mini(achievement_total_count, maxi(1, visible_row_count))
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
-	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.86, 0.92, 0.78), true)
+	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.18, 0.27, 0.22), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.940, 0.250))
+	apply_rect(achievements_browse_status, rect_full(0.055, 0.205, 0.942, 0.250))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(achievements_browse_status)
+	achievements_browse_status.add_theme_color_override("font_color", Color(0.18, 0.27, 0.22))
+	achievements_browse_status.set_meta("preserve_semantic_color", true)
 	configure_clipped_label(achievements_browse_status)
 	achievements_browse_status.custom_minimum_size = Vector2(0, 24)
 	set_ui_full_text(achievements_browse_status, "暂无可浏览的成就记录" if achievements_empty else "当前成就列表浏览位置", "成就浏览位置")
@@ -3910,11 +3937,14 @@ func sync_stats_scroll_status(content_scroll: ScrollContainer, status_label: Lab
 		first_visible = 1
 		last_visible = mini(total, 1)
 	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
-	var at_end := scroll_range <= 0.0 or scrollbar.value >= scroll_range - 1.0
+	var at_end := scroll_range <= 0.5 or scrollbar.value >= scroll_range - 1.0
 	var state_text := "已到末尾" if at_end else "继续滚动可查看"
 	var section_text := "总览统计" if stats_selected_rule.strip_edges() == "" else "%s统计" % rule_variant_short_label(stats_selected_rule)
 	var recent_text := "最近一局可查看" if not round_history.is_empty() else "暂无最近一局"
-	status_label.text = "%s · 第%d-%d/%d行 · %s · %s" % [section_text, first_visible, last_visible, total, state_text, recent_text]
+	if scroll_range <= 0.5:
+		status_label.text = "%s · 共 %d 项 · %s" % [section_text, total, recent_text]
+	else:
+		status_label.text = "%s · 第%d-%d/%d行 · %s · %s" % [section_text, first_visible, last_visible, total, state_text, recent_text]
 	set_ui_full_text(status_label, status_label.text, "%s；当前显示第%d至%d行，共%d行；%s；%s" % [section_text, first_visible, last_visible, total, state_text, recent_text])
 	status_label.set_meta("stats_scroll_state", "end" if at_end else "scrollable")
 	status_label.set_meta("stats_section", section_text)
@@ -3976,7 +4006,7 @@ func _show_stats_screen_impl() -> void:
 	panel.set_meta("content_size_snapshot_policy", "one_content_size_snapshot_per_draw")
 
 	var title = make_heading(panel, "游戏统计", commercial_ui_font_size(30, 4), Color(0.94, 0.86, 0.48), true)
-	apply_rect(title, rect_full(0.04, 0.028, 0.40, 0.095))
+	apply_rect(title, rect_full(0.055, 0.028, 0.340, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(title, title.text, "游戏统计页面标题")
 	title.name = "StatsTitle"
@@ -3994,9 +4024,9 @@ func _show_stats_screen_impl() -> void:
 	filter_button.set_meta("stats_filter_state", "available" if not filter_button.disabled else "single_scope")
 	filter_button.set_meta("disabled_reason", "当前只有一个统计范围" if filter_button.disabled else "")
 	mark_ui_optimization(filter_button, "F-603")
-	apply_rect(filter_button, rect_full(0.405, 0.028, 0.570, 0.095))
+	apply_rect(filter_button, rect_full(0.365, 0.028, 0.545, 0.092))
 	panel.add_child(filter_button)
-	style_guofeng_secondary_action(filter_button)
+	style_guofeng_secondary_action(filter_button, stats_selected_rule != "" and not filter_button.disabled)
 	var copy_scope_label := stats_filter_label(stats_selected_rule)
 	var copy_button := make_small_button("复制%s" % copy_scope_label, Color(0.30, 0.48, 0.52), Callable(self, "copy_stats_summary"))
 	copy_button.name = "StatsCopyButton"
@@ -4006,7 +4036,7 @@ func _show_stats_screen_impl() -> void:
 	copy_button.set_meta("stats_copy_scope", copy_scope_label)
 	copy_button.set_meta("copy_feedback_route", "StatsCopyButtonToast")
 	mark_ui_optimization(copy_button, "F-604")
-	apply_rect(copy_button, rect_full(0.580, 0.028, 0.695, 0.095))
+	apply_rect(copy_button, rect_full(0.558, 0.028, 0.688, 0.092))
 	panel.add_child(copy_button)
 	style_guofeng_secondary_action(copy_button)
 	var latest_available := not round_history.is_empty()
@@ -4019,7 +4049,7 @@ func _show_stats_screen_impl() -> void:
 	latest_button.set_meta("stats_latest_state", "available" if not latest_button.disabled else "empty")
 	latest_button.set_meta("disabled_reason", "暂无最近一局记录，完成一局后可查看" if latest_button.disabled else "")
 	mark_ui_optimization(latest_button, "F-605")
-	apply_rect(latest_button, rect_full(0.700, 0.028, 0.830, 0.095))
+	apply_rect(latest_button, rect_full(0.700, 0.028, 0.832, 0.092))
 	panel.add_child(latest_button)
 	style_guofeng_secondary_action(latest_button)
 
@@ -4032,7 +4062,7 @@ func _show_stats_screen_impl() -> void:
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	apply_rect(back, rect_full(0.84, 0.030, 0.94, 0.090))
+	apply_rect(back, rect_full(0.845, 0.028, 0.945, 0.092))
 	var stats_source := stats_source_for_filter(stats_selected_rule)
 	panel.set_meta("stats_source", stats_source.duplicate(true))
 	draw_stats_dashboard_art(panel, stats_viewport_size)
@@ -4057,7 +4087,7 @@ func _show_stats_screen_impl() -> void:
 	content_scroll.set_meta("ui_scroll_header_bottom", stats_content_top)
 	mark_ui_optimization(content_scroll, "F-437")
 	panel.add_child(content_scroll)
-	var stats_scroll_status := make_label(panel, "", 10, Color(0.72, 0.84, 0.76), true)
+	var stats_scroll_status := make_label(panel, "", 10, Color(0.18, 0.27, 0.22), true)
 	stats_scroll_status.name = "StatsRowsScrollStatus"
 	apply_rect(stats_scroll_status, rect_full(0.055, 0.300, 0.945, 0.330))
 	stats_scroll_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -4065,6 +4095,8 @@ func _show_stats_screen_impl() -> void:
 	stats_scroll_status.set_meta("ui_scroll_role", "stats_rows_status")
 	stats_scroll_status.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	style_guofeng_label(stats_scroll_status)
+	stats_scroll_status.add_theme_color_override("font_color", Color(0.18, 0.27, 0.22))
+	stats_scroll_status.set_meta("preserve_semantic_color", true)
 	var content := VBoxContainer.new()
 	content.name = "StatsRowsContent"
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4754,13 +4786,18 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		title.size.x = title_width
 		var badge_plate := count_badge.get_node_or_null("GptPanelPlate") as TextureRect
 		if badge_plate != null:
-			var paper_tex := optional_gpt_illustration_texture("menu_card_readable_gpt")
+			var paper_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+			if paper_tex == null:
+				paper_tex = optional_gpt_illustration_texture("quiet_gold_accent")
 			if paper_tex != null:
 				badge_plate.texture = paper_tex
-			badge_plate.self_modulate = Color(0.88, 0.82, 0.70)
+				if paper_tex == optional_gpt_illustration_texture("button_face_jiangnan_gpt"):
+					configure_guofeng_button_slice(badge_plate, true, 96, 0.125)
+			badge_plate.modulate = Color.WHITE
+			badge_plate.self_modulate = Color(0.96, 0.92, 0.80)
 		for child in count_badge.get_children():
 			if child is Label:
-				child.add_theme_color_override("font_color", Color(0.24, 0.20, 0.16))
+				child.add_theme_color_override("font_color", Color(0.12, 0.24, 0.18))
 	if decorative_header != null:
 		decorative_header.visible = false
 	# The legacy art uses fixed message-row positions; the body now scrolls
@@ -4788,6 +4825,9 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	body.offset_bottom = -edge
 	body.set_meta("layout_role", "chat_scrollable_reading_and_composing_lanes")
 	panel.add_child(body)
+	var body_scrollbar := body.get_v_scroll_bar()
+	if body_scrollbar != null:
+		style_guofeng_scrollbar(body_scrollbar)
 	var content := VBoxContainer.new()
 	content.name = "ChatPanelBodyContent"
 	configure_passive_container(content)
@@ -4799,7 +4839,12 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		control.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		control.size_flags_vertical = Control.SIZE_FILL
-	messages.custom_minimum_size.y = 72.0 if compact else maxf(72.0, panel.size.y * 0.35)
+	var available_body_h := maxf(120.0, panel.size.y - (edge + header_height + edge * 2.0))
+	var natural_noncompact_order := not compact
+	if natural_noncompact_order:
+		messages.custom_minimum_size.y = clampf(available_body_h - 166.0, 84.0, 210.0)
+	else:
+		messages.custom_minimum_size.y = 72.0
 	quick_actions.clip_contents = false
 	quick_actions.set_meta("wrap_policy", "native_flow_all_quick_actions_reachable")
 	var latest := make_label(content, str(chat_messages.back()) if not chat_messages.is_empty() else "等待房间消息", 10, Color(0.14, 0.24, 0.18), false)
@@ -4809,14 +4854,13 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	latest.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	latest.tooltip_text = latest.text
 	latest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.move_child(latest, 0)
+	latest.visible = not natural_noncompact_order
 	var input_row := HBoxContainer.new()
 	input_row.name = "ChatPanelInputRow"
 	configure_passive_container(input_row)
 	input_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	input_row.add_theme_constant_override("separation", 8)
 	content.add_child(input_row)
-	content.move_child(input_row, 1)
 	var input_field := Control.new()
 	input_field.name = "ChatPanelInputField"
 	configure_passive_container(input_field)
@@ -4837,7 +4881,15 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	cooldown.reparent(content, false)
 	cooldown.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	cooldown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.move_child(cooldown, 3)
+	if natural_noncompact_order:
+		# Natural top-to-bottom reading flow: messages -> quick pills -> input -> meta.
+		var ordered_nodes: Array[Control] = [messages, quick_title, quick_actions, input_row, custom_title, cooldown, latest]
+		for idx in range(ordered_nodes.size()):
+			content.move_child(ordered_nodes[idx], idx)
+	else:
+		var compact_nodes: Array[Control] = [latest, input_row, custom_title, cooldown, messages, quick_title, quick_actions]
+		for idx in range(compact_nodes.size()):
+			content.move_child(compact_nodes[idx], idx)
 	panel.set_meta("composer_initial_visibility", "latest_preview_and_composer_before_history")
 	panel.set_meta("safe_content_contract", "pinned_44px_header_and_reachable_native_scroll_lanes")
 	panel.set_meta("body_scroll_owner", "ChatPanelBodyScroll")
@@ -4868,15 +4920,19 @@ func show_chat_panel() -> void:
 	# r215: GPT chrome conversion
 	var panel_rect := chat_panel_rect()
 	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
-	# The drawer is modal for the table: keep a transparent root-level hit target
-	# behind it so clicks cannot reach rivers, hand tiles, or the action dock.
+	# The drawer is modal for the table: keep a root-level hit target with a soft
+	# dark scrim behind it so clicks cannot reach rivers, hand tiles, or the dock.
 	var input_shield := Control.new()
 	input_shield.name = "ChatPanelInputShield"
 	input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
 	input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
-	input_shield.z_index = 44
+	input_shield.z_index = 68
 	input_shield.set_meta("modal_input_shield", true)
 	input_shield.set_meta("layout_role", "chat_modal_background")
+	var chat_scrim := make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.50), "ui_dark_scrim")
+	chat_scrim.name = "ChatPanelBackdropScrim"
+	chat_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	input_shield.add_child(chat_scrim)
 	input_shield.gui_input.connect(func(event: InputEvent) -> void:
 		var dismiss := false
 		if event is InputEventScreenTouch:
@@ -4891,7 +4947,8 @@ func show_chat_panel() -> void:
 	root_layer.add_child(input_shield)
 	var chat_panel = make_gpt_center_crop_plate_rect(panel_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	chat_panel.name = "ChatPanel"
-	chat_panel.z_index = 45
+	chat_panel.self_modulate = Color.WHITE
+	chat_panel.z_index = 69
 	chat_panel.set_meta("layout_role", chat_panel_route_name())
 	chat_panel.set_meta("compact_chat", compact_chat)
 	chat_panel.set_meta("modal_input_shield", true)
@@ -4956,6 +5013,7 @@ func show_chat_panel() -> void:
 	style_guofeng_label(chat_label)
 	chat_label.name = "ChatPanelMessageText"
 	chat_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	chat_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	var chat_drawer_width_px := safe_content_pixel_size().x * maxf(0.001, panel_rect.size.x - panel_rect.position.x)
 	var chat_width := maxf(140.0, chat_drawer_width_px * 0.86)
@@ -4977,6 +5035,7 @@ func show_chat_panel() -> void:
 	chat_message_range_label = message_range_label
 	var chat_scrollbar := chat_scroll.get_v_scroll_bar()
 	if chat_scrollbar != null:
+		style_guofeng_scrollbar(chat_scrollbar)
 		chat_scrollbar.value_changed.connect(func(_value: float) -> void:
 			refresh_chat_message_range_status()
 		)
@@ -5009,6 +5068,7 @@ func show_chat_panel() -> void:
 	var quick_title := make_label(chat_panel, "快捷消息", 9, Color(0.24, 0.36, 0.28), true)
 	style_guofeng_label(quick_title)
 	quick_title.name = "ChatPanelQuickMessagesLabel"
+	quick_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	apply_rect(quick_title, rect_full(0.060, 0.310, 0.940, 0.350) if compact_chat else rect_full(0.060, 0.205, 0.940, 0.255))
 	quick_title.tooltip_text = "点击一条快捷消息立即发送"
 	quick_title.set_meta("accessible_name", "快捷消息分组")
@@ -5093,6 +5153,7 @@ func show_chat_panel() -> void:
 	var custom_input_title := make_label(chat_panel, "自定义消息 · 0/%d" % CHAT_MESSAGE_MAX_LENGTH, 9, Color(0.24, 0.36, 0.28), true)
 	style_guofeng_label(custom_input_title)
 	custom_input_title.name = "ChatPanelCustomMessageLabel"
+	custom_input_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	apply_rect(custom_input_title, rect_full(0.060, 0.635, 0.400, 0.700) if compact_chat else rect_full(0.060, 0.735, 0.395, 0.765))
 	custom_input_title.tooltip_text = "输入自定义消息后按 Enter 或点击发送"
 	custom_input_title.set_meta("accessible_name", "自定义消息 · 0/%d" % CHAT_MESSAGE_MAX_LENGTH)
@@ -5154,12 +5215,13 @@ func show_chat_panel() -> void:
 	send_button.set_meta("send_state_source", "ChatSendCooldownLabel")
 	mark_ui_optimization(send_button, "F-121")
 	chat_panel.add_child(send_button)
-	var cooldown_label := make_label(chat_panel, "发送 · 可用", 9, Color(0.68, 0.28, 0.20), true)
+	var cooldown_label := make_label(chat_panel, "发送 · 可用", 9, Color(0.14, 0.46, 0.28), true)
 	cooldown_label.name = "ChatSendCooldownLabel"
+	cooldown_label.set_meta("preserve_semantic_color", true)
 	# Keep send status in its own stable slot instead of painting it on top of the
 	# disabled send button. The header slot remains visible throughout cooldown.
 	apply_rect(cooldown_label, rect_full(0.410, 0.635, 0.680, 0.700) if compact_chat else rect_full(0.060, 0.720, 0.680, 0.790))
-	cooldown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cooldown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	cooldown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cooldown_label.visible = true
 	cooldown_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -6290,7 +6352,7 @@ func show_exit_confirm() -> void:
 	var dialog_rect := rect_full(0.5 - dialog_width / content_size.x * 0.5, 0.5 - dialog_height / content_size.y * 0.5, 0.5 + dialog_width / content_size.x * 0.5, 0.5 + dialog_height / content_size.y * 0.5)
 	var dialog = make_gpt_center_crop_plate_rect(dialog_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	dialog.name = "ExitConfirmDialog"
-	dialog.self_modulate = Color(0.92, 0.88, 0.78)
+	dialog.self_modulate = Color.WHITE
 	dialog.set_meta("viewport_snapshot", exit_viewport)
 	dialog.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	dialog.set_meta("compact_layout", compact_exit)
@@ -6301,7 +6363,7 @@ func show_exit_confirm() -> void:
 	dialog.set_meta("opaque_reading_surface", true)
 
 	# 标题
-	var title = make_heading(dialog, "确认退出", 24, Color(0.94, 0.86, 0.48), true)
+	var title = make_heading(dialog, "确认退出", 26, Color(0.10, 0.22, 0.16), true)
 	title.name = "ExitConfirmTitle"
 	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.22))
 	style_guofeng_label(title)
@@ -6309,27 +6371,29 @@ func show_exit_confirm() -> void:
 
 	# 提示文本
 	var message = "是否退出当前游戏？\n进度将自动保存。"
-	var msg_label = make_label(dialog, message, 16, Color(0.92, 0.88, 0.76), false)  # r430 warm ink
+	var msg_label = make_label(dialog, message, 16, Color(0.14, 0.24, 0.18), false)
 	apply_rect(msg_label, rect_full(0.10, 0.29, 0.90, 0.49))
 	style_guofeng_label(msg_label)
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	msg_label.name = "ExitConfirmMessage"
 	set_ui_full_text(msg_label, message, "退出后果")
-	var save_status := make_label(dialog, "保存状态：尚未提交", 13, Color(0.82, 0.90, 0.78), true)
+	var save_status := make_label(dialog, "进度将在退出前自动保存", 13, Color(0.14, 0.44, 0.28), true)
 	save_status.name = "ExitConfirmSaveStatus"
 	apply_rect(save_status, rect_full(0.10, 0.53, 0.90, 0.62))
 	style_guofeng_label(save_status)
+	save_status.add_theme_color_override("font_color", Color(0.14, 0.44, 0.28))
+	save_status.set_meta("preserve_semantic_color", true)
 	save_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	save_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	save_status.set_meta("save_state", "idle")
-	set_ui_full_text(save_status, "退出前保存状态", "退出前保存状态")
+	set_ui_full_text(save_status, "退出前保存状态：当前对局将在退出前自动保存", "退出前保存状态")
 	configure_clipped_label(save_status)
 
 	# 按钮行
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	button_row.add_theme_constant_override("separation", 16)
+	button_row.add_theme_constant_override("separation", 18)
 	apply_rect(button_row, rect_full(0.10, 0.72, 0.90, 0.91))
 	dialog.add_child(button_row)
 
@@ -6339,7 +6403,7 @@ func show_exit_confirm() -> void:
 	)
 	continue_btn.name = "ExitConfirmContinueButton"
 	continue_btn.focus_mode = Control.FOCUS_ALL
-	continue_btn.custom_minimum_size = Vector2(140, 52)
+	continue_btn.custom_minimum_size = Vector2(144, 52)
 	style_guofeng_secondary_action(continue_btn, true)
 	button_row.add_child(continue_btn)
 
@@ -6362,6 +6426,7 @@ func show_exit_confirm() -> void:
 			exit_confirm_decision_locked = false
 			if live_status != null:
 				set_dynamic_label_text(live_status, "保存失败，请重试", "退出被阻止：当前牌局未能保存，请重试")
+				live_status.add_theme_color_override("font_color", Color(0.66, 0.16, 0.13))
 				live_status.set_meta("save_state", "failed")
 			if continue_btn != null and is_instance_valid(continue_btn):
 				continue_btn.disabled = false
@@ -6378,7 +6443,8 @@ func show_exit_confirm() -> void:
 	)
 	exit_btn.name = "ExitConfirmLeaveButton"
 	exit_btn.focus_mode = Control.FOCUS_ALL
-	exit_btn.custom_minimum_size = Vector2(140, 52)
+	exit_btn.custom_minimum_size = Vector2(144, 52)
+	exit_btn.set_meta("ui_danger_action", true)
 	style_guofeng_secondary_action(exit_btn)
 	button_row.add_child(exit_btn)
 	continue_btn.focus_neighbor_left = exit_btn.get_path()
@@ -6400,17 +6466,13 @@ func show_exit_confirm() -> void:
 	if ui_motion_enabled():
 		overlay.modulate = Color(1, 1, 1, 0)
 		dialog.scale = Vector2(0.7, 0.7)
-		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(200, 100)
+		dialog.pivot_offset = dialog.size * 0.5 if dialog.size.length() > 0 else Vector2(dialog_width * 0.5, dialog_height * 0.5)
 		var overlay_tw := create_screen_tween()
 		overlay_tw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0)
 		var dialog_tw := create_screen_tween()
 		dialog_tw.set_parallel(true)
 		dialog_tw.tween_property(dialog, "scale", Vector2(1.0, 1.0), 0.25).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		dialog_tw.tween_property(dialog, "modulate:a", 1.0, 0.2).from(0.0)
-		# 抖动"退出游戏"按钮吸引注意
-		var exit_btn_node = dialog.get_node_or_null("ExitConfirmDialog/ExitConfirmButtonArt_leave")
-		if exit_btn_node != null:
-			AnimationEffects.shake_popup(exit_btn_node, 6.0, 0.5)
 	else:
 		overlay.modulate = Color(1, 1, 1, 1)
 	schedule_ui_qa_page_ready("exit_confirm", ["ExitConfirmDialog", "ExitConfirmContinueButton", "ExitConfirmLeaveButton"])
@@ -6705,16 +6767,18 @@ func _show_replay_import_screen_impl() -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var title := make_heading(panel, "回放复盘", 30, Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.065, 0.055, 0.520, 0.145))
+	apply_rect(title, rect_full(0.055, 0.026, 0.285, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
 	mark_ui_optimization(title, "F-503")
-	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.14, 0.27, 0.20), false)
+	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.24, 0.34, 0.28), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	style_guofeng_label(digest_hint)
-	digest_hint.name = "ReplayImportDigestHint"
-	apply_rect(digest_hint, rect_full(0.065, 0.145, 0.520, 0.205))
+	digest_hint.add_theme_color_override("font_color", Color(0.24, 0.34, 0.28))
+	digest_hint.set_meta("preserve_semantic_color", true)
+	digest_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(digest_hint, rect_full(0.295, 0.046, 0.720, 0.092))
 	configure_clipped_label(digest_hint)
 	set_ui_full_text(digest_hint, "校验链 · SHA-256", "回放完整性校验方式")
 	mark_ui_optimization(digest_hint, "F-504")
@@ -6724,14 +6788,16 @@ func _show_replay_import_screen_impl() -> void:
 	back.name = "ReplayImportBackButton"
 	back.custom_minimum_size = Vector2(100, 46)
 	back.tooltip_text = "返回主菜单 · Esc"
+	back.set_meta("ui_navigation_role", "page_back")
 	set_ui_full_text(back, back.tooltip_text, "返回主菜单")
 	mark_ui_optimization(back, "F-505")
 	style_guofeng_secondary_action(back)
-	apply_rect(back, rect_full(0.805, 0.055, 0.945, 0.145))
+	apply_rect(back, rect_full(0.845, 0.026, 0.945, 0.092))
 	panel.add_child(back)
-	var input_label := make_label(panel, "回放码", 13, Color(0.92, 0.84, 0.62), true)
+	var input_label := make_label(panel, "回放码", 13, Color(0.11, 0.23, 0.18), true)
 	input_label.name = "ReplayImportInputLabel"
-	apply_rect(input_label, rect_full(0.065, 0.205, 0.220, 0.250))
+	input_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(input_label, rect_full(0.055, 0.124, 0.260, 0.162))
 	set_ui_full_text(input_label, "回放码", "回放码输入字段")
 	mark_ui_optimization(input_label, "F-506")
 	var input := LineEdit.new()
@@ -6747,28 +6813,28 @@ func _show_replay_import_screen_impl() -> void:
 	input.add_theme_font_override("font", ui_cjk_font())
 	input.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 1))
 	var input_styles := input_style_set()
-	input.add_theme_stylebox_override("normal", input_styles["normal"])
-	input.add_theme_stylebox_override("focus", input_styles["focus"])
-	input.add_theme_stylebox_override("read_only", input_styles["read_only"])
-	input.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
-	input.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	for style_name in ["normal", "focus", "read_only"]:
+		var field_style := input_styles[style_name].duplicate() as StyleBox
+		field_style.content_margin_left = maxf(field_style.content_margin_left, 12.0)
+		field_style.content_margin_right = maxf(field_style.content_margin_right, 12.0)
+		input.add_theme_stylebox_override(style_name, field_style)
 	# A 96 KiB JSON payload expands to roughly 128 KiB as base64; do not
 	# truncate a valid long replay before the digest can be checked.
 	configure_line_edit_input(input, "回放码", REPLAY_SHARE_MAX_BYTES * 2)
-	var input_paper := add_optional_gpt_illustration_texture(input, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	var input_frame_key := "input_field_paper_normal_gpt" if optional_gpt_illustration_texture("input_field_paper_normal_gpt") != null else "button_face_jiangnan_gpt"
+	var input_paper := add_optional_gpt_illustration_texture(input, input_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if input_paper != null:
 		input_paper.name = "ReplayFieldPaperFace"
 		input_paper.show_behind_parent = true
-		var input_source := optional_gpt_illustration_texture("menu_card_readable_gpt")
-		if input_source != null:
-			input_paper.texture = gpt_center_crop_texture(input_source, "menu_card_readable_gpt", 0.65)
+		input_paper.self_modulate = Color(0.99, 0.98, 0.94)
+		configure_guofeng_button_slice(input_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 24, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.5)
 	input.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-	input.add_theme_color_override("font_placeholder_color", Color(0.28, 0.36, 0.30))
+	input.add_theme_color_override("font_placeholder_color", Color(0.32, 0.40, 0.34))
 	input.add_theme_color_override("caret_color", Color(0.11, 0.23, 0.18))
 	set_ui_full_text(input, "请输入或粘贴完整回放码", "回放码输入框")
 	mark_ui_optimization(input, "F-507")
 	mark_ui_optimization(input, "F-051")
-	apply_rect(input, rect_full(0.065, 0.265, 0.520, 0.360))
+	apply_rect(input, rect_full(0.055, 0.172, 0.540, 0.262))
 	panel.add_child(input)
 	replay_import_input = input
 	input.text_changed.connect(func(_value: String) -> void:
@@ -6789,7 +6855,7 @@ func _show_replay_import_screen_impl() -> void:
 	paste_button.custom_minimum_size = Vector2(72, 48)
 	paste_button.tooltip_text = "从剪贴板粘贴回放码"
 	set_ui_full_text(paste_button, paste_button.tooltip_text, "粘贴回放码")
-	apply_rect(paste_button, rect_full(0.530, 0.265, 0.615, 0.360))
+	apply_rect(paste_button, rect_full(0.552, 0.172, 0.642, 0.262))
 	panel.add_child(paste_button)
 	var clear_button := make_small_button("清空", Color(0.42, 0.34, 0.30), func() -> void:
 		set_replay_import_input_text("")
@@ -6800,7 +6866,7 @@ func _show_replay_import_screen_impl() -> void:
 	clear_button.custom_minimum_size = Vector2(72, 48)
 	clear_button.tooltip_text = "清空当前回放码"
 	set_ui_full_text(clear_button, clear_button.tooltip_text, "清空回放码")
-	apply_rect(clear_button, rect_full(0.625, 0.265, 0.705, 0.360))
+	apply_rect(clear_button, rect_full(0.652, 0.172, 0.742, 0.262))
 	panel.add_child(clear_button)
 	var import_button := make_small_button("导入", Color(0.42, 0.66, 0.50), Callable(self, "import_replay_from_input"))
 	import_button.name = "ReplayImportButton"
@@ -6808,18 +6874,21 @@ func _show_replay_import_screen_impl() -> void:
 	import_button.tooltip_text = "校验并打开回放时间线"
 	set_ui_full_text(import_button, import_button.tooltip_text, "导入并校验回放")
 	mark_ui_optimization(import_button, "F-508")
-	apply_rect(import_button, rect_full(0.730, 0.265, 0.935, 0.360))
+	apply_rect(import_button, rect_full(0.755, 0.172, 0.945, 0.262))
 	panel.add_child(import_button)
-	var status := make_label(panel, "等待粘贴回放码", 14, Color(0.76, 0.84, 0.76), true)
+	var status := make_label(panel, "等待粘贴回放码", 14, Color(0.24, 0.34, 0.28), true)
 	status.name = "ReplayImportStatus"
-	apply_rect(status, rect_full(0.065, 0.375, 0.935, 0.415))
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	status.set_meta("preserve_semantic_color", true)
+	apply_rect(status, rect_full(0.055, 0.278, 0.735, 0.330))
 	configure_clipped_label(status)
 	set_ui_full_text(status, "等待粘贴回放码", "回放导入状态：粘贴回放码后点击导入并校验")
 	status.set_meta("replay_validation_state", "empty")
 	mark_ui_optimization(status, "F-509")
-	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), 12, Color(0.70, 0.80, 0.72), false)
+	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), 12, Color(0.26, 0.35, 0.30), false)
 	code_summary.name = "ReplayImportCodeSummary"
-	apply_rect(code_summary, rect_full(0.065, 0.425, 0.680, 0.465))
+	code_summary.set_meta("preserve_semantic_color", true)
+	apply_rect(code_summary, rect_full(0.055, 0.340, 0.735, 0.392))
 	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(code_summary)
 	set_ui_full_text(code_summary, "回放码长度与当前输入摘要", "回放码输入进度")
@@ -6839,15 +6908,16 @@ func _show_replay_import_screen_impl() -> void:
 	copy_code_button.set_meta("pane_clearance_px", 8.0)
 	set_ui_full_text(copy_code_button, copy_code_button.tooltip_text, "复制完整回放码")
 	copy_code_button.disabled = input.text.strip_edges() == ""
-	apply_rect(copy_code_button, rect_full(0.710, 0.385, 0.935, 0.450))
+	apply_rect(copy_code_button, rect_full(0.755, 0.285, 0.945, 0.382))
 	panel.add_child(copy_code_button)
 	update_replay_import_input_feedback(input)
 	var compact_replay_layout := ui_is_compact()
-	var archive_pane_left := 0.065
-	var archive_pane_right := 0.440 if compact_replay_layout else 0.480
-	var timeline_pane_left := 0.465 if compact_replay_layout else 0.505
-	var timeline_pane_right := 0.935
-	var archive_pane := make_layout_host(rect_full(archive_pane_left, 0.525, archive_pane_right, 0.955))
+	var archive_pane_left := 0.055
+	var archive_pane_right := 0.440 if compact_replay_layout else 0.485
+	var timeline_pane_left := 0.460 if compact_replay_layout else 0.505
+	var timeline_pane_right := 0.945
+	var pane_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var archive_pane := make_layout_host(rect_full(archive_pane_left, 0.415, archive_pane_right, 0.955))
 	archive_pane.name = "ReplayArchivePane"
 	archive_pane.set_meta("copy_action_clearance_px", 8.0)
 	archive_pane.set_meta("compact_width_policy", "timeline_priority_after_input_and_copy_lanes" if compact_replay_layout else "balanced_archive_timeline_columns")
@@ -6856,14 +6926,21 @@ func _show_replay_import_screen_impl() -> void:
 	# an isolated, input-ignoring texture.
 	archive_pane.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel.add_child(archive_pane)
-	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.88, 0.78, 0.56), true)
+	var archive_pane_plate := add_optional_gpt_illustration_texture(archive_pane, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if archive_pane_plate != null:
+		archive_pane_plate.name = "ReplayArchivePanePlate"
+		archive_pane_plate.self_modulate = Color(0.97, 0.95, 0.90)
+		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.25)
+	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.11, 0.23, 0.18), true)
 	archive_title.name = "ReplayArchiveTitle"
-	apply_rect(archive_title, rect_full(0.050, 0.045, 0.430, 0.180))
+	archive_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(archive_title, rect_full(0.045, 0.025, 0.450, 0.115))
 	set_ui_full_text(archive_title, "本地归档", "本地回放归档")
 	mark_ui_optimization(archive_title, "F-511")
-	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), 12, Color(0.70, 0.78, 0.70), false)
+	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), 12, Color(0.24, 0.34, 0.28), false)
 	archive_count.name = "ReplayArchiveCount"
-	apply_rect(archive_count, rect_full(0.570, 0.055, 0.950, 0.180))
+	archive_count.set_meta("preserve_semantic_color", true)
+	apply_rect(archive_count, rect_full(0.460, 0.028, 0.955, 0.115))
 	archive_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	set_ui_full_text(archive_count, "本地归档数量", "本地回放归档数量")
 	mark_ui_optimization(archive_count, "F-512")
@@ -6877,26 +6954,25 @@ func _show_replay_import_screen_impl() -> void:
 	search.add_theme_font_override("font", ui_cjk_font())
 	search.add_theme_font_size_override("font_size", accessibility_font_size(14))
 	var search_styles := input_style_set()
-	search.add_theme_stylebox_override("normal", search_styles["normal"])
-	search.add_theme_stylebox_override("focus", search_styles["focus"])
-	search.add_theme_stylebox_override("read_only", search_styles["read_only"])
-	search.add_theme_color_override("font_color", Color(0.96, 0.95, 0.89))
-	search.add_theme_color_override("font_placeholder_color", Color(0.72, 0.78, 0.72))
+	for style_name in ["normal", "focus", "read_only"]:
+		var search_style := search_styles[style_name].duplicate() as StyleBox
+		search_style.content_margin_left = maxf(search_style.content_margin_left, 12.0)
+		search_style.content_margin_right = maxf(search_style.content_margin_right, float(UI_MIN_TOUCH_TARGET) + 6.0)
+		search.add_theme_stylebox_override(style_name, search_style)
 	configure_line_edit_input(search, "搜索", 64)
-	var search_paper := add_optional_gpt_illustration_texture(search, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	var search_paper := add_optional_gpt_illustration_texture(search, input_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if search_paper != null:
 		search_paper.name = "ReplayFieldPaperFace"
 		search_paper.show_behind_parent = true
-		var search_source := optional_gpt_illustration_texture("menu_card_readable_gpt")
-		if search_source != null:
-			search_paper.texture = gpt_center_crop_texture(search_source, "menu_card_readable_gpt", 0.65)
+		search_paper.self_modulate = Color(0.99, 0.98, 0.94)
+		configure_guofeng_button_slice(search_paper, true, 96 if input_frame_key == "button_face_jiangnan_gpt" else 24, 0.125 if input_frame_key == "button_face_jiangnan_gpt" else 0.5)
 	search.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-	search.add_theme_color_override("font_placeholder_color", Color(0.28, 0.36, 0.30))
+	search.add_theme_color_override("font_placeholder_color", Color(0.32, 0.40, 0.34))
 	search.add_theme_color_override("caret_color", Color(0.11, 0.23, 0.18))
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.050, 0.180, 0.950, 0.365))
+	apply_rect(search, rect_full(0.045, 0.130, 0.955, 0.275))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -6913,7 +6989,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.050, 0.390, 0.950, 0.965))
+	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.965))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -6931,7 +7007,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_list.mouse_filter = Control.MOUSE_FILTER_PASS
 	archive_list.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	archive_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	archive_list.add_theme_constant_override("separation", 5)
+	archive_list.add_theme_constant_override("separation", 6)
 	archive_scroll.add_child(archive_list)
 	archive_list.sort_children.connect(func() -> void:
 		fit_replay_scroll_content(archive_scroll, archive_list)
@@ -6943,19 +7019,26 @@ func _show_replay_import_screen_impl() -> void:
 	archive_pane.resized.connect(func() -> void: fit_compact_replay_archive_viewport(archive_scroll, archive_list))
 	call_deferred("fit_replay_scroll_content", archive_scroll, archive_list)
 	call_deferred("fit_compact_replay_archive_viewport", archive_scroll, archive_list)
-	var timeline := make_layout_host(rect_full(timeline_pane_left, 0.525, timeline_pane_right, 0.955))
+	var timeline := make_layout_host(rect_full(timeline_pane_left, 0.415, timeline_pane_right, 0.955))
 	timeline.name = "ReplayImportTimeline"
 	timeline.set_meta("copy_action_clearance_px", 8.0)
 	timeline.set_meta("compact_width_policy", "minimum_event_text_lane_before_archive_width" if compact_replay_layout else "balanced_archive_timeline_columns")
 	panel.add_child(timeline)
-	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.88, 0.78, 0.56), true)
+	var timeline_pane_plate := add_optional_gpt_illustration_texture(timeline, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if timeline_pane_plate != null:
+		timeline_pane_plate.name = "ReplayImportTimelinePlate"
+		timeline_pane_plate.self_modulate = Color(0.97, 0.95, 0.90)
+		configure_guofeng_button_slice(timeline_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.25)
+	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.11, 0.23, 0.18), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
-	apply_rect(timeline_title, rect_full(0.035, 0.045, 0.500, 0.130))
+	timeline_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(timeline_title, rect_full(0.035, 0.025, 0.285, 0.115))
 	set_ui_full_text(timeline_title, "事件时间线", "已验证回放事件时间线")
 	mark_ui_optimization(timeline_title, "F-514")
-	var timeline_position := make_label(timeline, "0 / 0 条事件", 12, Color(0.70, 0.82, 0.74), false)
+	var timeline_position := make_label(timeline, "0 / 0 条事件", 12, Color(0.24, 0.34, 0.28), false)
 	timeline_position.name = "ReplayImportTimelinePosition"
-	apply_rect(timeline_position, rect_full(0.035, 0.170, 0.950, 0.290))
+	timeline_position.set_meta("preserve_semantic_color", true)
+	apply_rect(timeline_position, rect_full(0.295, 0.028, 0.965, 0.115))
 	timeline_position.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(timeline_position)
 	set_ui_full_text(timeline_position, "当前事件与可见范围", "回放时间线位置")
@@ -6963,9 +7046,10 @@ func _show_replay_import_screen_impl() -> void:
 	timeline_position.set_meta("timeline_state", "empty")
 	mark_ui_optimization(timeline_position, "F-515")
 	mark_ui_optimization(timeline_position, "F-118")
-	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", 12, Color(0.62, 0.72, 0.68), false)
+	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", 12, Color(0.28, 0.36, 0.31), false)
 	empty.name = "ReplayImportTimelineEmpty"
-	apply_rect(empty, rect_full(0.035, 0.360, 0.965, 0.580))
+	empty.set_meta("preserve_semantic_color", true)
+	apply_rect(empty, rect_full(0.050, 0.320, 0.950, 0.560))
 	configure_clipped_label(empty)
 	set_ui_full_text(empty, "粘贴回放码并点击导入后显示已验证事件", "回放时间线空状态：粘贴回放码并点击导入并校验")
 	empty.set_meta("timeline_empty_contract", "import_result_validation_event_count_and_range")
@@ -6983,7 +7067,7 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.set_meta("timeline_measurement_pending", false)
 	event_scroll.set_meta("timeline_range_update_count", 0)
 	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
-	apply_rect(event_scroll, rect_full(0.035, 0.330, 0.965, 0.945))
+	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.965))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
 	if event_scrollbar != null:
@@ -7126,7 +7210,10 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 		status.tooltip_text = validation
 		status.set_meta("ui_full_text", validation)
 		status.set_meta("accessible_name", "回放导入状态：" + validation)
-		status.modulate = Color(0.96, 0.52, 0.38) if not valid_shape and not code.is_empty() else Color(0.76, 0.86, 0.76)
+		status.modulate = Color.WHITE
+		status.set_meta("preserve_semantic_color", true)
+		var validation_color := Color(0.68, 0.18, 0.14) if not valid_shape and not code.is_empty() else (Color(0.11, 0.42, 0.24) if valid_shape else Color(0.24, 0.34, 0.28))
+		status.add_theme_color_override("font_color", validation_color)
 		status.set_meta("error_position", error_position)
 		status.set_meta("status_lane", "validation_only")
 		mark_ui_optimization(status, "F-117")
@@ -7454,6 +7541,12 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	var archive_viewport_size := effective_viewport_size()
 	var row := Control.new()
 	row.name = "ReplayArchiveRow_%s" % archive_id.left(12)
+	var row_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var row_plate := add_optional_gpt_illustration_texture(row, row_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if row_plate != null:
+		row_plate.name = "ReplayArchiveRowPlate"
+		row_plate.self_modulate = Color(0.99, 0.97, 0.93)
+		configure_guofeng_button_slice(row_plate, true, 96 if row_frame_key == "button_face_jiangnan_gpt" else 48, 0.125 if row_frame_key == "button_face_jiangnan_gpt" else 0.25)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
 	# visible labels make favorite state discoverable without relying on a glyph.
 	# Keep the row height stable while confirmation text occupies the metadata
@@ -7604,7 +7697,9 @@ func open_replay_archive(archive_id: String) -> void:
 		var archive_visible_count := replay_timeline_visible_events(payload).size()
 		var archive_filtered_note := " · 时间线显示%d条已验证事件" % archive_visible_count if archive_visible_count != archive_events.size() else ""
 		status.text = "归档已打开 · 校验通过 · %d 条事件%s · %s" % [archive_visible_count, archive_filtered_note, str(payload.get("digest", "")).left(12).to_upper()]
-		status.modulate = Color(0.64, 0.90, 0.70)
+		status.modulate = Color.WHITE
+		status.set_meta("preserve_semantic_color", true)
+		status.add_theme_color_override("font_color", Color(0.11, 0.42, 0.24))
 		set_ui_full_text(status, status.text, "回放归档状态：" + status.text)
 		status.set_meta("timeline_source_event_count", archive_events.size())
 		status.set_meta("timeline_visible_event_count", archive_visible_count)
@@ -7628,7 +7723,9 @@ func replay_event_line_text(event: Dictionary) -> String:
 	if kind == "discard":
 		detail = " · " + tile_label(str(event.get("tile", "")))
 	elif kind == "draw" or kind == "draw_flower":
-		detail = " · 座位%d" % int(event.get("seat", -1))
+		var event_seat := int(event.get("seat", -1))
+		if event_seat >= 0 and event_seat < 4:
+			detail = " · %s家" % seat_wind_label(event_seat)
 	elif kind == "item_swap":
 		detail = " · " + tile_label(str(event.get("old_tile", ""))) + " → " + tile_label(str(event.get("new_tile", "")))
 	elif kind == "claim":
@@ -8110,7 +8207,9 @@ func import_replay_from_input() -> void:
 		input.grab_focus()
 		if status != null:
 			status.text = "回放码无效或校验失败"
-			status.modulate = Color(0.96, 0.48, 0.36)
+			status.modulate = Color.WHITE
+			status.set_meta("preserve_semantic_color", true)
+			status.add_theme_color_override("font_color", Color(0.68, 0.18, 0.14))
 			set_ui_full_text(status, "回放码无效或校验失败", "回放导入失败：请检查回放码完整性")
 			status.set_meta("replay_validation_state", "invalid")
 		if empty != null:
@@ -8125,7 +8224,9 @@ func import_replay_from_input() -> void:
 		var imported_visible_count := replay_timeline_visible_events(payload).size()
 		var imported_filtered_note := " · 时间线显示%d条已验证事件" % imported_visible_count if imported_visible_count != events.size() else ""
 		status.text = "校验通过 · %d 条事件%s · %s" % [imported_visible_count, imported_filtered_note, digest.left(12).to_upper()]
-		status.modulate = Color(0.64, 0.90, 0.70)
+		status.modulate = Color.WHITE
+		status.set_meta("preserve_semantic_color", true)
+		status.add_theme_color_override("font_color", Color(0.11, 0.42, 0.24))
 		set_ui_full_text(status, status.text, "回放导入成功：已通过完整性校验")
 		status.set_meta("replay_validation_state", "valid")
 		status.set_meta("timeline_source_event_count", events.size())
