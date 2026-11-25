@@ -163,6 +163,11 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"menu_hero_frame_gold_gpt": "res://assets/illustrations/menu_hero_frame_gold_gpt.png",
 	"empty_parlor_ink_gpt": "res://assets/illustrations/empty_parlor_ink_gpt.png",
 	"empty_scroll_ink_gpt": "res://assets/illustrations/empty_scroll_ink_gpt.png",
+	"menu_hero_play_vignette_gpt": "res://assets/illustrations/menu_hero_play_vignette_gpt.png",
+	"ui_meter_guofeng_rail_gpt": "res://assets/illustrations/ui_meter_guofeng_rail_gpt.png",
+	"ui_meter_guofeng_fill_jade_gpt": "res://assets/illustrations/ui_meter_guofeng_fill_jade_gpt.png",
+	"ui_scrollbar_guofeng_thumb_gpt": "res://assets/illustrations/ui_scrollbar_guofeng_thumb_gpt.png",
+	"daily_milestone_gold_frame_gpt": "res://assets/illustrations/daily_milestone_gold_frame_gpt.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -1492,7 +1497,7 @@ const DISCARD_ZONES := [
 		# Each river owns the inner side of its seat lane. Keep a measurable gap
 		# between seat, meld, and river so visual z-order can never hide a nameplate
 		# or turn an adjacent lane into a surprising click target.
-	[0, Rect2(Vector2(0.285, 0.655), Vector2(0.600, 0.875)), 8],
+	[0, Rect2(Vector2(0.320, 0.655), Vector2(0.636, 0.875)), 8],
 	[2, Rect2(Vector2(0.285, 0.210), Vector2(0.715, 0.300)), 8],
 		# Side rivers stop before the dedicated bottom action channel. The gap is
 		# intentional: response controls must never sit on the last discard row.
@@ -1508,7 +1513,7 @@ const MELD_LAYOUTS := [
 	[1, Rect2(Vector2(0.815, 0.240), Vector2(0.875, 0.600))],
 	# Top melds occupy the clear upper-right lane beside the centered dark hand,
 	# beyond the physical upper wall; all faces still point toward table center.
-	[2, Rect2(Vector2(0.684, 0.128), Vector2(0.980, 0.195))],
+	[2, Rect2(Vector2(0.684, 0.136), Vector2(0.980, 0.203))],
 	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.185, 0.600))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
@@ -1583,6 +1588,8 @@ const HAND_TILE_ASPECT := 1.36
 const HAND_MIN_GROUP_GAP := 8.0
 const HAND_DRAWN_TILE_GAP := 14.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
+# Smoke-locked HAND_TRAY_RECT stays 0.185..0.985; inset the visual rosewood deck right edge cleanly to root ~0.980.
+const HAND_TRAY_WOOD_DECK_RIGHT := 0.994
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
 const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
@@ -3123,7 +3130,7 @@ func find_ui_contract_control(root: Control, node_name: String) -> Control:
 		root.set_meta("ui_contract_name_index", name_index)
 	return found
 
-func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical: bool, inset: float, is_grabber: bool, cross_half: float = 4.0, grabber_min_half: float = 16.0) -> StyleBox:
+func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical: bool, inset: float, is_grabber: bool, cross_half: float = 4.0, grabber_min_half: float = 16.0, authored_vertical_thumb: bool = false) -> StyleBox:
 	if texture == null:
 		var fallback := StyleBoxEmpty.new()
 		if is_vertical:
@@ -3142,10 +3149,16 @@ func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical:
 	var box := StyleBoxTexture.new()
 	box.texture = texture
 	box.modulate_color = tint
-	box.texture_margin_left = 2.0
-	box.texture_margin_right = 2.0
-	box.texture_margin_top = 2.0
-	box.texture_margin_bottom = 2.0
+	if authored_vertical_thumb and is_vertical:
+		box.texture_margin_left = 0.0
+		box.texture_margin_right = 0.0
+		box.texture_margin_top = 10.0
+		box.texture_margin_bottom = 10.0
+	else:
+		box.texture_margin_left = 2.0
+		box.texture_margin_right = 2.0
+		box.texture_margin_top = 2.0
+		box.texture_margin_bottom = 2.0
 	if is_vertical:
 		box.expand_margin_left = -inset
 		box.expand_margin_right = -inset
@@ -3177,17 +3190,27 @@ func style_guofeng_scrollbar(scroll_bar: ScrollBar) -> void:
 	var inset: float = maxf(0.0, (effective_width - thumb_visual_w) * 0.5)
 	var track_inset: float = maxf(0.0, (effective_width - track_visual_w) * 0.5)
 	var track_raw: Texture2D = optional_gpt_illustration_texture("battle_ink_plaque_20261112")
-	var grabber_raw: Texture2D = optional_gpt_illustration_texture("menu_ink_primary")
-	var grabber_active_raw: Texture2D = optional_gpt_illustration_texture("table_gpt_backdrop_bright")
-	if grabber_active_raw == null:
-		grabber_active_raw = grabber_raw
+	var authored_thumb: Texture2D = optional_gpt_illustration_texture("ui_scrollbar_guofeng_thumb_gpt") if is_vertical else null
+	var use_authored_thumb: bool = authored_thumb != null
 	var track_tex: Texture2D = gpt_center_crop_texture(track_raw, "scrollbar_track_quiet", 0.42) if track_raw != null else null
-	var grabber_tex: Texture2D = gpt_center_crop_texture(grabber_raw, "scrollbar_grabber_quiet", 0.42) if grabber_raw != null else null
-	var grabber_active_tex: Texture2D = gpt_center_crop_texture(grabber_active_raw, "scrollbar_grabber_active_quiet", 0.42) if grabber_active_raw != null else grabber_tex
-	var grabber_style: StyleBox = _make_guofeng_scrollbar_style(grabber_tex, Color(0.92, 0.96, 0.92, 0.78), is_vertical, inset, true, cross_half, grabber_min_half)
-	var grabber_hl: StyleBox = _make_guofeng_scrollbar_style(grabber_active_tex, Color(1.0, 1.0, 1.0, 0.92), is_vertical, inset, true, cross_half, grabber_min_half)
-	var grabber_pressed: StyleBox = _make_guofeng_scrollbar_style(grabber_active_tex, Color(0.90, 0.96, 0.88, 0.98), is_vertical, inset, true, cross_half, grabber_min_half)
-	var track_style: StyleBox = _make_guofeng_scrollbar_style(track_tex, Color(0.88, 0.92, 0.88, 0.20), is_vertical, track_inset, false, cross_half, grabber_min_half)
+	var grabber_style: StyleBox
+	var grabber_hl: StyleBox
+	var grabber_pressed: StyleBox
+	if use_authored_thumb:
+		grabber_style = _make_guofeng_scrollbar_style(authored_thumb, Color(0.96, 0.98, 0.96, 0.92), is_vertical, inset, true, cross_half, grabber_min_half, true)
+		grabber_hl = _make_guofeng_scrollbar_style(authored_thumb, Color(1.06, 1.06, 1.02, 0.98), is_vertical, inset, true, cross_half, grabber_min_half, true)
+		grabber_pressed = _make_guofeng_scrollbar_style(authored_thumb, Color(0.88, 0.94, 0.88, 1.0), is_vertical, inset, true, cross_half, grabber_min_half, true)
+	else:
+		var grabber_raw: Texture2D = optional_gpt_illustration_texture("menu_ink_primary")
+		var grabber_active_raw: Texture2D = optional_gpt_illustration_texture("table_gpt_backdrop_bright")
+		if grabber_active_raw == null:
+			grabber_active_raw = grabber_raw
+		var grabber_tex: Texture2D = gpt_center_crop_texture(grabber_raw, "scrollbar_grabber_quiet", 0.42) if grabber_raw != null else null
+		var grabber_active_tex: Texture2D = gpt_center_crop_texture(grabber_active_raw, "scrollbar_grabber_active_quiet", 0.42) if grabber_active_raw != null else grabber_tex
+		grabber_style = _make_guofeng_scrollbar_style(grabber_tex, Color(0.92, 0.96, 0.92, 0.78), is_vertical, inset, true, cross_half, grabber_min_half, false)
+		grabber_hl = _make_guofeng_scrollbar_style(grabber_active_tex, Color(1.0, 1.0, 1.0, 0.92), is_vertical, inset, true, cross_half, grabber_min_half, false)
+		grabber_pressed = _make_guofeng_scrollbar_style(grabber_active_tex, Color(0.90, 0.96, 0.88, 0.98), is_vertical, inset, true, cross_half, grabber_min_half, false)
+	var track_style: StyleBox = _make_guofeng_scrollbar_style(track_tex, Color(0.88, 0.92, 0.88, 0.20), is_vertical, track_inset, false, cross_half, grabber_min_half, false)
 	scroll_bar.add_theme_stylebox_override("grabber", grabber_style)
 	scroll_bar.add_theme_stylebox_override("grabber_highlight", grabber_hl)
 	scroll_bar.add_theme_stylebox_override("grabber_pressed", grabber_pressed)
@@ -4876,6 +4899,26 @@ func guofeng_table_log_texture() -> Texture2D:
 
 func guofeng_menu_hero_frame_texture() -> Texture2D:
 	return optional_gpt_illustration_texture("menu_hero_frame_gold_gpt")
+
+
+func guofeng_menu_hero_play_vignette_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("menu_hero_play_vignette_gpt")
+
+
+func guofeng_meter_rail_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("ui_meter_guofeng_rail_gpt")
+
+
+func guofeng_meter_fill_jade_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("ui_meter_guofeng_fill_jade_gpt")
+
+
+func guofeng_scrollbar_thumb_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("ui_scrollbar_guofeng_thumb_gpt")
+
+
+func guofeng_daily_milestone_frame_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
 
 
 func table_tile_back_texture() -> Texture2D:

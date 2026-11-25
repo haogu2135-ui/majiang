@@ -1328,78 +1328,54 @@ func test_audio_setting() -> void:
 	await get_tree().create_timer(0.7).timeout
 
 	# 收集诊断信息
-	var diag = []
-	diag.append("【音频系统诊断 %s】" % app_version())
+	var diag: Array[String] = []
+	var engine_ver: String = str(Engine.get_version_info().get("string", "4.6.3"))
+	var driver_name: String = AudioServer.get_driver_name()
+	var track_name: String = str(BGM_TRACKS[clampi(current_bgm_index, 0, maxi(0, BGM_TRACKS.size() - 1))].get("name", "默认曲目")) if not BGM_TRACKS.is_empty() else "默认曲目"
+	diag.append("【音频与运行诊断 %s】" % app_version())
 	diag.append("")
-	diag.append("1. 用户激活: " + ("是" if audio_touch_unlocked else "否"))
-	diag.append("2. 设备: 小米手机 (MIUI)")
-	diag.append("")
-	diag.append("⚠️ 当前音频说明")
-	diag.append("BGM已从WAV改为MP3格式")
-	diag.append("因为您能听到TTS语音提示")
-	diag.append("说明音频系统正常")
-	diag.append("只是WAV格式不兼容")
-	diag.append("")
-	diag.append("【请回答】")
-	diag.append("1. 能听到背景音乐了吗？")
-	diag.append("2. 刚才的440Hz测试音听到了吗？")
+	diag.append("1. 运行环境: %s · Godot %s" % [OS.get_name(), engine_ver])
+	diag.append("2. 音频驱动: %s" % (driver_name if driver_name != "" else "默认音频输出"))
+	diag.append("3. 用户交互激活: " + ("是" if audio_touch_unlocked else "否"))
+	diag.append("4. 声音开关: 音乐%s · 音效%s · 报牌%s" % ["开" if music_enabled else "关", "开" if sfx_enabled else "关", "开" if tts_enabled else "关"])
+	diag.append("5. 当前背景曲目: %s" % track_name)
 	diag.append("")
 
 	if bgm_player != null and is_instance_valid(bgm_player):
-		diag.append("3. BGM播放器: 正常")
-		diag.append("4. BGM音频流: " + ("已加载" if bgm_player.stream != null else "未加载"))
-		diag.append("5. BGM正在播放: " + ("是" if bgm_player.playing else "否"))
-		diag.append("6. BGM音量: " + str(bgm_player.volume_db) + "dB (0dB=最大)")
-		diag.append("7. 音频总线: " + bgm_player.bus)
+		diag.append("6. BGM播放器: 已就绪")
+		diag.append("7. BGM音频流: " + ("已加载" if bgm_player.stream != null else "未加载"))
+		diag.append("8. BGM正在播放: " + ("是" if bgm_player.playing else "否"))
+		diag.append("9. BGM音量: %.1fdB (0.0dB=标准)" % bgm_player.volume_db)
+		diag.append("10. 音频总线: " + bgm_player.bus)
 
 		# 检查音频总线音量
 		var master_idx = AudioServer.get_bus_index("Master")
 		if master_idx >= 0:
 			var bus_vol = AudioServer.get_bus_volume_db(master_idx)
 			var bus_muted = AudioServer.is_bus_mute(master_idx)
-			diag.append("8. Master总线音量: " + str(bus_vol) + "dB")
-			diag.append("9. Master总线静音: " + ("是" if bus_muted else "否"))
+			diag.append("11. Master总线音量: %.1fdB" % bus_vol)
+			diag.append("12. Master总线静音: " + ("是" if bus_muted else "否"))
 
 		if bgm_player.stream != null:
 			var stream_type = bgm_player.stream.get_class()
-			diag.append("10. 音频格式: " + stream_type)
-
-			# 检查音频流大小
-			if stream_type == "AudioStreamWAV":
-				var wav = bgm_player.stream as AudioStreamWAV
-				if wav != null and wav.data != null:
-					diag.append("11. 音频数据大小: " + str(wav.data.size()) + " bytes")
+			diag.append("13. 音频流类型: " + stream_type)
 
 		if bgm_player.playing:
 			diag.append("")
-			diag.append("✓ BGM播放成功")
+			diag.append("✓ BGM 播放正常，440Hz 测试音已触发")
+			diag.append("• 如未听到声音，请检查系统媒体音量与输出设备")
+		elif not music_enabled:
 			diag.append("")
-			diag.append("小米手机听不到声音？")
-			diag.append("请检查以下MIUI设置:")
-			diag.append("")
-			diag.append("1. 断开蓝牙设备")
-			diag.append("2. 按音量+键调整【媒体音量】")
-			diag.append("3. 关闭【游戏加速】")
-			diag.append("4. 关闭【省电模式】")
-			diag.append("5. 设置→应用管理→本应用")
-			diag.append("   →省电策略→无限制")
-			diag.append("6. 尝试重启手机")
+			diag.append("⚠ 当前已关闭背景音乐开关，可在设置中重新开启")
 		else:
 			diag.append("")
-			diag.append("✗ BGM未播放")
-			diag.append("")
-			diag.append("已尝试4种播放方法:")
-			diag.append("1. 标准play()")
-			diag.append("2. play(0.0)从头播放")
-			diag.append("3. 重新加载音频流")
-			diag.append("4. 完全重建播放器")
-			diag.append("")
-			diag.append("所有方法都被系统阻止")
+			diag.append("✗ BGM 暂未播放")
+			diag.append("• 请确认系统未静音、输出设备已连接并点击页面触发音频权限")
 	else:
-		diag.append("3. ✗ BGM播放器未初始化")
+		diag.append("6. ✗ BGM播放器未初始化")
 
 	diag.append("")
-	diag.append("点击任意位置关闭")
+	diag.append("可点击下方按钮复制完整报告或关闭窗口")
 
 	print("===== 诊断结果 =====")
 	for line in diag:
@@ -2720,11 +2696,17 @@ func play_reset_progress_button_feedback(button: Button, armed: bool) -> void:
 
 
 func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int, tile_size: Vector2, visible_count: int, archive_reserved_start: int, table_size: Vector2) -> float:
-	if (seat != 0 and seat != 2) or visible_count <= 0 or columns <= 0 or table_size.x <= 1.0:
+	if (seat != 0 and seat != 2 and seat != 3) or visible_count <= 0 or columns <= 0 or table_size.x <= 1.0:
 		return 0.0
 	var used_cols: int = mini(columns, visible_count)
 	var content_w: float = float(used_cols) * tile_size.x + float(maxi(0, used_cols - 1) * DISCARD_GRID_SEPARATION)
 	var zone_w: float = maxf(0.0, (zone_rect.size.x - zone_rect.position.x) * table_size.x)
+	if seat == 3:
+		if archive_reserved_start >= 0 or content_w >= zone_w - 0.5:
+			return 0.0
+		# Right-align Seat 3's river toward the center compass so left/right
+		# rivers frame the compass symmetrically (mirroring Seat 1).
+		return floorf(maxf(0.0, zone_w - content_w))
 	var max_right_px: float = zone_w
 	if seat == 0 and archive_reserved_start >= 0:
 		var vp := effective_viewport_size()
@@ -4383,11 +4365,11 @@ func battle_ui_lane_contract() -> Dictionary:
 func pending_claim_action_base_rect() -> Rect2:
 	# A single, wide bottom channel gives response choices enough columns to keep
 	# every real button at a readable touch width. It begins after the side rivers
-	# and ends before the hand tray, leaving the meld lanes above it untouched.
-	return rect_full(0.635, 0.545, 0.985, 0.795)
+	# and ends flush inside the hand tray rail, leaving melds and bezel untouched.
+	return rect_full(0.635, 0.545, 0.978, 0.795)
 
 func pending_claim_action_dock_base_rect() -> Rect2:
-	return rect_full(0.625, 0.535, 0.995, 0.805)
+	return rect_full(0.625, 0.535, 0.985, 0.805)
 
 func pending_claim_action_row_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> int:
 	if count <= 0:
@@ -4440,12 +4422,17 @@ func pending_claim_action_columns(count: int, viewport_snapshot: Vector2 = Vecto
 func pending_claim_response_button_width(count: int, separation: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
 	var columns := maxi(1, pending_claim_action_columns(count, viewport_snapshot, content_size_snapshot))
 	var base_rect := pending_claim_action_base_rect()
+	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
 	var available_width := resolved_content_size.x * maxf(0.001, base_rect.size.x - base_rect.position.x)
 	var width := floorf((available_width - float(maxi(0, columns - 1) * separation)) / float(columns))
-	# A single claim owns the primary row; only multi-choice grids need a cap.
 	if pending_claim_response_count(count) > 1:
-		width = minf(action_button_max_width_for_viewport(viewport_snapshot), width)
+		width = minf(action_button_max_width_for_viewport(resolved_viewport), width)
+	else:
+		# Cap single-claim width so a lone 碰/杠/胡 never stretches into a skinny 15:1 strip
+		# while still staying >= 2x wider than the secondary pass button below it.
+		var single_cap: float = 196.0 if resolved_viewport.x >= 1600.0 else 172.0
+		width = minf(single_cap, width)
 	return maxf(float(PENDING_CLAIM_BUTTON_MIN_WIDTH), width)
 
 func pending_claim_action_content_height(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
@@ -4458,6 +4445,7 @@ func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vec
 	var base_rect = pending_claim_action_dock_base_rect()
 	var resolved_viewport := viewport_snapshot if viewport_snapshot.x > 1.0 and viewport_snapshot.y > 1.0 else effective_viewport_size()
 	var resolved_content_size := content_size_snapshot if content_size_snapshot.x > 1.0 and content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	var content_width := maxf(1.0, resolved_content_size.x)
 	var content_height := maxf(1.0, resolved_content_size.y)
 	var compact_headroom := 8.0 if resolved_viewport.y <= 560.0 else 0.0
 	var dock_height = (8.0 + pending_claim_action_content_height(count, resolved_viewport, resolved_content_size) + 14.0 + compact_headroom) / content_height
@@ -4468,7 +4456,12 @@ func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vec
 	# lower reserve prevents the first response row from touching its last tile.
 	var dock_bottom := minf(base_rect.size.y, HAND_TRAY_RECT.position.y - 14.0 / content_height)
 	var top = maxf(compact_min_top, dock_bottom - dock_height)
-	return Rect2(Vector2(base_rect.position.x, top), Vector2(base_rect.size.x, dock_bottom))
+	var dock_left := base_rect.position.x
+	if pending_claim_response_count(count) == 1 and mode != "online_game":
+		var sep := action_button_separation_for_count(count, resolved_viewport)
+		var single_w := pending_claim_response_button_width(count, sep, resolved_viewport, resolved_content_size)
+		dock_left = maxf(base_rect.position.x, base_rect.size.x - (single_w + 22.0) / content_width)
+	return Rect2(Vector2(dock_left, top), Vector2(base_rect.size.x, dock_bottom))
 
 func pending_claim_action_bar_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	var dock_rect = pending_claim_action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
@@ -4736,25 +4729,20 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	var narrow_context := context_viewport_size.x <= 960.0
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
-		# and tile labels without covering the right-seat meld lane.
-		context_height_px = 56.0 if large_text_enabled else 48.0
+		# and tile labels without covering the right-seat meld lane or top HUD.
+		context_height_px = 50.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
 		context_height_px = 56.0 if large_text_enabled else 48.0
-	# Keep every viewport in the same upper-left reading lane. It sits below the
-	# HUD and left of the transformed top wall, so the wall gutter remains real
-	# screen space instead of depending on a center candidate that can collapse.
+	# Keep every viewport in the same upper-left reading lane strictly below Top HUD
+	# (>=4px clearance) and left of the transformed top wall.
 	var header_left := 0.020
-	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 1.0 / safe_height)
+	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
-	if header_top > 0.108:
-		var legacy_header_candidate := rect_full(header_left, 0.108, header_right, 0.108 + context_height_px / safe_height)
-		if pending_claim_context_candidate_is_clear(legacy_header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
-			return legacy_header_candidate
 	var left_river = seat_discard_rect(3)
 	var right_river = seat_discard_rect(1)
 	var bottom_river = seat_discard_rect(0)
@@ -4960,11 +4948,19 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			var tail_budget := (full_width - utility_gap_reserve - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
 			var tail_cap := minf(action_button_max_width_for_viewport(layout_viewport_snapshot), maxf(ACTION_BUTTON_MIN_TOUCH_WIDTH, floorf(response_width * 0.90)))
 			if pending_tail_buttons.size() == 1:
-				tail_cap = minf(tail_cap, maxf(76.0, floorf(response_width * 0.84)))
+				if pending_claim_response_count(count) == 1:
+					tail_cap = minf(tail_cap, maxf(ACTION_BUTTON_MIN_TOUCH_WIDTH, floorf(response_width * 0.46)))
+				else:
+					tail_cap = minf(tail_cap, maxf(76.0, floorf(response_width * 0.84)))
 			button_width = maxf(ACTION_BUTTON_MIN_TOUCH_WIDTH, minf(tail_cap, tail_budget))
 			button_font_size = 13 if is_util_tail else 14
 			button.size_flags_horizontal = Control.SIZE_SHRINK_END
 			button.set_meta("fixed_action_width", true)
+		if mode == "offline" and has_pending_danger_discard():
+			if button.name == "DangerDiscardConfirmButton":
+				button_width = maxf(button_width, minf(124.0, button_width + 20.0))
+			elif button.name == "DangerDiscardCancelButton":
+				button_width = maxf(74.0, minf(button_width, 84.0))
 		if ended_action_mode and btn_index < ended_widths.size():
 			button_width = float(ended_widths[btn_index])
 			button_font_size = 18 if str(button.get_meta("action_priority", "secondary")) == "primary" else 15
@@ -12114,7 +12110,7 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 			return rect_full(0.815, 0.240, 0.875, 0.660)
 	if viewport_size.x >= 1600.0 and viewport_size.y >= 900.0:
 		if seat == 2:
-			return rect_full(0.676, 0.128, 0.954, 0.195)
+			return rect_full(0.676, 0.136, 0.954, 0.203)
 		if seat == 3:
 			return rect_full(0.125, 0.240, 0.165, 0.600)
 		if seat == 1:
