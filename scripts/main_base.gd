@@ -148,6 +148,21 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"icon_coin_bronze_gpt": "res://assets/illustrations/icon_coin_bronze_gpt.png",
 	"icon_jade_token_gpt": "res://assets/illustrations/icon_jade_token_gpt.png",
 	"icon_mic_ink_gpt": "res://assets/illustrations/icon_mic_ink_gpt.png",
+	"icon_dock_rules_gpt": "res://assets/illustrations/icon_dock_rules_gpt.png",
+	"icon_dock_stats_gpt": "res://assets/illustrations/icon_dock_stats_gpt.png",
+	"icon_dock_achievements_gpt": "res://assets/illustrations/icon_dock_achievements_gpt.png",
+	"icon_dock_daily_gpt": "res://assets/illustrations/icon_dock_daily_gpt.png",
+	"icon_dock_replay_gpt": "res://assets/illustrations/icon_dock_replay_gpt.png",
+	"table_compass_plate_gpt": "res://assets/illustrations/table_compass_plate_gpt.png",
+	"hand_rail_rosewood_gpt": "res://assets/illustrations/hand_rail_rosewood_gpt.png",
+	"table_log_dark_jade_gpt": "res://assets/illustrations/table_log_dark_jade_gpt.png",
+	"seal_cinnabar_cap_gpt": "res://assets/illustrations/seal_cinnabar_cap_gpt.png",
+	"seal_cinnabar_done_gpt": "res://assets/illustrations/seal_cinnabar_done_gpt.png",
+	"seal_cinnabar_claimed_gpt": "res://assets/illustrations/seal_cinnabar_claimed_gpt.png",
+	"seal_cinnabar_dealer_gpt": "res://assets/illustrations/seal_cinnabar_dealer_gpt.png",
+	"menu_hero_frame_gold_gpt": "res://assets/illustrations/menu_hero_frame_gold_gpt.png",
+	"empty_parlor_ink_gpt": "res://assets/illustrations/empty_parlor_ink_gpt.png",
+	"empty_scroll_ink_gpt": "res://assets/illustrations/empty_scroll_ink_gpt.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -2091,6 +2106,61 @@ func add_illustration_texture(parent: Control, name: String, rect: Rect2, alpha:
 	parent.add_child(tex)
 	return tex
 
+func _guofeng_modal_side_trim_atlas(is_right: bool) -> Texture2D:
+	var frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if frame_tex == null:
+		return null
+	var src_size: Vector2 = frame_tex.get_size()
+	if src_size.x < 32.0 or src_size.y < 320.0:
+		return null
+	var cache_key: String = "%s|modal_side_trim_%s" % [str(frame_tex.get_instance_id()), "r" if is_right else "l"]
+	if gpt_center_crop_cache.has(cache_key):
+		touch_cache_key(gpt_center_crop_lru, cache_key)
+		return gpt_center_crop_cache[cache_key] as Texture2D
+	var atlas := AtlasTexture.new()
+	atlas.atlas = frame_tex
+	var x_pos: float = maxf(0.0, src_size.x - 6.0) if is_right else 2.0
+	atlas.region = Rect2(Vector2(x_pos, 160.0), Vector2(5.0, maxf(64.0, src_size.y - 320.0)))
+	gpt_center_crop_cache[cache_key] = atlas
+	touch_cache_key(gpt_center_crop_lru, cache_key)
+	while gpt_center_crop_cache.size() > GPT_CENTER_CROP_CACHE_LIMIT:
+		evict_cache_key(gpt_center_crop_lru, gpt_center_crop_cache)
+	return atlas
+
+
+func apply_guofeng_modal_side_trim(paper: TextureRect) -> void:
+	if paper == null or not is_instance_valid(paper):
+		return
+	var left_tex: Texture2D = _guofeng_modal_side_trim_atlas(false)
+	var right_tex: Texture2D = _guofeng_modal_side_trim_atlas(true)
+	if left_tex == null or right_tex == null:
+		return
+	var trim_w: float = 4.0 if is_wide_desktop_viewport() else 3.0
+	var trim_alpha: float = 0.92 if high_contrast_enabled else 0.72
+	for side_idx in range(2):
+		var is_right: bool = side_idx == 1
+		var trim_name: String = "GuofengSideTrimRight" if is_right else "GuofengSideTrimLeft"
+		var trim: TextureRect = paper.get_node_or_null(trim_name) as TextureRect
+		if trim == null:
+			trim = TextureRect.new()
+			trim.name = trim_name
+			trim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			trim.stretch_mode = TextureRect.STRETCH_SCALE
+			trim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			paper.add_child(trim)
+		trim.texture = right_tex if is_right else left_tex
+		trim.modulate = Color(1.0, 1.0, 1.0, trim_alpha)
+		trim.anchor_left = 1.0 if is_right else 0.0
+		trim.anchor_right = 1.0 if is_right else 0.0
+		trim.anchor_top = 0.0
+		trim.anchor_bottom = 1.0
+		trim.offset_left = -trim_w if is_right else 0.0
+		trim.offset_right = 0.0 if is_right else trim_w
+		trim.offset_top = 4.0
+		trim.offset_bottom = -4.0
+		trim.visible = true
+
+
 func add_optional_gpt_illustration_texture(parent: Control, name: String, rect: Rect2, alpha: float = 1.0, keep_aspect: bool = false) -> TextureRect:
 	var texture = optional_gpt_illustration_texture(name)
 	if texture == null:
@@ -2104,6 +2174,8 @@ func add_optional_gpt_illustration_texture(parent: Control, name: String, rect: 
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(tex, rect)
 	parent.add_child(tex)
+	if name == "settings_readable_gpt" and absf(rect.size.x - rect.position.x) >= 0.25 and absf(rect.size.y - rect.position.y) >= 0.20:
+		apply_guofeng_modal_side_trim(tex)
 	return tex
 
 func add_optional_gpt_atlas_texture(parent: Control, name: String, region: Rect2, rect: Rect2, alpha: float = 1.0, keep_aspect: bool = false) -> TextureRect:
@@ -2324,6 +2396,8 @@ func make_gpt_center_crop_plate_rect(rect: Rect2, color: Color, plate_key: Strin
 		clampf(color.a, 0.02, 1.0)
 	)
 	apply_rect(tex, rect)
+	if plate_key == "settings_readable_gpt" and crop_fraction >= 0.85 and absf(rect.size.x - rect.position.x) >= 0.25 and absf(rect.size.y - rect.position.y) >= 0.20:
+		apply_guofeng_modal_side_trim(tex)
 	return tex
 
 
@@ -3049,21 +3123,21 @@ func find_ui_contract_control(root: Control, node_name: String) -> Control:
 		root.set_meta("ui_contract_name_index", name_index)
 	return found
 
-func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical: bool, inset: float, is_grabber: bool) -> StyleBox:
+func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical: bool, inset: float, is_grabber: bool, cross_half: float = 4.0, grabber_min_half: float = 16.0) -> StyleBox:
 	if texture == null:
 		var fallback := StyleBoxEmpty.new()
 		if is_vertical:
-			fallback.content_margin_left = 4.0
-			fallback.content_margin_right = 4.0
+			fallback.content_margin_left = cross_half
+			fallback.content_margin_right = cross_half
 			if is_grabber:
-				fallback.content_margin_top = 16.0
-				fallback.content_margin_bottom = 16.0
+				fallback.content_margin_top = grabber_min_half
+				fallback.content_margin_bottom = grabber_min_half
 		else:
-			fallback.content_margin_top = 4.0
-			fallback.content_margin_bottom = 4.0
+			fallback.content_margin_top = cross_half
+			fallback.content_margin_bottom = cross_half
 			if is_grabber:
-				fallback.content_margin_left = 16.0
-				fallback.content_margin_right = 16.0
+				fallback.content_margin_left = grabber_min_half
+				fallback.content_margin_right = grabber_min_half
 		return fallback
 	var box := StyleBoxTexture.new()
 	box.texture = texture
@@ -3075,37 +3149,45 @@ func _make_guofeng_scrollbar_style(texture: Texture2D, tint: Color, is_vertical:
 	if is_vertical:
 		box.expand_margin_left = -inset
 		box.expand_margin_right = -inset
-		box.content_margin_left = 4.0
-		box.content_margin_right = 4.0
-		box.content_margin_top = 16.0 if is_grabber else 0.0
-		box.content_margin_bottom = 16.0 if is_grabber else 0.0
+		box.content_margin_left = cross_half
+		box.content_margin_right = cross_half
+		box.content_margin_top = grabber_min_half if is_grabber else 0.0
+		box.content_margin_bottom = grabber_min_half if is_grabber else 0.0
 	else:
 		box.expand_margin_top = -inset
 		box.expand_margin_bottom = -inset
-		box.content_margin_top = 4.0
-		box.content_margin_bottom = 4.0
-		box.content_margin_left = 16.0 if is_grabber else 0.0
-		box.content_margin_right = 16.0 if is_grabber else 0.0
+		box.content_margin_top = cross_half
+		box.content_margin_bottom = cross_half
+		box.content_margin_left = grabber_min_half if is_grabber else 0.0
+		box.content_margin_right = grabber_min_half if is_grabber else 0.0
 	return box
 
 
 func style_guofeng_scrollbar(scroll_bar: ScrollBar) -> void:
 	if scroll_bar == null or not is_instance_valid(scroll_bar):
 		return
-	var is_vertical := scroll_bar is VScrollBar
-	var width := maxf(scroll_bar.custom_minimum_size.x if is_vertical else scroll_bar.custom_minimum_size.y, 44.0 if scroll_bar.has_meta("ui_min_touch_target") else 0.0)
-	var effective_width := maxf(width, 8.0)
-	var inset := maxf(0.0, (effective_width - 10.0) * 0.5)
-	var track_inset := maxf(0.0, (effective_width - 6.0) * 0.5)
-	var track_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
-	var grabber_tex := optional_gpt_illustration_texture("menu_ink_primary")
-	var grabber_active_tex := optional_gpt_illustration_texture("table_gpt_backdrop_bright")
-	if grabber_active_tex == null:
-		grabber_active_tex = grabber_tex
-	var grabber_style := _make_guofeng_scrollbar_style(grabber_tex, Color(1.0, 1.0, 1.0, 0.72), is_vertical, inset, true)
-	var grabber_hl := _make_guofeng_scrollbar_style(grabber_active_tex, Color(1.0, 1.0, 1.0, 0.90), is_vertical, inset, true)
-	var grabber_pressed := _make_guofeng_scrollbar_style(grabber_active_tex, Color(0.92, 0.96, 0.90, 0.98), is_vertical, inset, true)
-	var track_style := _make_guofeng_scrollbar_style(track_tex, Color(1.0, 1.0, 1.0, 0.22), is_vertical, track_inset, false)
+	var is_vertical: bool = scroll_bar is VScrollBar
+	var wide_bar: bool = is_wide_desktop_viewport()
+	var thumb_visual_w: float = 13.0 if wide_bar else 10.0
+	var track_visual_w: float = 8.0 if wide_bar else 6.0
+	var cross_half: float = 6.5 if wide_bar else 5.0
+	var grabber_min_half: float = 22.0 if wide_bar else 16.0
+	var width: float = maxf(scroll_bar.custom_minimum_size.x if is_vertical else scroll_bar.custom_minimum_size.y, 44.0 if scroll_bar.has_meta("ui_min_touch_target") else 0.0)
+	var effective_width: float = maxf(width, thumb_visual_w)
+	var inset: float = maxf(0.0, (effective_width - thumb_visual_w) * 0.5)
+	var track_inset: float = maxf(0.0, (effective_width - track_visual_w) * 0.5)
+	var track_raw: Texture2D = optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+	var grabber_raw: Texture2D = optional_gpt_illustration_texture("menu_ink_primary")
+	var grabber_active_raw: Texture2D = optional_gpt_illustration_texture("table_gpt_backdrop_bright")
+	if grabber_active_raw == null:
+		grabber_active_raw = grabber_raw
+	var track_tex: Texture2D = gpt_center_crop_texture(track_raw, "scrollbar_track_quiet", 0.42) if track_raw != null else null
+	var grabber_tex: Texture2D = gpt_center_crop_texture(grabber_raw, "scrollbar_grabber_quiet", 0.42) if grabber_raw != null else null
+	var grabber_active_tex: Texture2D = gpt_center_crop_texture(grabber_active_raw, "scrollbar_grabber_active_quiet", 0.42) if grabber_active_raw != null else grabber_tex
+	var grabber_style: StyleBox = _make_guofeng_scrollbar_style(grabber_tex, Color(0.92, 0.96, 0.92, 0.78), is_vertical, inset, true, cross_half, grabber_min_half)
+	var grabber_hl: StyleBox = _make_guofeng_scrollbar_style(grabber_active_tex, Color(1.0, 1.0, 1.0, 0.92), is_vertical, inset, true, cross_half, grabber_min_half)
+	var grabber_pressed: StyleBox = _make_guofeng_scrollbar_style(grabber_active_tex, Color(0.90, 0.96, 0.88, 0.98), is_vertical, inset, true, cross_half, grabber_min_half)
+	var track_style: StyleBox = _make_guofeng_scrollbar_style(track_tex, Color(0.88, 0.92, 0.88, 0.20), is_vertical, track_inset, false, cross_half, grabber_min_half)
 	scroll_bar.add_theme_stylebox_override("grabber", grabber_style)
 	scroll_bar.add_theme_stylebox_override("grabber_highlight", grabber_hl)
 	scroll_bar.add_theme_stylebox_override("grabber_pressed", grabber_pressed)
@@ -3290,7 +3372,15 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 	var source := slice_texture_override if slice_texture_override != null else plate.texture
 	if source == null:
 		return
-	var safe_scale := maxf(0.01, bitmap_scale if is_finite(bitmap_scale) else 0.125)
+	var resolved_margin: int = source_margin
+	var resolved_scale: float = bitmap_scale
+	var active_chamfer_tex: Texture2D = optional_gpt_illustration_texture("button_face_jiangnan_active_gpt")
+	var danger_chamfer_tex: Texture2D = optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt")
+	if (source == active_chamfer_tex or source == danger_chamfer_tex) and source_margin == 96 and is_equal_approx(bitmap_scale, 0.125):
+		var unified: Dictionary = _guofeng_chamfer_slice_params(source)
+		resolved_margin = int(unified.get("margin", 100))
+		resolved_scale = float(unified.get("scale", 0.155))
+	var safe_scale := maxf(0.01, resolved_scale if is_finite(resolved_scale) else 0.125)
 	if edges == null:
 		edges = NinePatchRect.new()
 		edges.name = "AuthoredBitmapEdges"
@@ -3301,10 +3391,14 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 	else:
 		edges.scale = Vector2(safe_scale, safe_scale)
 	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
-		edges.set_patch_margin(side, source_margin)
+		edges.set_patch_margin(side, resolved_margin)
 	edges.texture = source
 	edges.region_rect = Rect2(Vector2.ZERO, source.get_size())
 	edges.visible = true
+	for trim_name in ["GuofengSideTrimLeft", "GuofengSideTrimRight"]:
+		var trim_node: CanvasItem = plate.get_node_or_null(str(trim_name)) as CanvasItem
+		if trim_node != null:
+			trim_node.visible = false
 	# The existing atlas supplies every pixel. Uniform scaling keeps its frame
 	# near 1px; native nine-slice stretches only the quiet center and straight edges.
 	if keep_plate_texture:
@@ -3315,7 +3409,7 @@ func configure_guofeng_button_slice(plate: TextureRect, preserve_edges: bool, so
 	sync_guofeng_button_slice(plate.get_instance_id())
 
 
-func _guofeng_chamfer_slice_params(texture: Texture2D, target_corner_px: float = 12.0) -> Dictionary:
+func _guofeng_chamfer_slice_params(texture: Texture2D, target_corner_px: float = 15.5) -> Dictionary:
 	var source_dim := minf(texture.get_size().x, texture.get_size().y) if texture != null else 490.0
 	var margin := clampi(int(round(source_dim * 0.195)), 24, 240)
 	var scale := clampf(target_corner_px / maxf(1.0, float(margin)), 0.05, 0.50)
@@ -4523,6 +4617,25 @@ func menu_quick_dock_metrics() -> Dictionary:
 	}
 
 
+func menu_hero_grid_bounds(content_size: Vector2) -> Dictionary:
+	var wide_menu: bool = content_size.x >= 1600.0
+	var card_gap: int = 32 if wide_menu else 28
+	var available_w: float = maxf(720.0, content_size.x * 0.83)
+	var card_w: float = clampf(floor((available_w - float(card_gap * 2)) / 3.0), 220.0, 470.0 if wide_menu else 338.0)
+	var row_w: float = card_w * 3.0 + float(card_gap * 2)
+	var left_px: float = maxf(0.0, (content_size.x - row_w) * 0.5)
+	var safe_w: float = maxf(1.0, content_size.x)
+	return {
+		"left_px": left_px,
+		"right_px": left_px + row_w,
+		"row_width": row_w,
+		"card_width": card_w,
+		"card_gap": card_gap,
+		"left_ratio": clampf(left_px / safe_w, 0.04, 0.20),
+		"right_ratio": clampf((left_px + row_w) / safe_w, 0.80, 0.96),
+	}
+
+
 func apply_wide_menu_scale(menu_root: Control) -> void:
 	if menu_root == null or not is_instance_valid(menu_root) or not is_wide_desktop_viewport():
 		return
@@ -4535,14 +4648,20 @@ func apply_wide_menu_scale(menu_root: Control) -> void:
 		var raw_cs: Variant = call("safe_content_pixel_size")
 		if raw_cs is Vector2 and (raw_cs as Vector2).x > 1.0:
 			content_size = raw_cs as Vector2
-	# 1. Header rule subtitle proportional scale (+preserve tutorial banner clearance).
+	var hero_grid: Dictionary = menu_hero_grid_bounds(content_size)
+	var hero_left: float = float(hero_grid.get("left_ratio", 0.106))
+	var hero_right: float = float(hero_grid.get("right_ratio", 0.894))
+	# 1. Header rule subtitle proportional scale + flush left alignment with hero grid.
 	var header: Control = menu_root.find_child("MenuTitleTextLayer", false, false) as Control
 	var title_rule: Label = menu_root.find_child("MenuTitleRule", true, false) as Label
+	if header != null:
+		header.anchor_left = hero_left
+		header.anchor_right = minf(0.440, hero_left + 0.335)
 	if header != null and title_rule != null:
 		var old_header_bottom: float = header.offset_bottom
 		title_rule.add_theme_font_size_override("font_size", accessibility_font_size(22))
 		if title_rule.autowrap_mode != TextServer.AUTOWRAP_OFF:
-			configure_wrapped_label(title_rule, content_size.x * 0.35 * 0.93, 0.0, 3.0)
+			configure_wrapped_label(title_rule, content_size.x * 0.335 * 0.93, 0.0, 3.0)
 		var rule_h: float = ceilf(title_rule.get_combined_minimum_size().y)
 		title_rule.offset_bottom = title_rule.offset_top + rule_h
 		header.offset_bottom = title_rule.offset_bottom + 8.0
@@ -4552,13 +4671,27 @@ func apply_wide_menu_scale(menu_root: Control) -> void:
 			if tutorial_banner != null:
 				tutorial_banner.offset_top += delta_h
 				tutorial_banner.offset_bottom += delta_h
-	# 2. Corner action buttons (新手教学 / 设置).
+	# 2. Corner action buttons (新手教学 flush right with 商店; slimmer 设置 flush right).
 	var tutorial_btn: Button = menu_root.find_child("MenuTutorialButton", false, false) as Button
 	if tutorial_btn != null:
+		tutorial_btn.anchor_left = maxf(0.760, hero_right - 0.114)
+		tutorial_btn.anchor_right = hero_right
 		tutorial_btn.add_theme_font_size_override("font_size", accessibility_font_size(22))
+	var footer: Control = menu_root.find_child("MenuFooterTextLayer", false, false) as Control
+	if footer != null:
+		footer.anchor_left = hero_left
+		footer.anchor_right = hero_right
+		var footer_back: Control = footer.find_child("MenuFooterBackplate", false, false) as Control
+		if footer_back != null and not high_contrast_enabled:
+			footer_back.anchor_left = 0.000
+			footer_back.anchor_right = 0.812
 	var settings_btn: Button = menu_root.find_child("MenuSettingsButton", true, false) as Button
 	if settings_btn != null:
-		settings_btn.add_theme_font_size_override("font_size", accessibility_font_size(23))
+		settings_btn.anchor_left = 0.860
+		settings_btn.anchor_right = 1.000
+		settings_btn.anchor_top = 0.210
+		settings_btn.anchor_bottom = 0.820
+		settings_btn.add_theme_font_size_override("font_size", accessibility_font_size(22))
 	# 3. Three hero entry cards (入席开局 / 联机房间 / 商店).
 	for card_name in ["MenuPrimaryOfflineCard", "MenuPrimaryOnlineCard", "MenuPrimaryShopCard"]:
 		var card: Button = menu_root.find_child(str(card_name), true, false) as Button
@@ -4607,21 +4740,26 @@ func apply_wide_menu_scale(menu_root: Control) -> void:
 		var claim_glyph: Label = claim_dot.find_child("MenuQuickDailyClaimGlyph", true, false) as Label
 		if claim_glyph != null:
 			claim_glyph.add_theme_font_size_override("font_size", int(metrics.get("claim_font_size", 11)))
-	# 5. Bottom status bar chips (version / currency / rank / stats).
-	var footer_w: float = content_size.x * 0.890
+	# 5. Bottom status bar chips evenly distributed inside hero-aligned footer.
+	var footer_w: float = float(hero_grid.get("row_width", content_size.x * 0.788))
 	var footer_chips: Array = [
-		["version", "MenuVersionBadge"],
-		["currency", "MenuCurrencyBadge"],
-		["rank", "MenuRankBadge"],
-		["stats", "MenuStatsBadge"],
+		["version", "MenuVersionBadge", 0.018, 0.178],
+		["currency", "MenuCurrencyBadge", 0.194, 0.436],
+		["rank", "MenuRankBadge", 0.452, 0.616],
+		["stats", "MenuStatsBadge", 0.632, 0.796],
 	]
 	for entry in footer_chips:
 		var chip_id: String = str(entry[0])
 		var badge_name: String = str(entry[1])
+		var chip_left: float = float(entry[2])
+		var chip_right: float = float(entry[3])
 		var chip: Control = menu_root.find_child("MenuFooterStatusChip_%s" % chip_id, true, false) as Control
+		if chip != null:
+			chip.anchor_left = chip_left
+			chip.anchor_right = chip_right
 		var badge_lbl: Label = menu_root.find_child(badge_name, true, false) as Label
 		if badge_lbl != null:
-			var chip_span: float = maxf(0.10, chip.anchor_right - chip.anchor_left) if chip != null else 0.16
+			var chip_span: float = maxf(0.10, chip_right - chip_left)
 			var lbl_span: float = (badge_lbl.anchor_right - badge_lbl.anchor_left) if badge_lbl.anchor_right > badge_lbl.anchor_left + 0.01 else 0.88
 			var offset_reserve: float = maxf(0.0, badge_lbl.offset_left - badge_lbl.offset_right)
 			var avail_w: float = maxf(96.0, footer_w * chip_span * lbl_span - offset_reserve - 6.0)
@@ -4636,6 +4774,70 @@ func apply_wide_menu_scale(menu_root: Control) -> void:
 					var icon_tr: TextureRect = sub_node as TextureRect
 					if icon_tr.custom_minimum_size.x > 0.0 and icon_tr.custom_minimum_size.x <= 20.0:
 						icon_tr.custom_minimum_size = Vector2(24.0, 24.0)
+
+
+func guofeng_dock_icon_texture(quick_id: String) -> Texture2D:
+	var dock_key: String = ""
+	match quick_id:
+		"rules":
+			dock_key = "icon_dock_rules_gpt"
+		"stats":
+			dock_key = "icon_dock_stats_gpt"
+		"achievements":
+			dock_key = "icon_dock_achievements_gpt"
+		"daily_login":
+			dock_key = "icon_dock_daily_gpt"
+		"replay":
+			dock_key = "icon_dock_replay_gpt"
+	if dock_key != "":
+		var authored: Texture2D = optional_gpt_illustration_texture(dock_key)
+		if authored != null:
+			return authored
+	return optional_gpt_illustration_texture("menu_nav_" + quick_id + "_jiangnan_gpt")
+
+
+func guofeng_cinnabar_seal_texture(seal_role: String) -> Texture2D:
+	var key: String = ""
+	match seal_role:
+		"cap":
+			key = "seal_cinnabar_cap_gpt"
+		"done":
+			key = "seal_cinnabar_done_gpt"
+		"claimed":
+			key = "seal_cinnabar_claimed_gpt"
+		"dealer":
+			key = "seal_cinnabar_dealer_gpt"
+	if key != "":
+		var seal_tex: Texture2D = optional_gpt_illustration_texture(key)
+		if seal_tex != null:
+			return seal_tex
+	if seal_role == "dealer":
+		return optional_gpt_illustration_texture("dealer_seal_carved_gpt")
+	return null
+
+
+func guofeng_empty_state_ink_texture(kind: String) -> Texture2D:
+	if kind == "parlor":
+		return optional_gpt_illustration_texture("empty_parlor_ink_gpt")
+	if kind == "scroll":
+		return optional_gpt_illustration_texture("empty_scroll_ink_gpt")
+	return null
+
+
+func guofeng_compass_plate_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("table_compass_plate_gpt")
+
+
+func guofeng_hand_rail_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("hand_rail_rosewood_gpt")
+
+
+func guofeng_table_log_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("table_log_dark_jade_gpt")
+
+
+func guofeng_menu_hero_frame_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("menu_hero_frame_gold_gpt")
 
 
 func table_tile_back_texture() -> Texture2D:
