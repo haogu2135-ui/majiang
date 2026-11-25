@@ -382,13 +382,13 @@ func update_pending_claim_live_state() -> void:
 			var ratio_now := clampf(pending_claim_remaining_ratio(), 0.04, 1.0) if remaining_now >= 0 else 0.68
 			time_bar.anchor_right = ratio_now
 			if remaining_now < 0:
-				time_bar.self_modulate = Color(0.86, 0.64, 0.24, 0.92)
+				time_bar.self_modulate = Color(0.92, 0.60, 0.12, 1.0)
 			elif ratio_now <= 0.28:
-				time_bar.self_modulate = Color(0.84, 0.24, 0.18, 0.96)
+				time_bar.self_modulate = Color(0.88, 0.20, 0.14, 1.0)
 			elif ratio_now <= 0.55:
-				time_bar.self_modulate = Color(0.88, 0.60, 0.18, 0.94)
+				time_bar.self_modulate = Color(0.92, 0.58, 0.12, 1.0)
 			else:
-				time_bar.self_modulate = Color(0.18, 0.56, 0.38, 0.94)
+				time_bar.self_modulate = Color(0.16, 0.56, 0.34, 1.0)
 func refresh_pending_claim_live_controls() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
@@ -2728,13 +2728,13 @@ func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int,
 	var max_right_px: float = zone_w
 	if seat == 0 and archive_reserved_start >= 0:
 		var vp := effective_viewport_size()
-		if vp.x <= 960.0:
-			var content := safe_content_pixel_size_for_margins(vp, safe_area_margins)
-			var zone_root := battle_table_anchor_root_rect(zone_rect, vp)
-			var dock_left_px: float = action_bar_dock_layout_rect(vp, content).position.x * content.x
-			var archive_left_px: float = dock_left_px - 10.0 - 50.0
-			var local_limit_px: float = archive_left_px - zone_root.position.x * content.x - 6.0
-			max_right_px = minf(max_right_px, maxf(0.0, local_limit_px))
+		var content := safe_content_pixel_size_for_margins(vp, safe_area_margins)
+		var zone_root := battle_table_anchor_root_rect(zone_rect, vp)
+		var dock_left_px: float = action_bar_dock_layout_rect(vp, content).position.x * content.x
+		var archive_gap_px: float = 10.0 if vp.x <= 960.0 else 8.0
+		var archive_left_px: float = dock_left_px - archive_gap_px - 50.0
+		var local_limit_px: float = archive_left_px - zone_root.position.x * content.x - 6.0
+		max_right_px = minf(max_right_px, maxf(0.0, local_limit_px))
 	elif seat == 2 and archive_reserved_start >= 0 and not top_discard_archive_uses_side_gutter(effective_viewport_size()):
 		if archive_reserved_start >= columns or archive_reserved_start <= 0:
 			return 0.0
@@ -4919,8 +4919,11 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			pending_tail_lane.custom_minimum_size.x = action_bar_pixel_width()
 			for group in pending_tail_lane.get_children():
 				if group is Control:
-					# Empty network/voice groups must not leave trailing HBox gaps.
-					(group as Control).visible = group.get_child_count() > 0
+					if group.name == "PendingClaimUtilityGap":
+						(group as Control).visible = mode == "online_game"
+					else:
+						# Empty network/voice groups must not leave trailing HBox gaps.
+						(group as Control).visible = group.get_child_count() > 0
 	if compact_claim_mode and layout_viewport_snapshot.y <= 560.0:
 		# Keep the response stack aligned with the shell. The shell already reserves
 		# its hand-tray gutter, so an extra negative offset would create a false
@@ -4951,13 +4954,15 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			button_font_size = action_button_font_size(response_width)
 		if compact_claim_mode and bool(button.get_meta("pending_tail", false)):
 			# Secondary actions keep practical targets at the right edge instead of
-			# turning a lone pass into a larger CTA than the claim above it.
-			var tail_budget := (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
-			var tail_cap := action_button_max_width_for_viewport(layout_viewport_snapshot)
+			# turning pass or utilities into wider CTAs than the claim buttons above.
+			var is_util_tail := button.has_meta("pending_utility_button") and bool(button.get_meta("pending_utility_button"))
+			var utility_gap_reserve := 10.0 if pending_tail_buttons.size() >= 2 else 0.0
+			var tail_budget := (full_width - utility_gap_reserve - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
+			var tail_cap := minf(action_button_max_width_for_viewport(layout_viewport_snapshot), maxf(ACTION_BUTTON_MIN_TOUCH_WIDTH, floorf(response_width * 0.90)))
 			if pending_tail_buttons.size() == 1:
 				tail_cap = minf(tail_cap, maxf(76.0, floorf(response_width * 0.84)))
-			button_width = minf(tail_cap, tail_budget)
-			button_font_size = 15
+			button_width = maxf(ACTION_BUTTON_MIN_TOUCH_WIDTH, minf(tail_cap, tail_budget))
+			button_font_size = 13 if is_util_tail else 14
 			button.size_flags_horizontal = Control.SIZE_SHRINK_END
 			button.set_meta("fixed_action_width", true)
 		if ended_action_mode and btn_index < ended_widths.size():
@@ -12046,10 +12051,10 @@ func seat_discard_rect(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 			var bounds: Rect2 = zone[1]
 			if seat == 0:
 				var resolved_size := table_size if table_size.y > 1.0 else game_table_pixel_size()
-				if resolved_size.x >= 1150.0 and not has_pending_claim_window() and not has_pending_danger_discard():
+				if resolved_size.x >= 1150.0 and not has_pending_danger_discard():
 					# On 1920x1080 wide tables, expand the bottom river's right bound
-					# so 8-tile rows center symmetrically on x=50% while staying strictly
-					# left of ActionButtonDock (root x=0.612 < 0.615).
+					# so 8-tile rows center symmetrically on x=50% in both normal and
+					# pending-claim states while staying strictly left of the action dock.
 					bounds.size.x = maxf(bounds.size.x, 0.665)
 				var wall_center_y := (WALL_LAYOUTS[1][0].y + WALL_LAYOUTS[1][1].y) * 0.5
 				# Include the 1.5px frame, an 8px gutter and container pixel rounding.
