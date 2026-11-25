@@ -3157,7 +3157,7 @@ func run_layout_checks_for_viewport(viewport_size: Vector2) -> void:
 		rule_variant_button.pressed.emit()
 		var refreshed_rule_status = scene.find_child("SettingsRuleVariantStatus", true, false) as Label
 		var refreshed_rule_text: String = str(refreshed_rule_status.text) if refreshed_rule_status != null else "<missing>"
-		check(refreshed_rule_text.begins_with("当前局：扬州 · 下一局：南京") and (refreshed_rule_text.contains("可吃") or refreshed_rule_text.contains("不可吃")), "settings local-rule state refreshes after cycling the queued profile at %s (got %s)" % [actual_viewport, refreshed_rule_text])
+		check(refreshed_rule_status != null and refreshed_rule_text.begins_with("当前：扬州 · 下局：南京") and refreshed_rule_status.tooltip_text.begins_with("当前局：扬州 · 下一局：南京") and (refreshed_rule_text.contains("可吃") or refreshed_rule_text.contains("不可吃")), "settings local-rule state refreshes after cycling the queued profile at %s (got %s)" % [actual_viewport, refreshed_rule_text])
 	var settings_panel_for_local_probe := scene.find_child("SettingsPanel", true, false) as Control
 	var local_probe_panel_id := settings_panel_for_local_probe.get_instance_id() if settings_panel_for_local_probe != null else 0
 	var saved_ai_assist: bool = scene.ai_assist_enabled
@@ -4503,14 +4503,9 @@ func check_settings_large_text_layout(scene, viewport_size: Vector2) -> void:
 		check(section != null and grid != null, "large-text settings keeps the %s section in the scroll content at %s" % [section_name, viewport_size])
 		if section == null or grid == null or not section.is_visible_in_tree():
 			continue
-		var section_title: Label = null
-		for child in section.get_children():
-			if child is Label and (child as Label).text == section_name:
-				section_title = child as Label
-				break
-		check(section_title != null and screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "large-text settings %s grid stays inside its section at %s" % [section_name, viewport_size])
-		if section_title != null:
-			check(screen_rect(grid).position.y >= screen_rect(section_title).end.y + 8.0, "large-text settings %s title keeps an 8px gap before its first row lane at %s" % [section_name, viewport_size])
+		check(screen_rect(section).grow(1.0).encloses(screen_rect(grid)), "large-text settings %s grid stays inside its section at %s" % [section_name, viewport_size])
+		var tab := scene.find_child("SettingsSectionNavButton_%s" % section_name, true, false) as Button
+		check(tab != null and tab.text.ends_with(section_name) and screen_rect(scroll).position.y >= screen_rect(tab).end.y + 8.0, "large-text settings %s uses its fixed tab as the section heading above the scroll lane at %s" % [section_name, viewport_size])
 
 
 func check_chat_scroll_reachability(scene, viewport_size: Vector2) -> void:
@@ -5730,7 +5725,10 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		return
 	check(not screen_rect(form).intersects(screen_rect(room), true), "lobby operational columns stay separate at %s" % viewport_size)
 	check(not back.disabled and back.modulate == Color.WHITE and back.size.y >= 44.0, "lobby return remains readable and available in every connection state")
-	check(feedback.get_global_rect().end.y + 7.5 <= actions.get_global_rect().position.y and actions.get_global_rect().end.y + 7.5 <= start_actions.get_global_rect().position.y, "lobby validation and two action rows keep eight pixel gaps")
+	var waiting_for_connection: bool = scene.lobby_connection_state_text() != "已连接"
+	var first_action_row := start_actions if waiting_for_connection else actions
+	var second_action_row := actions if waiting_for_connection else start_actions
+	check(feedback.get_global_rect().end.y + 7.5 <= first_action_row.get_global_rect().position.y and first_action_row.get_global_rect().end.y + 7.5 <= second_action_row.get_global_rect().position.y, "lobby validation and action rows keep eight pixel gaps in the current connection order")
 	for field_name in ["OnlineLobbyNameEdit", "OnlineLobbyHostEdit", "OnlineLobbyRoomEdit"]:
 		var edit := scene.find_child(field_name, true, false) as LineEdit
 		check(edit != null, "lobby retains native input " + field_name)
@@ -5739,7 +5737,7 @@ func check_online_lobby_layout(scene, viewport_size: Vector2) -> void:
 		check(edit.size.y >= 44.0 and edit.get_theme_font_size("font_size") >= 18 and not edit.clear_button_enabled and bool(edit.get_meta("native_clear_proxy", false)), field_name + " preserves readable native editing and one clear owner")
 		var face := edit.find_child("LobbyFieldPaperFace", true, false) as TextureRect
 		check(face != null and face.show_behind_parent and face.texture == scene.optional_gpt_illustration_texture("menu_card_readable_gpt"), field_name + " uses the authored paper without a baked clear icon")
-		check(edit.get_global_rect().end.y + 6.0 <= actions.get_global_rect().position.y, field_name + " clears actions")
+		check(edit.get_global_rect().end.y + 6.0 <= first_action_row.get_global_rect().position.y, field_name + " clears actions")
 	for action_name in ["OnlineLobbyConnectButton", "OnlineLobbyCreateButton", "OnlineLobbyJoinButton", "OnlineLobbyPrimaryStartButton", "ChatLobbyButton", "OnlineLobbyEndpointCopyButton"]:
 		var button := scene.find_child(action_name, true, false) as Button
 		check(button != null and button.size.x >= 44 and button.size.y >= 44 and button.get_meta("guofeng_button_face_key", "") in ["button_face_jiangnan_gpt", "menu_ink_primary"], action_name + " retains a real authored forty-four-pixel action")
@@ -5954,7 +5952,7 @@ func check_shop_layout(scene, viewport_size: Vector2) -> void:
 	var shop_end_marker = scene.find_child("ShopItemsEndMarker", true, false) as Control
 	if shop_end_marker != null and scrollbar != null:
 		var shop_scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page)
-		check(shop_end_marker.visible == (shop_scroll_range <= 0.5 or scroll.scroll_vertical >= shop_scroll_range - 1.0), "shop only exposes the terminal marker at the measured list end at %s" % viewport_size)
+		check(shop_end_marker.visible == (shop_scroll_range > 0.5 and scroll.scroll_vertical >= shop_scroll_range - 1.0), "shop only exposes a separate terminal marker when scrolling has reached the list end at %s" % viewport_size)
 	check(footer_panel != null and footer_title != null and footer_body != null and footer_inventory != null and footer_state != null, "shop exposes cabinet footer information panel at %s (panel=%s title=%s body=%s inventory=%s state=%s get_gems=%s)" % [viewport_size, footer_panel != null, footer_title != null, footer_body != null, footer_inventory != null, footer_state != null, scene.find_child("ShopGetGemsButton", true, false) != null])
 	var get_gems_button = scene.find_child("ShopGetGemsButton", true, false) as Control
 	if get_gems_button != null:

@@ -18,12 +18,17 @@ func run() -> void:
 	scene.currency = {"coins": 499, "gems": 0}
 	scene.save_economy_state()
 	check(not scene.exchange_coins_for_gems() and scene.currency == {"coins": 499, "gems": 0}, "insufficient coins cannot create gems or debit currency")
+	scene.show_shop_screen(true)
+	await process_frame
+	var currency_help := scene.find_child("ShopGetGemsButton", true, false) as Button
+	var shortfall := scene.find_child("ShopCabinetFooterInventoryBadge", true, false) as Label
+	check(currency_help != null and currency_help.text == "铜钱获取" and shortfall != null and shortfall.text == "还差 1 铜钱", "one coin below the exchange threshold shows an exact shortfall before input")
 	scene.currency = {"coins": 1000, "gems": 0}
 	scene.save_economy_state()
 	scene.show_shop_screen(true)
 	await process_frame
 	var exchange := scene.find_child("ShopGetGemsButton", true, false) as Button
-	check(exchange != null, "shop offers native currency exchange action")
+	check(exchange != null and exchange.text == "兑换玉符", "sufficient coins expose the native exchange action")
 	if exchange != null:
 		exchange.pressed.emit()
 		await process_frame
@@ -35,9 +40,11 @@ func run() -> void:
 		var persisted := ConfigFile.new()
 		check(persisted.load(scene.ECONOMY_PATH) == OK and int(persisted.get_value("currency", "coins", -1)) == 500 and int(persisted.get_value("currency", "gems", -1)) == 5, "confirmed exchange survives a fresh config read")
 		exchange = scene.find_child("ShopGetGemsButton", true, false) as Button
-		exchange.pressed.emit()
-		await process_frame
-		check(scene.currency == {"coins": 500, "gems": 5}, "extra activation starts a fresh confirmation instead of spending twice")
+		check(exchange != null and exchange.text == "兑换玉符", "exactly 500 coins still offers exchange")
+		if exchange != null:
+			exchange.pressed.emit()
+			await process_frame
+			check(scene.currency == {"coins": 500, "gems": 5}, "extra activation starts a fresh confirmation instead of spending twice")
 		scene.shop_exchange_confirm_until_msec = Time.get_ticks_msec() - 1
 		scene.request_shop_currency_exchange()
 		check(scene.currency == {"coins": 500, "gems": 5}, "expired confirmation cannot perform a transaction")

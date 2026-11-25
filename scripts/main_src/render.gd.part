@@ -16762,30 +16762,15 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
 	apply_rect(rule_setting_button, rect_full(0.685, 0.045, 0.815, 0.135))
 	panel.add_child(rule_setting_button)
-	var active_rule_profile := rule_profile(rule_variant)
-	var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
-	var rule_difference_short := ("可吃·含花" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃·无花" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
-	var rule_activation_full := rule_variant_activation_status_text()
-	var rule_activation_visible := rule_activation_full.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
-	var rule_variant_status_text := "%s · %s" % [rule_activation_visible, rule_difference_short]
-	var rule_variant_full_status_text := "%s · %s" % [rule_activation_full, rule_difference]
-	var rule_status_font_size := accessibility_font_size(13)
-	var rule_variant_status = make_label(panel, rule_variant_status_text, 13, Color(0.13, 0.17, 0.12, 0.98), true)
+	var rule_variant_status = make_label(panel, "", 13, Color(0.13, 0.17, 0.12, 0.98), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
-	rule_variant_status.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-	rule_variant_status.add_theme_constant_override("outline_size", 0)
-	rule_variant_status.add_theme_constant_override("shadow_offset_x", 0)
-	rule_variant_status.add_theme_constant_override("shadow_offset_y", 0)
+	style_guofeng_label(rule_variant_status)
 	apply_rect(rule_variant_status, rect_full(0.350, 0.140, 0.815, 0.178))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
 	mark_ui_optimization(rule_variant_status, "F-080")
 	rule_variant_status.set_meta("status_summary_contract", "当前档案 · 关键规则差异")
-	rule_variant_status.set_meta("rule_difference", rule_difference)
-	set_ui_full_text(rule_variant_status, rule_variant_full_status_text, "地方规则详情：" + rule_variant_summary(rule_variant))
-	rule_variant_status.tooltip_text = rule_variant_full_status_text
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	configure_clipped_label(rule_variant_status)
-	fit_label_font_size(rule_variant_status, panel.size.x * 0.465, rule_status_font_size, accessibility_font_size(11))
+	update_settings_rule_status(rule_variant_status)
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
 	# all fit in the compact panel while preserving readable setting rows.

@@ -28917,10 +28917,11 @@ func draw_settings_overlay(parent: Control) -> void:
 	# Every category owns the same reading area. Hidden categories retain their
 	# native controls, while focus and input only visit the selected category.
 	var audio_section_rect = rect_full(0.040, 0.290, 0.960, 0.875)
-	if not compact_settings and not large_text_enabled:
-		audio_section_rect = rect_full(0.040, 0.275, 0.965, 0.915)
 	var play_section_rect = audio_section_rect
-	var maint_section_rect = audio_section_rect
+	if not compact_settings and not large_text_enabled:
+		audio_section_rect = rect_full(0.040, 0.295, 0.700, 0.915)
+		play_section_rect = rect_full(0.040, 0.295, 0.965, 0.915)
+	var maint_section_rect = play_section_rect
 	var settings_content_parent: Control = null
 	var settings_grid_compact := compact_settings or large_text_enabled
 	var settings_large_text_scroll: ScrollContainer = null
@@ -29066,29 +29067,15 @@ func draw_settings_overlay(parent: Control) -> void:
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
 	apply_rect(rule_setting_button, rect_full(0.685, 0.045, 0.815, 0.135))
 	panel.add_child(rule_setting_button)
-	var active_rule_profile := rule_profile(rule_variant)
-	var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
-	var rule_difference_short := ("可吃·含花" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃·无花" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
-	var rule_activation_full := rule_variant_activation_status_text()
-	var rule_activation_visible := rule_activation_full.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
-	var rule_variant_status_text := "%s · %s" % [rule_activation_visible, rule_difference_short]
-	var rule_variant_full_status_text := "%s · %s" % [rule_activation_full, rule_difference]
-	var rule_variant_status = make_label(panel, rule_variant_status_text, 11, Color(0.13, 0.17, 0.12, 0.98), true)
+	var rule_variant_status = make_label(panel, "", 13, Color(0.13, 0.17, 0.12, 0.98), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
-	rule_variant_status.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-	rule_variant_status.add_theme_constant_override("outline_size", 0)
-	rule_variant_status.add_theme_constant_override("shadow_offset_x", 0)
-	rule_variant_status.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(rule_variant_status, rect_full(0.480, 0.140, 0.815, 0.172))
+	style_guofeng_label(rule_variant_status)
+	apply_rect(rule_variant_status, rect_full(0.350, 0.140, 0.815, 0.178))
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
 	mark_ui_optimization(rule_variant_status, "F-080")
 	rule_variant_status.set_meta("status_summary_contract", "当前档案 · 关键规则差异")
-	rule_variant_status.set_meta("rule_difference", rule_difference)
-	set_ui_full_text(rule_variant_status, rule_variant_full_status_text, "地方规则详情：" + rule_variant_summary(rule_variant))
-	rule_variant_status.tooltip_text = rule_variant_full_status_text
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	configure_clipped_label(rule_variant_status)
-	fit_label_font_size(rule_variant_status, maxf(120.0, settings_viewport.x * 0.22), 11, 9)
+	update_settings_rule_status(rule_variant_status)
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
 	# all fit in the compact panel while preserving readable setting rows.
@@ -29360,15 +29347,18 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 	mark_ui_optimization(status_label, "F-115")
 
 
+func settings_overview_text() -> String:
+	var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
+	return "声音已启用 %d 项 · 出牌辅助%s" % [enabled_audio, "开启" if ai_assist_enabled else "关闭"]
+
+
 func draw_settings_overview_art(parent: Control) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(art, rect_full(0.540, 0.178, 0.965, 0.238))
 	parent.add_child(art)
-	var enabled_audio = int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
-	var enabled_play = int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-	var summary = make_label(art, "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play], 12, Color(0.11, 0.23, 0.18), true)
+	var summary = make_label(art, settings_overview_text(), 12, Color(0.11, 0.23, 0.18), true)
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -29377,6 +29367,7 @@ func draw_settings_overview_art(parent: Control) -> Control:
 	summary.add_theme_constant_override("shadow_offset_x", 0)
 	summary.add_theme_constant_override("shadow_offset_y", 0)
 	configure_clipped_label(summary)
+	set_ui_full_text(summary, summary.text, "设置总览")
 	return art
 
 
@@ -32727,18 +32718,8 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	section.name = "SettingsSection_%s" % title_text
 	section.mouse_filter = Control.MOUSE_FILTER_PASS
 	section.set_meta("visual_contract", "transparent_group_on_one_authored_paper_surface")
+	set_ui_full_text(section, title_text, "设置分类")
 	parent.add_child(section)
-	var section_title = make_label(section, title_text, 14, Color(0.12, 0.25, 0.18), true)
-	section_title.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
-	section_title.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.70))
-	section_title.add_theme_constant_override("outline_size", 0)
-	section_title.add_theme_constant_override("shadow_offset_x", 0)
-	section_title.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(section_title, SETTINGS_SECTION_TITLE_RECT)
-	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	section_title.set_meta("section_title_font_contract", "accessibility_scaled_and_measured")
-	section_title.set_meta("section_status_lane", "title_reserved_above_grid")
-	mark_ui_optimization(section_title, "F-223")
 	var grid = GridContainer.new()
 	grid.name = "SettingsSectionGrid_%s" % title_text
 	configure_passive_container(grid)
@@ -32747,10 +32728,7 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	grid.add_theme_constant_override("h_separation", 16)
 	grid.add_theme_constant_override("v_separation", 8)
 	section.add_child(grid)
-	apply_rect(section_title, rect_full(0.0, 0.0, 1.0, 0.0))
-	section_title.offset_bottom = section_title.get_combined_minimum_size().y
 	apply_rect(grid, rect_full(0.0, 0.0, 1.0, 0.0))
-	grid.offset_top = section_title.get_combined_minimum_size().y + 10.0
 
 	return grid
 
@@ -35389,7 +35367,8 @@ func _show_menu_impl() -> void:
 	menu_hero_art = null
 	menu_parallax_enabled = false
 
-	var content_size = safe_content_pixel_size()
+	var content_size := safe_content_pixel_size()
+	var compact_home := content_size.y <= 560.0
 	var tutorial_available := tutorial_is_available()
 	var tutorial_detail_text := tutorial_entry_detail_text()
 
@@ -35397,7 +35376,7 @@ func _show_menu_impl() -> void:
 	var header = Control.new()
 	header.name = "MenuTitleTextLayer"
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(header, rect_full(0.070, 0.075, 0.420, 0.205))
+	apply_rect(header, rect_full(0.085, 0.075, 0.420, 0.205))
 	root_layer.add_child(header)
 	if ui_motion_enabled() and DisplayServer.get_name().to_lower() != "headless":
 		header.modulate = Color(1, 1, 1, 0)
@@ -35407,10 +35386,9 @@ func _show_menu_impl() -> void:
 		h_tw.tween_property(header, "modulate:a", 1.0, 0.30).from(0.0).set_ease(Tween.EASE_OUT)
 		h_tw.tween_property(header, "offset_top", 0.0, 0.30).from(-14.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	# 游戏标题 - 更大更突出，使用国风金色
-	var title = make_heading(header, "云桌麻将", commercial_ui_font_size(52, 8), Color(0.98, 0.94, 0.80), true)
+	var title = make_heading(header, "云桌麻将", commercial_ui_font_size(48 if compact_home else 64, 12), Color(0.98, 0.94, 0.80), true)
 	title.name = "MenuTitleLabel"
-	apply_rect(title, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(title, rect_full(0.0, 0.0, 1.0, 0.0))
 	title.set_meta("header_reserved_right", 0.445)
 	title.set_meta("full_text_route", "MenuTitleDetail")
 	title.tooltip_text = "云桌麻将 · 当前规则：" + rule_variant_label()
@@ -35422,9 +35400,9 @@ func _show_menu_impl() -> void:
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_theme_constant_override("outline_size", 1)
 	title.add_theme_color_override("font_outline_color", Color(0.05, 0.10, 0.08, 0.80))
-	var title_rule = make_label(header, "一桌风雅，四方入席 · %s" % rule_variant_label(), commercial_ui_font_size(14, 2), Color(0.88, 0.89, 0.78), false)
+	var title_rule = make_label(header, "当前规则 · %s" % rule_variant_label(), commercial_ui_font_size(15, 3), Color(0.94, 0.92, 0.82), false)
 	title_rule.name = "MenuTitleRule"
-	apply_rect(title_rule, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(title_rule, rect_full(0.0, 0.0, 1.0, 0.0))
 	title_rule.set_meta("header_reserved_right", 0.445)
 	title_rule.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title_rule.set_meta("wrap_policy", "two_line_when_rule_name_long")
@@ -35472,63 +35450,67 @@ func _show_menu_impl() -> void:
 		tutorial_face.self_modulate = Color(0.88, 0.82, 0.70)
 
 	if tutorial_available:
-		var tutorial_banner = add_optional_gpt_illustration_texture(root_layer, "menu_card_readable_gpt", rect_full(0.445, 0.205, 0.940, 0.385), 1.0, false)
+		var learning_left := 0.445 if compact_home else 0.085
+		var learning_top := ceilf(content_size.y * header.anchor_top if compact_home else content_size.y * header.anchor_top + header.offset_bottom + 8.0)
+		var learning_height := 70.0 if large_text_enabled else 64.0
+		var learning_width := 464.0 if large_text_enabled else 432.0
+		var tutorial_banner := make_gpt_plate_rect(rect_full(learning_left, 0.0, learning_left, 0.0), Color.WHITE, "menu_card_readable_gpt")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
-		tutorial_banner.self_modulate = Color(0.92, 0.88, 0.78)
+		tutorial_banner.offset_right = minf(learning_width, content_size.x * (0.965 - learning_left))
+		tutorial_banner.offset_top = learning_top
+		tutorial_banner.offset_bottom = learning_top + learning_height
+		root_layer.add_child(tutorial_banner)
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
 		tutorial_banner.set_meta("action_owner", "MenuTutorialStartButton")
 		# Only the two child buttons are actions. Let clicks on copy or ornament
 		# fall through instead of presenting a non-functional full-banner target.
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var tutorial_title = make_label(tutorial_banner, "新手教学", commercial_ui_font_size(15, 4), Color(0.10, 0.15, 0.12), true)
+		var tutorial_title = make_heading(tutorial_banner, "新手教学", 16, Color(0.10, 0.15, 0.12))
 		tutorial_title.name = "MenuTutorialEntryTitle"
-		tutorial_title.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-		tutorial_title.add_theme_constant_override("outline_size", 0)
-		tutorial_title.add_theme_constant_override("shadow_offset_x", 0)
-		tutorial_title.add_theme_constant_override("shadow_offset_y", 0)
-		apply_rect(tutorial_title, rect_full(0.050, 0.095, 1.0, 0.360))
-		tutorial_title.offset_right = -224.0
+		style_guofeng_label(tutorial_title)
+		apply_rect(tutorial_title, rect_full(0.045, 0.10, 1.0, 0.46))
+		tutorial_title.offset_right = -216.0
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, commercial_ui_font_size(12, 4), Color(0.24, 0.29, 0.23), false)
+		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 13, Color(0.11, 0.23, 0.18), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
-		tutorial_detail.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
-		tutorial_detail.add_theme_constant_override("outline_size", 0)
-		tutorial_detail.add_theme_constant_override("shadow_offset_x", 0)
-		tutorial_detail.add_theme_constant_override("shadow_offset_y", 0)
-		apply_rect(tutorial_detail, rect_full(0.050, 0.390, 1.0, 0.880))
-		tutorial_detail.offset_right = -224.0
+		style_guofeng_label(tutorial_detail)
+		apply_rect(tutorial_detail, rect_full(0.045, 0.46, 1.0, 0.91))
+		tutorial_detail.offset_right = -216.0
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		configure_clipped_label(tutorial_detail)
+		var tutorial_text_width := maxf(1.0, tutorial_banner.offset_right * 0.955 - 216.0)
+		configure_wrapped_label(tutorial_detail, tutorial_text_width, 0.0, 2.0)
+		tutorial_detail.max_lines_visible = 2
+		tutorial_detail.set_meta("max_visible_lines", 2)
 		set_ui_full_text(tutorial_detail, tutorial_detail_text, "新手教学进度详情")
-		if tutorial_detail_text.length() > 16 or large_text_enabled:
-			configure_wrapped_label(tutorial_detail, maxf(160.0, content_size.x * 0.245), 0.0, 2.0)
-			tutorial_detail.max_lines_visible = 2
-			tutorial_detail.set_meta("max_visible_lines", 2)
 		mark_ui_optimization(tutorial_detail, "F-453")
 		mark_ui_optimization(tutorial_detail, "F-225")
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
 		tutorial_action.custom_minimum_size = Vector2(112, 44)
-		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
+		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
 		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
-		apply_guofeng_button_face(tutorial_action)
-		apply_rect(tutorial_action, rect_full(1.0, 0.205, 1.0, 0.800))
-		tutorial_action.offset_left = -212.0
+		apply_guofeng_button_face(tutorial_action, true)
+		apply_rect(tutorial_action, rect_full(1.0, 0.5, 1.0, 0.5))
+		tutorial_action.offset_left = -204.0
 		tutorial_action.offset_right = -92.0
+		tutorial_action.offset_top = -22.0
+		tutorial_action.offset_bottom = 22.0
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
 		tutorial_skip.name = "MenuTutorialSkipButton"
 		tutorial_skip.custom_minimum_size = Vector2(76, 44)
-		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(18, 4)))
+		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(16))
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
 		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_guofeng_button_face(tutorial_skip)
-		apply_rect(tutorial_skip, rect_full(1.0, 0.205, 1.0, 0.800))
-		tutorial_skip.offset_left = -84.0
-		tutorial_skip.offset_right = -8.0
+		apply_rect(tutorial_skip, rect_full(1.0, 0.5, 1.0, 0.5))
+		tutorial_skip.offset_left = -86.0
+		tutorial_skip.offset_right = -10.0
+		tutorial_skip.offset_top = -22.0
+		tutorial_skip.offset_bottom = 22.0
 		tutorial_banner.add_child(tutorial_skip)
 
 	# 主菜单卡片区域 - 按安全区宽度收缩，避免移动端溢出。
@@ -35539,8 +35521,8 @@ func _show_menu_impl() -> void:
 	var card_gap := 32 if wide_menu else 28
 	row.add_theme_constant_override("separation", card_gap)
 	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
-	var available_card_width = max(720.0, content_size.x * 0.78)
-	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 340.0 if wide_menu else 290.0)
+	var available_card_width = max(720.0, content_size.x * 0.83)
+	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 470.0 if wide_menu else 338.0)
 	var card_height = clamp(floor(content_size.y * (0.225 if not wide_menu else 0.190)), 120.0, 198.0 if wide_menu else 176.0)
 	var quick_rail_top_px: float = content_size.y * 0.704
 	var card_row_top_px: float = content_size.y * 0.430
@@ -36085,7 +36067,7 @@ func refresh_online_lobby_action_states() -> void:
 		var raw_feedback := online_feedback.strip_edges()
 		var feedback_text := raw_feedback
 		var gate_reason := str(start_gate.get("reason", "等待服务器确认开局条件"))
-		var short_field_hint := "未连接 · 创建无需房号 · 加入需房号" if not connected else ("已连接 · 创建可用 · 加入需房号" if room_code == "" else "已连接 · 房间号%s" % online_room_code_summary(room_code))
+		var short_field_hint := "先连接服务器，再创建或加入房间" if not connected else ("已连接 · 创建可用 · 加入需房号" if room_code == "" else "已连接 · 房间号%s" % online_room_code_summary(room_code))
 		var error_feedback := false
 		for error_marker in ["失败", "拒绝", "异常", "错误", "无效", "不是", "格式", "断开", "不支持"]:
 			if raw_feedback.contains(error_marker):
@@ -36145,6 +36127,13 @@ func layout_online_lobby_primary_action(connected: bool) -> void:
 	actions.move_child(secondary, 0)
 	primary.set_meta("lobby_primary_action", true)
 	secondary.set_meta("lobby_primary_action", false)
+	var form_panel := actions.get_parent() as Control
+	var fields := form_panel.get_node_or_null("OnlineLobbyConnectionFields") as Control
+	var feedback := form_panel.get_node_or_null("OnlineLobbyFormFeedbackLabel") as Label
+	var action_plate := form_panel.get_node_or_null("OnlineLobbyActionClusterBackplate") as Control
+	var first_row := actions if connected else primary_actions
+	var second_row := primary_actions if connected else actions
+	call_deferred("normalize_online_lobby_form_lanes", form_panel, fields, feedback, first_row, second_row, action_plate)
 
 
 func online_lobby_control(node_name: String) -> Control:
@@ -36223,8 +36212,8 @@ func configure_online_lobby_focus_navigation(grab_default_focus: bool = false) -
 	configure_ordered_focus_navigation(root_layer, controls, default_focus_name, grab_default_focus)
 
 
-func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedback: Label, actions: Control, start_actions: Control, action_plate: Control) -> void:
-	if not is_current_ui_control(form_panel) or not is_current_ui_control(form) or not is_current_ui_control(feedback) or not is_current_ui_control(actions) or not is_current_ui_control(start_actions):
+func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedback: Label, first_row: Control, second_row: Control, action_plate: Control) -> void:
+	if not is_current_ui_control(form_panel) or not is_current_ui_control(form) or not is_current_ui_control(feedback) or not is_current_ui_control(first_row) or not is_current_ui_control(second_row):
 		return
 	var lane_gap := 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
@@ -36236,25 +36225,25 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	form.offset_bottom = form_top + form_height
 	var feedback_top := ceilf(form_top + form_height) + lane_gap
 	var feedback_height := feedback.get_minimum_size().y
-	var actions_top := feedback_top + feedback_height + lane_gap
-	var actions_height := maxf(UI_MIN_TOUCH_TARGET, actions.get_combined_minimum_size().y)
-	var start_top := actions_top + actions_height + lane_gap
-	var start_height := maxf(UI_MIN_TOUCH_TARGET, start_actions.get_combined_minimum_size().y)
-	for lane in [feedback, actions, start_actions]:
+	var first_top := feedback_top + feedback_height + lane_gap
+	var first_height := maxf(UI_MIN_TOUCH_TARGET, first_row.get_combined_minimum_size().y)
+	var second_top := first_top + first_height + lane_gap
+	var second_height := maxf(UI_MIN_TOUCH_TARGET, second_row.get_combined_minimum_size().y)
+	for lane in [feedback, first_row, second_row]:
 		lane.anchor_top = 0.0
 		lane.anchor_bottom = 0.0
 	feedback.offset_top = feedback_top
 	feedback.offset_bottom = feedback_top + feedback_height
-	actions.offset_top = actions_top
-	actions.offset_bottom = actions_top + actions_height
-	start_actions.offset_top = start_top
-	start_actions.offset_bottom = start_top + start_height
-	form_panel.custom_minimum_size.y = maxf(form_panel.custom_minimum_size.y, ceilf(start_top + start_height + 4.0))
+	first_row.offset_top = first_top
+	first_row.offset_bottom = first_top + first_height
+	second_row.offset_top = second_top
+	second_row.offset_bottom = second_top + second_height
+	form_panel.custom_minimum_size.y = maxf(form_panel.custom_minimum_size.y, ceilf(second_top + second_height + 4.0))
 	if is_current_ui_control(action_plate):
 		action_plate.anchor_top = 0.0
 		action_plate.anchor_bottom = 0.0
-		action_plate.offset_top = actions_top - 4.0
-		action_plate.offset_bottom = start_top + start_height + 4.0
+		action_plate.offset_top = first_top - 4.0
+		action_plate.offset_bottom = second_top + second_height + 4.0
 
 
 func _show_online_lobby_impl() -> void:
@@ -36410,6 +36399,7 @@ func _show_online_lobby_impl() -> void:
 	form_panel.add_child(input_group_backplate)
 
 	var form = VBoxContainer.new()
+	form.name = "OnlineLobbyConnectionFields"
 	configure_passive_container(form)
 	form.anchor_left = 0.06
 	form.anchor_top = 0.125 if compact_lobby_form else 0.133
@@ -36431,7 +36421,7 @@ func _show_online_lobby_impl() -> void:
 	)
 
 	# A short, stable feedback lane keeps field validation out of the action row.
-	var form_feedback := make_label(form_panel, "未连接 · 创建无需房号 · 加入需房号", 12, Color(0.86, 0.92, 0.80), false)
+	var form_feedback := make_label(form_panel, "先连接服务器，再创建或加入房间", 12, Color(0.86, 0.92, 0.80), false)
 	form_feedback.name = "OnlineLobbyFormFeedbackLabel"
 	apply_rect(form_feedback, rect_full(0.060, 0.630, 0.940, 0.665))
 	form_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -36702,7 +36692,6 @@ func _show_online_lobby_impl() -> void:
 	register_ui_round_801_830(root_layer)
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
-	call_deferred("normalize_online_lobby_form_lanes", form_panel, form, form_feedback, button_row, start_row, action_cluster_backplate)
 	schedule_ui_qa_page_ready("online_lobby", ["OnlineLobbyFormPanel", "OnlineLobbyNameEdit", "OnlineLobbyLogPanel", "OnlineLobbyLogScroll"])
 
 
@@ -37992,9 +37981,10 @@ func request_shop_currency_exchange() -> void:
 	if mode != "shop":
 		return
 	shop_focus_restore_name = "ShopGetGemsButton"
-	if int(currency.get("coins", 0)) < SHOP_EXCHANGE_COINS:
+	var coins_needed := SHOP_EXCHANGE_COINS - int(currency.get("coins", 0))
+	if coins_needed > 0:
 		shop_exchange_confirm_until_msec = 0
-		show_toast("铜钱不足：需500铜钱。完成对局、签到或每日任务可获得铜钱。", 3200)
+		show_toast("还差 %d 铜钱。完成对局、签到或每日任务可获得铜钱。" % coins_needed, 3200)
 		return
 	if Time.get_ticks_msec() >= shop_exchange_confirm_until_msec:
 		shop_exchange_confirm_until_msec = Time.get_ticks_msec() + 5000
@@ -38487,28 +38477,30 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_title, rect_full(0.000, 0.040, 0.220, 0.350))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
-	var footer_body_text := "500铜钱可兑换5玉符；铜钱可通过对局、签到与任务获得。"
+	var exchange_coins_needed := maxi(0, SHOP_EXCHANGE_COINS - int(currency.get("coins", 0)))
+	var exchange_rate := "%d铜钱可兑换%d玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
+	var footer_body_text := exchange_rate + "。"
 	if affordable_items <= 0:
-		footer_body_text = "当前玉符 %d；还差 %d 玉符可购买。500铜钱可兑换5玉符。" % [int(currency.get("gems", 0)), maxi(0, min_cost - int(currency.get("gems", 0)))]
+		footer_body_text += " 购买道具还差 %d 玉符。" % maxi(0, min_cost - int(currency.get("gems", 0)))
 	var footer_body = make_label(shop_footer, footer_body_text, commercial_ui_font_size(13, 2), shop_ink, false)
 	footer_body.name = "ShopCabinetFooterBody"
-	apply_rect(footer_body, rect_full(0.000, 0.400, 0.630, 0.960))
+	apply_rect(footer_body, rect_full(0.000, 0.400, 0.600, 0.960))
 	footer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_wrapped_label(footer_body, 0.0, 0.0, 2.0)
 	footer_body.set_meta("compact_fit_policy", "wrap_complete_copy_before_inventory_badges")
-	var inventory_text := "库存 %d件" % total_inventory
+	var inventory_text := "还差 %d 铜钱" % exchange_coins_needed if exchange_coins_needed > 0 else "库存 %d件" % total_inventory
 	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 2), shop_ink, true)
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
-	apply_rect(footer_inventory, rect_full(0.650, 0.175, 0.800, 0.775))
+	apply_rect(footer_inventory, rect_full(0.617, 0.175, 0.800, 0.775))
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var state_text := "确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符"
+	var state_text := "铜钱获取" if exchange_coins_needed > 0 else ("确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符")
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
-	apply_guofeng_button_face(footer_state, false)
+	apply_guofeng_button_face(footer_state, exchange_coins_needed == 0)
 	shop_footer.add_child(footer_state)
 	footer_state.name = "ShopGetGemsButton"
 	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
 	footer_state.tooltip_text = "%d铜钱兑换%d玉符；再次点击确认。铜钱可通过对局、签到与每日任务获得。" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
-	set_ui_full_text(footer_state, footer_state.tooltip_text, "铜钱兑换玉符")
+	set_ui_full_text(footer_state, footer_state.tooltip_text, "铜钱获取方式" if exchange_coins_needed > 0 else "铜钱兑换玉符")
 	footer_state.set_meta("recovery_route", "earned_coins_exchange")
 	footer_state.set_meta("currency_balance", int(currency.get("gems", 0)))
 	footer_state.set_meta("currency_gap_gems", maxi(0, min_cost - int(currency.get("gems", 0))))
@@ -38634,9 +38626,9 @@ func sync_shop_end_marker_visibility(content_scroll: ScrollContainer) -> void:
 		return
 	var scrollbar := content_scroll.get_v_scroll_bar()
 	var scroll_range := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
-	var at_end := scroll_range <= 0.5 or float(content_scroll.scroll_vertical) >= scroll_range - 1.0
+	var at_end := scroll_range > 0.5 and float(content_scroll.scroll_vertical) >= scroll_range - 1.0
 	marker.visible = at_end
-	marker.set_meta("shop_list_end_state", "at_end" if at_end else "more_below")
+	marker.set_meta("shop_list_end_state", "at_end" if at_end else ("more_below" if scroll_range > 0.5 else "all_visible"))
 	marker.set_meta("shop_scroll_range", scroll_range)
 	marker.tooltip_text = "商品列表已到末尾" if at_end else "下方还有商品，继续滚动查看"
 	mark_ui_optimization(marker, "F-720")
@@ -43602,7 +43594,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	if not settings_panel_open or root_layer == null or not is_instance_valid(root_layer):
 		return false
 	var cached_row: Dictionary = settings_local_row_controls.get(setting_key, {}) if typeof(settings_local_row_controls.get(setting_key, {})) == TYPE_DICTIONARY else {}
-	for control_key in ["panel", "button", "status", "overview_summary", "overview_fill"]:
+	for control_key in ["panel", "button", "status", "overview_summary"]:
 		if not is_instance_valid(cached_row.get(control_key, null)):
 			cached_row = {}
 			break
@@ -43610,20 +43602,17 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	var button := cached_row.get("button", null) as Button
 	var status_label := cached_row.get("status", null) as Label
 	var overview_summary := cached_row.get("overview_summary", null) as Label
-	var overview_fill := cached_row.get("overview_fill", null) as Control
-	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary) or not is_current_ui_control(overview_fill):
+	if not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label) or not is_current_ui_control(overview_summary):
 		settings_panel = root_layer.find_child("SettingsPanel", true, false) as Control
 		button = root_layer.find_child("SettingRowButton_%s" % setting_key, true, false) as Button
 		status_label = root_layer.find_child("SettingRowStatus_%s" % setting_key, true, false) as Label
 		if settings_panel != null and button != null and status_label != null:
 			overview_summary = settings_panel.find_child("SettingsOverviewSummary", true, false) as Label
-			overview_fill = settings_panel.find_child("SettingsOverviewFill", true, false) as Control
 			settings_local_row_controls[setting_key] = {
 				"panel": settings_panel,
 				"button": button,
 				"status": status_label,
 				"overview_summary": overview_summary,
-				"overview_fill": overview_fill,
 			}
 	if settings_panel == null or button == null or status_label == null or not is_current_ui_control(settings_panel) or not is_current_ui_control(button) or not is_current_ui_control(status_label):
 		return false
@@ -43733,13 +43722,8 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	button.set_meta("local_update_revision", settings_panel.get_meta("settings_local_update_revision", 0))
 
 	if overview_summary != null:
-		var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
-		var enabled_play := int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_summary.text = "声音已启用 %d 项 · 对局辅助 %d 项" % [enabled_audio, enabled_play]
-		set_ui_full_text(overview_summary, overview_summary.text, "设置总览：声音与体验启用数量")
-	if overview_fill != null:
-		var enabled_total := int(music_enabled) + int(sfx_enabled) + int(tts_enabled) + int(fast_mode_enabled) + int(fx_enabled) + int(ai_assist_enabled)
-		overview_fill.anchor_right = 0.030 + 0.920 * clampf(float(enabled_total) / 6.0, 0.0, 1.0)
+		overview_summary.text = settings_overview_text()
+		set_ui_full_text(overview_summary, overview_summary.text, "设置总览")
 	return true
 
 func toggle_ai_assist_setting() -> void:
@@ -43795,12 +43779,22 @@ func refresh_rule_variant_controls() -> void:
 		selector.set_meta("setting_state", rule_variant_short_label())
 	var status = root_layer.find_child("SettingsRuleVariantStatus", true, false) as Label if root_layer != null and is_instance_valid(root_layer) else null
 	if status != null:
-		var active_rule_profile := rule_profile(active_rule_variant())
-		var rule_difference := ("可吃 · 含花牌" if bool(active_rule_profile.get("allow_chi", true)) and bool(active_rule_profile.get("include_flowers", true)) else ("可吃 · 无花牌" if bool(active_rule_profile.get("allow_chi", true)) else "不可吃"))
-		status.text = "%s · %s" % [rule_variant_activation_status_text(), rule_difference]
-		status.set_meta("rule_difference", rule_difference)
-		set_ui_full_text(status, status.text + " · " + rule_difference, "地方规则详情：" + rule_variant_summary(rule_variant))
-		status.tooltip_text = status.text + " · " + rule_difference
+		update_settings_rule_status(status)
+
+
+func update_settings_rule_status(status: Label) -> void:
+	var profile := rule_profile(active_rule_variant())
+	var allows_chi := bool(profile.get("allow_chi", true))
+	var includes_flowers := bool(profile.get("include_flowers", true))
+	var difference := "不可吃" if not allows_chi else ("可吃 · 含花牌" if includes_flowers else "可吃 · 无花牌")
+	var short_difference := difference.replace(" · ", "·").replace("花牌", "花")
+	var activation := rule_variant_activation_status_text()
+	var short_activation := activation.replace("当前局：", "当前：").replace(" · 下一局：", " · 下局：")
+	status.text = "%s · %s" % [short_activation, short_difference]
+	status.tooltip_text = "%s · %s" % [activation, difference]
+	status.set_meta("rule_difference", difference)
+	set_ui_full_text(status, status.tooltip_text, "地方规则详情：" + rule_variant_summary(rule_variant))
+	fit_label_font_size(status, status.size.x, accessibility_font_size(13), accessibility_font_size(11))
 
 func toggle_fx_setting() -> void:
 	fx_enabled = not fx_enabled
@@ -55861,9 +55855,6 @@ func top_hud_status_tooltip_text() -> String:
 
 
 func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, section_index: int = -1) -> void:
-	# r215: GPT chrome conversion
-	# Keep the decorative texture behind the content. A TextureRect parent would
-	# multiply its tint and alpha into the text, weakening the reading contrast.
 	var section = make_layout_host(rect_full(0.0, 0.0, 1.0, 0.22))
 	section.name = "RuleSection_%d" % section_index if section_index >= 0 else "RuleSection"
 	section.set_meta("rules_section_index", section_index)
@@ -55872,13 +55863,13 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	mark_ui_optimization(section, "F-471")
 	parent.add_child(section)
 	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var line_count := int(lines.size())
 	var section_viewport := effective_viewport_size()
 	section.set_meta("viewport_snapshot", section_viewport)
 	section.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	var wide_typography := section_viewport.x >= 1600.0
 	var line_gap := 6.0 if wide_typography else 5.0
-	var line_font_size := accessibility_font_size(commercial_ui_font_size(15, 2))
+	var body_size := commercial_ui_font_size(15 if section_viewport.x <= 960.0 else 17, 2)
+	var line_font_size := accessibility_font_size(body_size)
 	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * 0.90)
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
@@ -55889,10 +55880,6 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 		required_text_height += line_height + line_gap
 	required_text_height += 44.0 if wide_typography else 38.0
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
-	var section_plate := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "menu_card_readable_gpt", 0.65)
-	section_plate.name = "RuleSectionPaperPlate_%d" % section_index if section_index >= 0 else "RuleSectionPaperPlate"
-	section_plate.self_modulate = Color(0.93, 0.89, 0.81)
-	section.add_child(section_plate)
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045
@@ -55901,10 +55888,8 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 5)
 	section.add_child(vbox)
 
-	var numbered_title := "%02d · %s" % [section_index + 1, title_text] if section_index >= 0 else title_text
-	var title_label = make_label(vbox, numbered_title, commercial_ui_font_size(20, 3), Color(1.00, 0.91, 0.60), true)
+	var title_label = make_heading(vbox, title_text, commercial_ui_font_size(23, 3), Color(0.11, 0.23, 0.18))
 	style_guofeng_label(title_label)
-	title_label.add_theme_font_override("font", ui_heading_font())
 	title_label.name = "RuleSectionTitle_%d" % section_index if section_index >= 0 else "RuleSectionTitle"
 	title_label.tooltip_text = title_text
 	title_label.custom_minimum_size = Vector2(0, 30 if wide_typography else 28)
@@ -55922,7 +55907,7 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 			style_guofeng_label(group_title)
 			group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
-		var line_label = make_label(vbox, str(line), commercial_ui_font_size(15, 2), Color(0.94, 0.96, 0.88), false)
+		var line_label = make_label(vbox, str(line), body_size, Color(0.11, 0.23, 0.18), false)
 		style_guofeng_label(line_label)
 		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
 		line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
