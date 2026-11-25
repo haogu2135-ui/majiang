@@ -543,16 +543,35 @@ func _show_menu_impl() -> void:
 	if tutorial_face != null:
 		tutorial_face.self_modulate = Color.WHITE
 
+	# 主菜单卡片区域几何参数 - 先计算以让顶部教学进度卡与“入席开局”主卡左右严格齐平。
+	var wide_menu: bool = content_size.x >= 1600.0
+	var card_gap: int = 32 if wide_menu else 28
+	var available_card_width: float = max(720.0, content_size.x * 0.83)
+	var card_width: float = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 470.0 if wide_menu else 338.0)
+	var card_height: float = clamp(floor(content_size.y * (0.225 if not wide_menu else 0.190)), 120.0, 198.0 if wide_menu else 176.0)
+	var quick_rail_top_px: float = content_size.y * 0.704
+	var card_row_top_px: float = content_size.y * 0.430
+	var card_height_limit: float = maxf(120.0, quick_rail_top_px - card_row_top_px - 8.0)
+	card_height = minf(card_height, card_height_limit)
+	var row_width: float = card_width * 3.0 + float(card_gap * 2)
+	var primary_extra: float = maxf(24.0, minf(64.0, maxf(0.0, float(card_width) - 250.0) * 1.6)) if not large_text_enabled else 0.0
+	var secondary_width: float = card_width - primary_extra * 0.5
+	var card_row_left_px: float = max(0.0, (content_size.x - row_width) * 0.5)
+	var primary_card_width_px: float = card_width + primary_extra
+
 	if tutorial_available:
-		var learning_left := 0.445 if compact_home else 0.085
-		var learning_top := ceilf(content_size.y * header.anchor_top if compact_home else content_size.y * header.anchor_top + header.offset_bottom + 8.0)
-		var learning_height := 70.0 if large_text_enabled else 64.0
-		var learning_width := 464.0 if large_text_enabled else 432.0
+		var learning_left: float = 0.445 if compact_home else (card_row_left_px / maxf(1.0, content_size.x))
+		var learning_top: float = ceilf(content_size.y * header.anchor_top if compact_home else content_size.y * header.anchor_top + header.offset_bottom + 8.0)
+		var learning_height: float = 70.0 if large_text_enabled else 64.0
+		var learning_width: float = (464.0 if large_text_enabled else 432.0) if compact_home else primary_card_width_px
 		var tutorial_banner := make_gpt_plate_rect(rect_full(learning_left, 0.0, learning_left, 0.0), Color.WHITE, "menu_card_readable_gpt")
 		tutorial_banner.name = "MenuTutorialEntryBanner"
 		tutorial_banner.offset_right = minf(learning_width, content_size.x * (0.965 - learning_left))
 		tutorial_banner.offset_top = learning_top
 		tutorial_banner.offset_bottom = learning_top + learning_height
+		var tutorial_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+		if tutorial_frame_tex != null:
+			configure_guofeng_button_slice(tutorial_banner, true, 104, 0.22, tutorial_frame_tex, true)
 		root_layer.add_child(tutorial_banner)
 		tutorial_banner.set_meta("message_slot", "menu_tutorial_status_before_cards")
 		tutorial_banner.set_meta("status_owner", "MenuTutorialEntryStatus")
@@ -560,19 +579,22 @@ func _show_menu_impl() -> void:
 		# Only the two child buttons are actions. Let clicks on copy or ornament
 		# fall through instead of presenting a non-functional full-banner target.
 		tutorial_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var tutorial_action_width: float = 108.0 if tutorial_step == TUTORIAL_STEP_NEW else 88.0
+		var tutorial_skip_width: float = 72.0
+		var tutorial_buttons_reserve: float = tutorial_action_width + tutorial_skip_width + 24.0
 		var tutorial_title = make_heading(tutorial_banner, "新手教学", 16, Color(0.10, 0.15, 0.12))
 		tutorial_title.name = "MenuTutorialEntryTitle"
 		style_guofeng_label(tutorial_title)
 		apply_rect(tutorial_title, rect_full(0.045, 0.10, 1.0, 0.46))
-		tutorial_title.offset_right = -216.0
+		tutorial_title.offset_right = -tutorial_buttons_reserve
 		tutorial_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var tutorial_detail = make_label(tutorial_banner, tutorial_detail_text, 13, Color(0.11, 0.23, 0.18), false)
 		tutorial_detail.name = "MenuTutorialEntryStatus"
 		style_guofeng_label(tutorial_detail)
 		apply_rect(tutorial_detail, rect_full(0.045, 0.46, 1.0, 0.91))
-		tutorial_detail.offset_right = -216.0
+		tutorial_detail.offset_right = -tutorial_buttons_reserve
 		tutorial_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		var tutorial_text_width := maxf(1.0, tutorial_banner.offset_right * 0.955 - 216.0)
+		var tutorial_text_width := maxf(1.0, tutorial_banner.offset_right * 0.955 - tutorial_buttons_reserve)
 		configure_wrapped_label(tutorial_detail, tutorial_text_width, 0.0, 2.0)
 		tutorial_detail.max_lines_visible = 2
 		tutorial_detail.set_meta("max_visible_lines", 2)
@@ -581,27 +603,27 @@ func _show_menu_impl() -> void:
 		mark_ui_optimization(tutorial_detail, "F-225")
 		var tutorial_action = make_small_button("开始教学" if tutorial_step == TUTORIAL_STEP_NEW else "继续", Color(0.42, 0.68, 0.52), Callable(self, "resume_tutorial"))
 		tutorial_action.name = "MenuTutorialStartButton" if tutorial_step == TUTORIAL_STEP_NEW else "MenuTutorialContinueButton"
-		tutorial_action.custom_minimum_size = Vector2(112, 44)
-		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(16))
+		tutorial_action.custom_minimum_size = Vector2(tutorial_action_width, 44)
+		tutorial_action.add_theme_font_size_override("font_size", accessibility_font_size(15 if tutorial_step == TUTORIAL_STEP_NEW else 16))
 		tutorial_action.tooltip_text = "进入可中断、可继续的本地教学流程"
 		ensure_button_gpt_face_plate(tutorial_action, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_guofeng_button_face(tutorial_action, true)
 		apply_rect(tutorial_action, rect_full(1.0, 0.5, 1.0, 0.5))
-		tutorial_action.offset_left = -204.0
-		tutorial_action.offset_right = -92.0
+		tutorial_action.offset_left = -(tutorial_skip_width + 16.0 + tutorial_action_width)
+		tutorial_action.offset_right = -(tutorial_skip_width + 16.0)
 		tutorial_action.offset_top = -22.0
 		tutorial_action.offset_bottom = 22.0
 		tutorial_banner.add_child(tutorial_action)
 		var tutorial_skip = make_small_button("跳过", Color(0.52, 0.34, 0.28), Callable(self, "skip_tutorial"))
 		tutorial_skip.name = "MenuTutorialSkipButton"
-		tutorial_skip.custom_minimum_size = Vector2(76, 44)
-		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(16))
+		tutorial_skip.custom_minimum_size = Vector2(tutorial_skip_width, 44)
+		tutorial_skip.add_theme_font_size_override("font_size", accessibility_font_size(15))
 		tutorial_skip.set_meta("accessible_name", "跳过新手教学")
 		tutorial_skip.tooltip_text = "跳过教学，之后可从顶部入口重新开始"
 		ensure_button_gpt_face_plate(tutorial_skip, Color(0.98, 0.94, 0.80, 0.90), "action_gpt_dock_banner_bright")
 		apply_guofeng_button_face(tutorial_skip)
 		apply_rect(tutorial_skip, rect_full(1.0, 0.5, 1.0, 0.5))
-		tutorial_skip.offset_left = -86.0
+		tutorial_skip.offset_left = -(tutorial_skip_width + 10.0)
 		tutorial_skip.offset_right = -10.0
 		tutorial_skip.offset_top = -22.0
 		tutorial_skip.offset_bottom = 22.0
@@ -611,25 +633,11 @@ func _show_menu_impl() -> void:
 	var row = HBoxContainer.new()
 	configure_passive_container(row)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var wide_menu: bool = content_size.x >= 1600.0
-	var card_gap := 32 if wide_menu else 28
 	row.add_theme_constant_override("separation", card_gap)
 	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 0)
-	var available_card_width = max(720.0, content_size.x * 0.83)
-	var card_width = clamp(floor((available_card_width - float(card_gap * 2)) / 3.0), 220.0, 470.0 if wide_menu else 338.0)
-	var card_height = clamp(floor(content_size.y * (0.225 if not wide_menu else 0.190)), 120.0, 198.0 if wide_menu else 176.0)
-	var quick_rail_top_px: float = content_size.y * 0.704
-	var card_row_top_px: float = content_size.y * 0.430
-	var card_height_limit: float = maxf(120.0, quick_rail_top_px - card_row_top_px - 8.0)
-	card_height = minf(card_height, card_height_limit)
-	var row_width = card_width * 3.0 + float(card_gap * 2)
-	# Give the local-game entry more space on both standard and compact desktop viewports
-	# while keeping large-text lanes at equal width. The total row width remains unchanged.
-	var primary_extra := maxf(24.0, minf(64.0, maxf(0.0, float(card_width) - 250.0) * 1.6)) if not large_text_enabled else 0.0
-	var secondary_width: float = card_width - primary_extra * 0.5
 	row.custom_minimum_size = Vector2(row_width, card_height)
 	root_layer.add_child(row)
-	row.position = Vector2(max(0.0, (content_size.x - row_width) * 0.5), card_row_top_px)
+	row.position = Vector2(card_row_left_px, card_row_top_px)
 	row.set_meta("quick_rail_clearance_px", quick_rail_top_px - (card_row_top_px + card_height))
 	row.set_meta("quick_rail_clearance_required_px", 12.0)
 	row.set_meta("layout_contract", "card_visual_bounds_plus_12px_before_quick_rail")
@@ -677,11 +685,16 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(0.055, 0.850 if content_size.x >= 1100.0 and not large_text_enabled else 0.828, 0.945, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = add_optional_gpt_illustration_texture(footer, "menu_card_readable_gpt", rect_full(0.000, 0.050, 1.000, 0.950), 1.0, false)
+	var footer_back = add_optional_gpt_illustration_texture(footer, "menu_card_readable_gpt" if high_contrast_enabled else "battle_ink_plaque_20261112", rect_full(0.000, 0.050, 1.000, 0.950) if high_contrast_enabled else rect_full(0.014, 0.140, 0.768, 0.875), 1.0, false)
 	footer_back.name = "MenuFooterBackplate"
-	footer_back.self_modulate = Color(0.92, 0.88, 0.78)
+	if high_contrast_enabled:
+		footer_back.self_modulate = Color(0.92, 0.88, 0.78)
+		footer_back.modulate = Color.WHITE
+	else:
+		configure_guofeng_button_slice(footer_back, true, 32, 0.25)
+		footer_back.modulate = Color(1.0, 1.0, 1.0, 0.72)
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	footer_back.visible = high_contrast_enabled
+	footer_back.visible = true
 
 	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.030, 0.185, 0.190, 0.830), Color(0.58, 0.54, 0.42), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(_version_chip, "当前版本：" + app_version(), "应用版本")
@@ -759,16 +772,23 @@ func _show_menu_impl() -> void:
 	settings.name = "MenuSettingsButton"
 	settings.add_theme_font_override("font", ui_heading_font())
 	settings.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18, 1.0))
-	settings.add_theme_font_size_override("font_size", 15)
+	settings.add_theme_font_size_override("font_size", accessibility_font_size(18 if wide_menu else 15))
 	set_ui_full_text(settings, "打开设置、音频和辅助选项", "菜单设置")
 	mark_ui_optimization(settings, "F-459")
 	footer.add_child(settings)
 	apply_rect(settings, rect_full(0.820, 0.165, 0.965, 0.865))
 	if not high_contrast_enabled:
-		# Status belongs to the quiet water margin rather than a full-width sheet.
+		# Status sits on the translucent ink-scroll backing over the water margin.
 		for footer_label in [_version_chip.get_meta("label_control"), currency_chip.get_meta("label_control"), rank_label, stats_label]:
 			if footer_label is Label:
-				(footer_label as Label).add_theme_color_override("font_color", Color(0.94, 0.92, 0.83))
+				var fl := footer_label as Label
+				fl.add_theme_color_override("font_color", Color(0.96, 0.94, 0.86))
+				if wide_menu:
+					fl.add_theme_font_size_override("font_size", accessibility_font_size(16))
+	elif wide_menu:
+		for footer_label in [_version_chip.get_meta("label_control"), currency_chip.get_meta("label_control"), rank_label, stats_label]:
+			if footer_label is Label:
+				(footer_label as Label).add_theme_font_size_override("font_size", accessibility_font_size(16))
 
 	var settings_icon := add_lucide_icon(settings, "settings", rect_full(0.080, 0.240, 0.250, 0.760), Color(0.18, 0.25, 0.20, 0.92))
 	if settings_icon != null:
@@ -1145,8 +1165,8 @@ func refresh_online_lobby_action_states() -> void:
 	var join_button = find_control.call("OnlineLobbyJoinButton") as Button
 	var chat_button = find_control.call("ChatLobbyButton") as Button
 	var start_ready := bool(start_gate.get("enabled", false))
-	var create_is_primary := connected and not start_ready and room_code == ""
-	var join_is_primary := connected and not start_ready and room_code != ""
+	var create_is_primary := connected and not has_room_context and not start_ready and room_code == ""
+	var join_is_primary := connected and not has_room_context and not start_ready and room_code != ""
 	if connect_button != null:
 		connect_button.disabled = connected or connecting
 		style_guofeng_secondary_action(connect_button, not connect_button.disabled)
@@ -1699,7 +1719,9 @@ func _show_online_lobby_impl() -> void:
 	log_panel.set_meta("retry_clearance_px", 8.0)
 	log_panel.set_meta("wide_content_policy", "bounded_operational_columns" if wide_lobby_layout else "full_safe_width")
 	panel.add_child(log_panel)
-	var empty_state_backplate := make_layout_host(rect_full(0.050, 0.155, 0.950, 0.925))
+	var lobby_recovery_active: bool = online_feedback_requires_recovery() or connection_state == "异常"
+	var empty_state_bottom: float = (0.860 if room_first_layout else 0.680) if lobby_recovery_active else 0.925
+	var empty_state_backplate := make_layout_host(rect_full(0.050, 0.155, 0.950, empty_state_bottom))
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	empty_state_backplate.visible = not room_snapshot_visible
 	log_panel.add_child(empty_state_backplate)
@@ -1743,7 +1765,7 @@ func _show_online_lobby_impl() -> void:
 	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
-	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.475, 0.018, 0.610, 0.102)
+	var connected_chat_rect := rect_full(0.430, 0.008, 0.610, 0.098) if compact_room_badge else rect_full(0.475, 0.018, 0.610, 0.102)
 	var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if compact_room_badge else rect_full(0.790, 0.008, 0.950, 0.098)
 	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else disconnected_chat_rect)
 	log_panel.add_child(lobby_chat_button)
@@ -1790,13 +1812,21 @@ func _show_online_lobby_impl() -> void:
 	var log_list_panel = draw_online_lobby_log_list_panel(log_panel)
 	log_list_panel.visible = room_snapshot_visible
 	var compact_lobby_log := online_lobby_viewport_size.y <= 560.0
+	var log_header_top_px: float = float(log_list_panel.get_meta("header_min_height_px", 0.0))
+	var log_frame_key: String = "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var log_body_frame := add_optional_gpt_illustration_texture(log_list_panel, log_frame_key, rect_full(0.025, 0.0, 0.975, 0.985), 1.0, false)
+	if log_body_frame != null:
+		log_body_frame.name = "OnlineLobbyLogBodyFrame"
+		log_body_frame.offset_top = maxf(0.0, log_header_top_px - 4.0)
+		log_body_frame.self_modulate = Color(0.98, 0.96, 0.92)
+		configure_guofeng_button_slice(log_body_frame, true, 104 if log_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if log_frame_key == "guofeng_card_frame_gpt" else 0.125)
 	var log_scroll := ScrollContainer.new()
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
 	mark_ui_optimization(log_scroll, "F-394")
-	apply_rect(log_scroll, rect_full(0.045, 0.470, 0.955, 1.000))
+	apply_rect(log_scroll, rect_full(0.045, 0.470, 0.955, 0.955))
 	log_scroll.anchor_top = 0.0
-	log_scroll.offset_top = float(log_list_panel.get_meta("header_min_height_px", 0.0))
+	log_scroll.offset_top = log_header_top_px
 	if compact_large_roster:
 		# Keep a full log line and a real twelve-pixel gap before the feedback.
 		log_scroll.anchor_bottom = 0.0
@@ -2011,10 +2041,15 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 			state_icon.modulate = state_tint
 	if state_label != null:
 		style_guofeng_label(state_label)
+		if state == "异常":
+			state_label.set_meta("preserve_semantic_color", true)
+			state_label.add_theme_color_override("font_color", Color(0.68, 0.16, 0.12))
+		else:
+			state_label.set_meta("preserve_semantic_color", false)
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
-		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.475, 0.018, 0.610, 0.102)
+		var connected_chat_rect := rect_full(0.430, 0.008, 0.610, 0.098) if lobby_viewport_size.x <= 960.0 else rect_full(0.475, 0.018, 0.610, 0.102)
 		var disconnected_chat_rect := rect_full(0.760, 0.008, 0.950, 0.098) if lobby_viewport_size.x <= 960.0 else rect_full(0.790, 0.008, 0.950, 0.098)
 		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else disconnected_chat_rect)
 	if room_badge != null:
@@ -2043,6 +2078,10 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		log_list.visible = show_room_snapshot
 	if empty_state_backplate != null:
 		empty_state_backplate.visible = not show_room_snapshot
+		if empty_state_backplate is Control:
+			var recovery_open: bool = online_feedback_requires_recovery() or state == "异常"
+			var room_first_refresh: bool = use_jiangnan_secondary_composition(lobby_viewport_size)
+			(empty_state_backplate as Control).anchor_bottom = (0.860 if room_first_refresh else 0.680) if recovery_open else 0.925
 	if offline_state != null:
 		offline_state.visible = not show_room_snapshot
 	var start_button = find_control.call("OnlineLobbyPrimaryStartButton") as Button
@@ -2488,7 +2527,7 @@ func _show_rules_screen_impl() -> void:
 	content_scroll.name = "RulesContentScroll"
 	configure_scroll_container(content_scroll, "上下滚动查看完整规则说明")
 	var compact_rules_scroll := rules_viewport_size.y <= 560.0
-	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.945
+	var rules_content_bottom := 0.875 if compact_rules_scroll else 0.892
 	content_scroll.anchor_left = 0.040
 	content_scroll.anchor_top = rules_content_top
 	# Reserve a small stable gap for the custom scroll lane instead of letting its
@@ -2630,10 +2669,10 @@ func _show_rules_screen_impl() -> void:
 		"摸牌、打牌、吃碰杠组合手牌" if rule_allows_chi() else "摸牌、打牌、碰杠组合手牌（本档案禁吃）",
 		"可自摸，也可点炮胡牌",
 		"响应优先：胡 > 碰/杠%s，碰杠同级近家先" % (" > 吃" if rule_allows_chi() else ""),
-		"点炮多人可胡时保留玩家窗口，最终单家结算",
-		"过水：放弃和牌后，整组听口摸前不可再荣和",
-		"舍张振听：河中任一现听张都不能再荣和，只能自摸",
-		"食替：吃/碰后本拍不得立刻打出刚副露相关张",
+		"多人可胡点炮时优先响应玩家，最终单家结算",
+		"过水：放弃胡牌后，本巡摸牌前不可再接炮胡",
+		"振听限制：牌河已有自己听口牌时不可接炮胡，仅可自摸",
+		"禁打同张：吃、碰后当巡不得立刻打出刚副露的关联牌",
 	], 0)
 
 	add_rule_section(content, "结算与支付", [
@@ -3229,7 +3268,12 @@ func _show_shop_screen_impl() -> void:
 	var coins_panel := make_layout_host(rect_full(0.42, 0.035, 0.62, 0.090))
 	coins_panel.name = "ShopCurrencyPanel_coins"
 	panel.add_child(coins_panel)
-	add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.76, 0.54, 0.22))
+	if optional_gpt_illustration_texture("icon_coin_bronze_gpt") != null:
+		var coin_art := add_optional_gpt_illustration_texture(coins_panel, "icon_coin_bronze_gpt", rect_full(0.05, 0.12, 0.23, 0.88), 1.0, true)
+		if coin_art != null:
+			coin_art.name = "ShopCurrencyCoinGlyph"
+	else:
+		add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.76, 0.54, 0.22))
 	var coins_label = make_label(coins_panel, "铜钱 %d" % int(currency.get("coins", 0)), commercial_ui_font_size(16, 2), shop_ink, true)
 	coins_label.name = "ShopCurrencyValue_coins"
 	coins_label.add_theme_color_override("font_color", shop_ink)
@@ -3240,7 +3284,12 @@ func _show_shop_screen_impl() -> void:
 	var gems_panel := make_layout_host(rect_full(0.635, 0.035, 0.785, 0.090))
 	gems_panel.name = "ShopCurrencyPanel_gems"
 	panel.add_child(gems_panel)
-	add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.24, 0.62, 0.44))
+	if optional_gpt_illustration_texture("icon_jade_token_gpt") != null:
+		var gem_art := add_optional_gpt_illustration_texture(gems_panel, "icon_jade_token_gpt", rect_full(0.05, 0.12, 0.23, 0.88), 1.0, true)
+		if gem_art != null:
+			gem_art.name = "ShopCurrencyJadeGlyph"
+	else:
+		add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.24, 0.62, 0.44))
 	var gems_label = make_label(gems_panel, "玉符 %d" % int(currency.get("gems", 0)), commercial_ui_font_size(16, 2), shop_ink, true)
 	gems_label.name = "ShopCurrencyValue_gems"
 	gems_label.add_theme_color_override("font_color", shop_ink)
@@ -3259,7 +3308,12 @@ func _show_shop_screen_impl() -> void:
 	style_guofeng_secondary_action(back)
 	var shop_back_face := back.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if shop_back_face != null:
-		shop_back_face.self_modulate = Color.WHITE
+		var shop_back_edges := shop_back_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if shop_back_edges != null and shop_back_edges.visible:
+			shop_back_face.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+			shop_back_edges.self_modulate = Color.WHITE
+		else:
+			shop_back_face.self_modulate = Color.WHITE
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.822, 0.020, 0.930, 0.095))
 	add_shop_focus_marker(back, back, null, rect_full(0.08, 0.12, 0.30, 0.88))
@@ -3697,7 +3751,8 @@ func _show_shop_screen_impl() -> void:
 	var state_text := "铜钱获取" if exchange_coins_needed > 0 else ("确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符")
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
 	footer_state.name = "ShopGetGemsButton"
-	apply_guofeng_button_face(footer_state, exchange_coins_needed == 0)
+	style_guofeng_secondary_action(footer_state, exchange_coins_needed == 0)
+	footer_state.modulate = Color.WHITE
 	shop_footer.add_child(footer_state)
 	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
 	footer_state.tooltip_text = "%s。还差 %d 铜钱。完成对局、签到或每日任务可获得铜钱。" % [exchange_rate, exchange_coins_needed] if exchange_coins_needed > 0 else "%s。请在 5 秒内再次点击确认。" % exchange_rate
@@ -4313,6 +4368,9 @@ func show_telemetry_data_sheet() -> void:
 	var settings_close := overlay.find_child("SettingsCloseButton", true, false) as Control
 	if settings_close != null:
 		settings_close.visible = false
+	var parent_settings_panel := overlay.find_child("SettingsPanel", true, false) as Control
+	if parent_settings_panel != null:
+		parent_settings_panel.modulate = Color(0.26, 0.28, 0.27, 0.85)
 	var telemetry_scrim := overlay.find_child("SettingsOverlayScrim", true, false) as Control
 	if telemetry_scrim != null:
 		telemetry_scrim.set_meta("telemetry_modal_dim_alpha", 0.82)
@@ -4320,7 +4378,7 @@ func show_telemetry_data_sheet() -> void:
 		telemetry_scrim.modulate.a = minf(1.0, maxf(telemetry_scrim.modulate.a, 0.96))
 	var content_size := safe_content_pixel_size()
 	var card_width := minf(content_size.x * 0.90, 700.0)
-	var card_height := minf(content_size.y * 0.94, 490.0)
+	var card_height := minf(content_size.y * 0.94, 490.0 if large_text_enabled else 428.0)
 	var card_rect := rect_full(0.5 - card_width / content_size.x * 0.5, 0.5 - card_height / content_size.y * 0.5, 0.5 + card_width / content_size.x * 0.5, 0.5 + card_height / content_size.y * 0.5)
 	var card := make_gpt_center_crop_plate_rect(card_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	card.name = "TelemetryDataSheetCard"
@@ -4330,10 +4388,16 @@ func show_telemetry_data_sheet() -> void:
 	card.set_meta("opaque_reading_surface_alpha", 1.0)
 	card.set_meta("background_showthrough_policy", "opaque_authored_paper_before_privacy_copy")
 	sheet.add_child(card)
+	var summary_frame_key: String = "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var summary_frame := add_optional_gpt_illustration_texture(card, summary_frame_key, rect_full(0.055, 0.145, 0.945, 0.565), 1.0, false)
+	if summary_frame != null:
+		summary_frame.name = "TelemetrySummaryHost"
+		summary_frame.self_modulate = Color(0.98, 0.96, 0.91)
+		configure_guofeng_button_slice(summary_frame, true, 104 if summary_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if summary_frame_key == "guofeng_card_frame_gpt" else 0.125)
 	var title := make_heading(card, "隐私与诊断数据", 22, Color(0.10, 0.22, 0.16), true)
 	title.name = "TelemetryDataSheetTitle"
 	style_guofeng_label(title)
-	apply_rect(title, rect_full(0.075, 0.045, 0.925, 0.135))
+	apply_rect(title, rect_full(0.075, 0.040, 0.925, 0.130))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var body_scroll := ScrollContainer.new()
 	body_scroll.name = "TelemetryDataBodyScroll"
@@ -4347,7 +4411,7 @@ func show_telemetry_data_sheet() -> void:
 	mark_ui_optimization(body_scroll, "F-238")
 	# Give the privacy copy the main vertical budget. Status and actions stay in
 	# fixed footer lanes below it, so long copy cannot be hidden behind controls.
-	apply_rect(body_scroll, rect_full(0.075, 0.170, 0.925, 0.430))
+	apply_rect(body_scroll, rect_full(0.080, 0.168, 0.920, 0.365))
 	card.add_child(body_scroll)
 	var body := make_label(body_scroll, "默认不记录。开启后只保存匿名、最小化的本地事件；不含昵称、房间号、聊天内容或牌面。", 14, Color(0.11, 0.23, 0.18), false)
 	style_guofeng_label(body)
@@ -4361,29 +4425,33 @@ func show_telemetry_data_sheet() -> void:
 	body.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	body.set_meta("telemetry_body_lane", "0.205..0.505")
 	body.set_meta("action_lane_boundary", "0.620")
-	var status := make_label(card, telemetry_consent_status_text(), 13, Color(0.72, 0.86, 0.74), true)
+	var status := make_label(card, telemetry_consent_status_text(), 13, Color(0.11, 0.23, 0.18), true)
 	status.name = "TelemetryDataStatus"
-	apply_rect(status, rect_full(0.075, 0.455, 0.925, 0.510))
+	apply_rect(status, rect_full(0.080, 0.388, 0.920, 0.460))
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(status, status.text, "隐私诊断状态")
 	mark_ui_optimization(status, "F-403")
-	var permission_summary := make_label(card, telemetry_permission_summary_text(), 13, Color(0.82, 0.88, 0.78), true)
+	var permission_summary := make_label(card, telemetry_permission_summary_text(), 13, Color(0.18, 0.28, 0.22), true)
 	permission_summary.name = "TelemetryPermissionSummary"
-	apply_rect(permission_summary, rect_full(0.075, 0.520, 0.925, 0.580))
+	apply_rect(permission_summary, rect_full(0.080, 0.472, 0.920, 0.548))
 	permission_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	permission_summary.tooltip_text = "当前隐私权限与本地队列状态"
 	permission_summary.set_meta("accessible_name", permission_summary.text)
 	configure_clipped_label(permission_summary)
 	mark_ui_optimization(permission_summary, "F-404")
-	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 12, Color(0.68, 0.78, 0.72), false)
+	var export_copied_init: bool = telemetry_export_status.begins_with("已复制")
+	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 12, Color(0.11, 0.44, 0.24) if export_copied_init else Color(0.24, 0.32, 0.27), export_copied_init)
 	export_status.name = "TelemetryExportStatus"
-	apply_rect(export_status, rect_full(0.075, 0.810, 0.425, 0.865))
+	if export_copied_init:
+		export_status.set_meta("preserve_semantic_color", true)
+		export_status.add_theme_color_override("font_color", Color(0.11, 0.44, 0.24))
+	apply_rect(export_status, rect_full(0.075, 0.785, 0.445, 0.848))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
 	set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
-	var recent_action := make_label(card, "最近操作：%s" % telemetry_last_action, 12, Color(0.74, 0.82, 0.74), false)
+	var recent_action := make_label(card, "最近操作：%s" % telemetry_last_action, 12, Color(0.24, 0.32, 0.27), false)
 	recent_action.name = "TelemetryRecentAction"
-	apply_rect(recent_action, rect_full(0.455, 0.810, 0.925, 0.865))
+	apply_rect(recent_action, rect_full(0.460, 0.785, 0.925, 0.848))
 	recent_action.set_meta("lane_role", "recent_action_footer_before_close")
 	recent_action.set_meta("close_lane_gap_px", 8.0)
 	recent_action.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -4397,7 +4465,7 @@ func show_telemetry_data_sheet() -> void:
 	consent.disabled = telemetry_mutation_in_flight
 	consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	consent.custom_minimum_size = Vector2(120, 44)
-	apply_rect(consent, rect_full(0.075, 0.610, 0.320, 0.725))
+	apply_rect(consent, rect_full(0.075, 0.592, 0.320, 0.706))
 	consent.set_meta("telemetry_action", "consent")
 	consent.set_meta("telemetry_action_priority", "primary_state_action")
 	card.add_child(consent)
@@ -4408,7 +4476,7 @@ func show_telemetry_data_sheet() -> void:
 	export.disabled = telemetry_mutation_in_flight
 	export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	export.custom_minimum_size = Vector2(100, 44)
-	apply_rect(export, rect_full(0.350, 0.610, 0.610, 0.725))
+	apply_rect(export, rect_full(0.350, 0.592, 0.610, 0.706))
 	export.set_meta("telemetry_action", "export")
 	export.set_meta("telemetry_action_priority", "secondary_export")
 	card.add_child(export)
@@ -4421,15 +4489,15 @@ func show_telemetry_data_sheet() -> void:
 	clear.disabled = telemetry_mutation_in_flight or (telemetry_outbox.is_empty() and not telemetry_clear_confirming)
 	clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	clear.custom_minimum_size = Vector2(100, 44)
-	apply_rect(clear, rect_full(0.640, 0.610, 0.925, 0.725))
+	apply_rect(clear, rect_full(0.640, 0.592, 0.925, 0.706))
 	clear.set_meta("telemetry_action", "clear")
 	clear.set_meta("telemetry_action_priority", "destructive_with_confirmation")
 	clear.set_meta("confirm_hint_target", "TelemetryClearConfirmHint")
 	card.add_child(clear)
-	var clear_hint := make_label(card, "", 12, Color(1.0, 0.72, 0.54), true)
+	var clear_hint := make_label(card, "", 12, Color(0.60, 0.18, 0.14), true)
 	clear_hint.name = "TelemetryClearConfirmHint"
 	clear_hint.text = "暂无本地诊断数据" if telemetry_outbox.is_empty() else "范围：本机匿名诊断数据 · 首次点击仅确认"
-	apply_rect(clear_hint, rect_full(0.075, 0.745, 0.925, 0.800))
+	apply_rect(clear_hint, rect_full(0.075, 0.720, 0.925, 0.778))
 	clear_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	clear_hint.visible = true
 	clear_hint.set_meta("telemetry_clear_scope", "本机匿名诊断数据")
@@ -4437,19 +4505,26 @@ func show_telemetry_data_sheet() -> void:
 	clear_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	configure_clipped_label(clear_hint)
 	mark_ui_optimization(clear_hint, "F-405")
-	var close := make_small_button("关闭", Color(0.30, 0.34, 0.36), Callable(self, "close_telemetry_data_sheet"))
+	var close := make_small_button("返回设置", Color(0.30, 0.34, 0.36), Callable(self, "close_telemetry_data_sheet"))
 	close.name = "TelemetryDataSheetCloseButton"
-	close.tooltip_text = "关闭隐私数据页 · Esc"
-	set_ui_full_text(close, close.tooltip_text, "关闭隐私诊断页")
-	close.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
+	close.tooltip_text = "返回设置 · Esc"
+	set_ui_full_text(close, close.tooltip_text, "返回设置")
+	close.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
 	close.set_meta("telemetry_action_priority", "tertiary_close")
-	apply_rect(close, rect_full(0.390, 0.885, 0.610, 0.985))
+	close.set_meta("ui_navigation_role", "modal_close")
+	apply_rect(close, rect_full(0.370, 0.865, 0.630, 0.968))
 	close.set_meta("lane_role", "dedicated_bottom_close_lane")
 	close.set_meta("recent_action_clearance_px", 8.0)
 	card.add_child(close)
 	style_guofeng_reading_tree(card)
-	for action in [consent, export, clear, close]:
-		style_guofeng_secondary_action(action, action == consent)
+	if telemetry_consent:
+		mark_guofeng_danger_button(consent, false)
+	else:
+		consent.set_meta("ui_danger_action", false)
+		style_guofeng_secondary_action(consent, true)
+	style_guofeng_secondary_action(export, false)
+	mark_guofeng_danger_button(clear, telemetry_clear_confirming)
+	style_guofeng_secondary_action(close, false)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
 	root_layer.remove_meta("ui_contract_control_list")
 	root_layer.remove_meta("ui_contract_index_root_id")
@@ -4507,6 +4582,11 @@ func refresh_telemetry_data_sheet() -> void:
 		consent.tooltip_text = "正在提交隐私记录设置，请稍候" if telemetry_mutation_in_flight else ("停止记录并清除本地匿名事件" if telemetry_consent else "允许记录匿名诊断事件")
 		set_ui_full_text(consent, consent.tooltip_text, "隐私诊断记录：" + consent.text)
 		consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
+		if telemetry_consent:
+			mark_guofeng_danger_button(consent, false)
+		else:
+			consent.set_meta("ui_danger_action", false)
+			style_guofeng_secondary_action(consent, true)
 	var export := sheet.find_child("TelemetryExportButton", true, false) as Button
 	if export != null and mutation_changed:
 		export.disabled = telemetry_mutation_in_flight
@@ -4521,6 +4601,7 @@ func refresh_telemetry_data_sheet() -> void:
 		clear.set_meta("first_click_is_non_destructive", true)
 		clear.set_meta("confirm_remaining_seconds", remaining_seconds)
 		clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
+		mark_guofeng_danger_button(clear, telemetry_clear_confirming)
 		mark_ui_optimization(clear, "F-406")
 	var clear_hint := sheet.find_child("TelemetryClearConfirmHint", true, false) as Label
 	if clear_hint != null and (clear_changed or queue_changed):
@@ -4535,6 +4616,9 @@ func refresh_telemetry_data_sheet() -> void:
 	var export_status := sheet.find_child("TelemetryExportStatus", true, false) as Label
 	if export_status != null and export_changed:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
+		var export_copied: bool = telemetry_export_status.begins_with("已复制")
+		export_status.set_meta("preserve_semantic_color", export_copied)
+		export_status.add_theme_color_override("font_color", Color(0.11, 0.44, 0.24) if export_copied else Color(0.24, 0.32, 0.27))
 		export_status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 		export_status.set_meta("modal_safe_route", "inside_sheet_footer")

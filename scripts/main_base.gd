@@ -142,6 +142,12 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"guofeng_card_frame_gpt": "res://assets/illustrations/guofeng_card_frame_gpt.png",
 	"input_field_paper_normal_gpt": "res://assets/illustrations/input_field_paper_normal_gpt.png",
 	"input_field_paper_focus_gpt": "res://assets/illustrations/input_field_paper_focus_gpt.png",
+	"table_tile_back_celadon_gpt": "res://assets/illustrations/table_tile_back_celadon_gpt.png",
+	"toast_scroll_banner_gpt": "res://assets/illustrations/toast_scroll_banner_gpt.png",
+	"focus_ring_gold_gpt": "res://assets/illustrations/focus_ring_gold_gpt.png",
+	"icon_coin_bronze_gpt": "res://assets/illustrations/icon_coin_bronze_gpt.png",
+	"icon_jade_token_gpt": "res://assets/illustrations/icon_jade_token_gpt.png",
+	"icon_mic_ink_gpt": "res://assets/illustrations/icon_mic_ink_gpt.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -1501,7 +1507,7 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.785), Vector2(0.57, 0.975)),
+	Rect2(Vector2(0.43, 0.815), Vector2(0.57, 0.985)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
 	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
@@ -1560,7 +1566,7 @@ const HAND_TILE_MAX_WIDTH := 68.0
 const HAND_TILE_MIN_TOUCH_WIDTH := 46.0
 const HAND_TILE_ASPECT := 1.36
 const HAND_MIN_GROUP_GAP := 8.0
-const HAND_DRAWN_TILE_GAP := 8.0
+const HAND_DRAWN_TILE_GAP := 14.0
 const HAND_TRAY_RECT := Rect2(Vector2(0.185, 0.815), Vector2(0.985, 0.985))
 const HAND_TRAY_TOP_RAIL_RECT := Rect2(Vector2(0.012, 0.055), Vector2(0.988, 0.135))
 const HAND_TRAY_DIVIDER_RECT := Rect2(Vector2(0.012, 0.190), Vector2(0.988, 0.218))
@@ -1766,6 +1772,8 @@ const FX_BURST_LABEL_FONT_SIZE := 58
 const FX_LAYER_Z_INDEX := 16
 # Modal decisions must sit above board tiles, action docks, and transient FX.
 const UI_MODAL_Z_INDEX := 70
+# Toasts (and their detail sheet) must float above modal backdrops without lifting fx_layer particles.
+const UI_TOAST_Z_INDEX := 85
 const TRANSITION_DURATION_MSEC := 280
 const HAND_SLIDE_IN_DURATION_MSEC := 220
 const TOAST_DEFAULT_DURATION_MSEC := 1800
@@ -3212,11 +3220,20 @@ func top_hud_button_tooltip(text: String) -> String:
 	return text.strip_edges()
 
 func style_guofeng_label(label: Label, ink_face: bool = false) -> void:
-	label.add_theme_color_override("font_color", Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18))
+	var paper_ink := Color(0.03, 0.08, 0.05) if high_contrast_enabled else Color(0.11, 0.23, 0.18)
+	var ink_text := Color(1.0, 0.98, 0.88) if high_contrast_enabled else Color(0.97, 0.93, 0.78)
+	label.add_theme_color_override("font_color", ink_text if ink_face else paper_ink)
 	label.add_theme_constant_override("outline_size", 0)
 	label.add_theme_constant_override("shadow_offset_x", 0)
 	label.add_theme_constant_override("shadow_offset_y", 0)
 	label.set_meta("guofeng_text_surface", "ink" if ink_face else "paper")
+
+
+func elevate_toast_container_layer(container: Control) -> void:
+	if container == null or not is_instance_valid(container):
+		return
+	container.z_as_relative = false
+	container.z_index = UI_TOAST_Z_INDEX
 
 
 func position_button_focus_marker(button: Button, marker: Label) -> void:
@@ -3336,21 +3353,70 @@ func mark_guofeng_danger_button(button: Button, filled_cinnabar: bool = false) -
 	apply_guofeng_button_face(button, filled_cinnabar)
 
 
+func _make_guofeng_focus_ring_style(left_aligned: bool = false, ink_face: bool = false) -> StyleBox:
+	var focus_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
+	var use_authored_ring := focus_tex != null and minf(focus_tex.get_size().x, focus_tex.get_size().y) <= 160.0
+	var border_tex := focus_tex if use_authored_ring else optional_gpt_illustration_texture("quiet_gold_accent")
+	if border_tex == null:
+		var fallback_empty := StyleBoxEmpty.new()
+		if left_aligned:
+			fallback_empty.content_margin_left = 14.0
+			fallback_empty.content_margin_right = 12.0
+		return fallback_empty
+	var ring := StyleBoxTexture.new()
+	ring.texture = border_tex
+	ring.draw_center = false
+	var border_px: float
+	if use_authored_ring:
+		var min_dim := minf(border_tex.get_size().x, border_tex.get_size().y)
+		border_px = clampf(min_dim * 0.125, 8.0, 12.0)
+		ring.modulate_color = Color.WHITE
+	else:
+		var tex_size := border_tex.get_size()
+		if tex_size.x >= 384.0 and tex_size.y >= 384.0:
+			ring.region_rect = Rect2(Vector2(64.0, 64.0), Vector2(256.0, 256.0))
+		border_px = 4.0 if high_contrast_enabled else 3.0
+		if high_contrast_enabled:
+			ring.modulate_color = Color(1.0, 0.90, 0.36, 1.0) if ink_face else Color(0.76, 0.18, 0.12, 1.0)
+		else:
+			ring.modulate_color = Color(1.0, 0.84, 0.34, 0.98) if ink_face else Color(0.78, 0.42, 0.10, 0.98)
+	ring.texture_margin_left = border_px
+	ring.texture_margin_top = border_px
+	ring.texture_margin_right = border_px
+	ring.texture_margin_bottom = border_px
+	ring.expand_margin_left = 0.0
+	ring.expand_margin_top = 0.0
+	ring.expand_margin_right = 0.0
+	ring.expand_margin_bottom = 0.0
+	ring.content_margin_left = 14.0 if left_aligned else 0.0
+	ring.content_margin_right = 12.0 if left_aligned else 0.0
+	ring.content_margin_top = 0.0
+	ring.content_margin_bottom = 0.0
+	return ring
+
+
 func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var face_key := "menu_ink_primary" if ink_face else "button_face_jiangnan_gpt"
 	var action_role := str(button.get_meta("action_role", "")) if button != null else ""
-	var is_danger_action := button != null and (action_role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false)))
+	var clean_text := button.text.strip_edges() if button != null else ""
+	var is_danger_action := button != null and (action_role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false)) or clean_text == "确认清空")
 	var is_battle_action_role := action_role in ["chi", "peng", "gang", "win", "pass", "safe", "advice", "voice", "menu", "next", "replay", "refresh", "action"]
 	var is_lobby_connect := button != null and button.name == "OnlineLobbyConnectButton"
 	var is_menu_quick := button != null and button.name.begins_with("MenuQuick")
-	var is_raw_ink_contract := button != null and (button.name.begins_with("SettingRowButton_") or button.text == "重置" or button.text == "确认清空")
+	var is_raw_ink_contract := button != null and not is_danger_action and (button.name.begins_with("SettingRowButton_") or clean_text == "重置")
 	var use_framed_ink_slice := ink_face and button != null and not is_raw_ink_contract and not is_battle_action_role
 	var use_paper_nine_slice := not ink_face and button != null and not is_battle_action_role and not is_menu_quick
 	var danger_cinnabar_tex := optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") if is_danger_action else null
 	var filled_danger_visual := is_danger_action and (ink_face or danger_cinnabar_tex != null)
-	var text_color := Color(0.99, 0.94, 0.84) if filled_danger_visual else (Color(0.60, 0.14, 0.11) if is_danger_action else (Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)))
-	var hover_text_color := Color(1.0, 0.97, 0.90) if filled_danger_visual else (Color(0.48, 0.10, 0.08) if is_danger_action else text_color)
-	var disabled_text_color := Color(0.80, 0.79, 0.69) if (ink_face or filled_danger_visual) else (Color(0.55, 0.34, 0.31) if is_danger_action else Color(0.30, 0.36, 0.32))
+	var paper_ink_color := Color(0.03, 0.08, 0.05) if high_contrast_enabled else Color(0.11, 0.23, 0.18)
+	var ink_text_color := Color(1.0, 0.98, 0.88) if high_contrast_enabled else Color(0.97, 0.93, 0.78)
+	var danger_ivory_color := Color(1.0, 0.97, 0.88) if high_contrast_enabled else Color(0.99, 0.94, 0.84)
+	var danger_paper_color := Color(0.52, 0.09, 0.07) if high_contrast_enabled else Color(0.60, 0.14, 0.11)
+	var text_color := danger_ivory_color if filled_danger_visual else (danger_paper_color if is_danger_action else (ink_text_color if ink_face else paper_ink_color))
+	var hover_text_color := Color(1.0, 0.99, 0.92) if filled_danger_visual else (Color(0.42, 0.06, 0.05) if is_danger_action else text_color)
+	var disabled_ink_color := Color(0.86, 0.85, 0.76) if high_contrast_enabled else Color(0.80, 0.79, 0.69)
+	var disabled_paper_color := Color(0.18, 0.24, 0.20) if high_contrast_enabled else Color(0.30, 0.36, 0.32)
+	var disabled_text_color := disabled_ink_color if (ink_face or filled_danger_visual) else (Color(0.50, 0.26, 0.23) if is_danger_action else disabled_paper_color)
 	var base_face_modulate := Color.WHITE
 	if is_danger_action and danger_cinnabar_tex == null:
 		base_face_modulate = Color(0.68, 0.21, 0.18, 1.0) if ink_face else Color(1.0, 0.91, 0.88, 1.0)
@@ -3394,12 +3460,15 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	button.set_meta("guofeng_button_font_color", text_color)
 	button.set_meta("guofeng_button_face_key", face_key)
 	sync_guofeng_button_face_state(button)
+	var left_aligned := button != null and button.alignment == HORIZONTAL_ALIGNMENT_LEFT
 	var empty_style := StyleBoxEmpty.new()
-	if button != null and button.alignment == HORIZONTAL_ALIGNMENT_LEFT:
+	if left_aligned:
 		empty_style.content_margin_left = 14.0
 		empty_style.content_margin_right = 12.0
-	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+	var focus_style: StyleBox = empty_style if is_battle_action_role else _make_guofeng_focus_ring_style(left_aligned, ink_face or filled_danger_visual)
+	for state in ["normal", "hover", "pressed", "disabled", "hover_pressed"]:
 		button.add_theme_stylebox_override(state, empty_style)
+	button.add_theme_stylebox_override("focus", focus_style)
 	button.add_theme_color_override("font_color", text_color)
 	button.add_theme_color_override("font_focus_color", text_color)
 	button.add_theme_color_override("font_hover_color", hover_text_color)
@@ -3591,14 +3660,9 @@ func add_button_focus_feedback(button: Button) -> void:
 		focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
 	else:
 		# The authored plate is optional in headless/exported or not-yet-imported
-		# builds. Keep focus visible through the native Button state instead of
-		# silently dropping keyboard feedback or adding a program-painted panel.
-		var focus_style := StyleBoxFlat.new()
-		focus_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-		focus_style.border_color = Color(1.0, 0.82, 0.34, 0.92)
-		focus_style.set_border_width_all(2)
-		focus_style.set_corner_radius_all(6)
-		button.add_theme_stylebox_override("focus", focus_style)
+		# builds. Keep focus visible through a bitmap-backed StyleBoxTexture
+		# without adding any program-painted StyleBoxFlat.
+		button.add_theme_stylebox_override("focus", _make_guofeng_focus_ring_style(false, true))
 		var focus_contract := Control.new()
 		focus_contract.name = "ButtonFocusPlate"
 		focus_contract.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -4340,6 +4404,21 @@ func accessible_text_color(color: Color) -> Color:
 		clampf(color.b * 0.35 + 0.65, 0.0, 1.0),
 		color.a
 	)
+
+
+func guofeng_card_title_font_size(base_size: int = 16) -> int:
+	return accessibility_font_size(maxi(base_size, 16))
+
+
+func guofeng_high_contrast_card_tint() -> Color:
+	return Color(1.0, 0.99, 0.95, 1.0) if high_contrast_enabled else Color.WHITE
+
+
+func table_tile_back_texture() -> Texture2D:
+	var celadon_back := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
+	if celadon_back != null:
+		return celadon_back
+	return tile_back
 
 func get_shader_material(shader_name: String) -> ShaderMaterial:
 	var base_mat = shader_materials.get(shader_name, null)
@@ -5976,6 +6055,9 @@ func load_assets() -> void:
 		var texture = load_illustration_texture(path)
 		if texture != null:
 			optional_gpt_illustration_textures[key] = texture
+	var celadon_tile_back := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
+	if celadon_tile_back != null:
+		tile_back = celadon_tile_back
 
 	# 着色器材质加载
 	if not bool(get_meta("assets_visuals_loaded", false)):

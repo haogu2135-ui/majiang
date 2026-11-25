@@ -3591,12 +3591,12 @@ func ai_safety_bonus(safety: String, defense: float, shanten: int, kabe_strength
 		base = 36.0
 	elif safety == "壁":
 		base = 28.0 * clampf(kabe_strength, 0.55, 1.38)
-		if multi_threat and risk >= 22.0:
-			base *= clampf(1.0 - (risk - 16.0) / 36.0, 0.45, 1.0)
+		if multi_threat and risk >= 26.0:
+			base *= clampf(1.0 - (risk - 22.0) / 48.0, 0.68, 1.0)
 	elif safety == "筋":
 		base = 22.0
-		if multi_threat and risk >= 20.0:
-			base *= clampf(1.0 - (risk - 14.0) / 30.0, 0.30, 1.0)
+		if multi_threat and risk >= 26.0:
+			base *= clampf(1.0 - (risk - 22.0) / 42.0, 0.62, 1.0)
 	return base * urgency
 
 func emergency_defense_adjustment(seat: int, shanten: int, safety: String, risk: float, feed_risk: float, pressure_context: Dictionary = {}, eval_context: Dictionary = {}, kabe_strength: float = 1.0) -> float:
@@ -3641,13 +3641,13 @@ func emergency_defense_adjustment(seat: int, shanten: int, safety: String, risk:
 			safety_value = 175.0
 		"筋":
 			safety_value = 125.0
-			if multi_threat and risk >= 20.0:
-				# 多家高压且他家高危时，单家筋线不可高于现物，同步折减。
-				safety_value *= clampf(1.0 - (risk - 14.0) / 30.0, 0.30, 1.0)
+			if multi_threat and risk >= 26.0:
+				# 多家高压且他家高危时，适度折减单家筋线，使其低于现物但仍显著优于无依据生张。
+				safety_value *= clampf(1.0 - (risk - 22.0) / 42.0, 0.62, 1.0)
 		"壁":
 			safety_value = 110.0 * clampf(kabe_strength, 0.55, 1.38)
-			if multi_threat and risk >= 22.0:
-				safety_value *= clampf(1.0 - (risk - 16.0) / 36.0, 0.45, 1.0)
+			if multi_threat and risk >= 26.0:
+				safety_value *= clampf(1.0 - (risk - 22.0) / 48.0, 0.68, 1.0)
 	var danger_penalty = risk * 0.84 + feed_risk * 0.34
 	if risk >= 31.0:
 		danger_penalty += 130.0
@@ -3749,12 +3749,12 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 			safety_value = 52.0
 		"壁":
 			safety_value = 38.0 * clampf(kabe_strength, 0.55, 1.38)
-			if multi_threat and risk >= 22.0:
-				safety_value *= clampf(1.0 - (risk - 16.0) / 36.0, 0.45, 1.0)
+			if multi_threat and risk >= 26.0:
+				safety_value *= clampf(1.0 - (risk - 22.0) / 48.0, 0.68, 1.0)
 		"筋":
 			safety_value = 24.0
-			if multi_threat and risk >= 20.0:
-				safety_value *= clampf(1.0 - (risk - 14.0) / 30.0, 0.30, 1.0)
+			if multi_threat and risk >= 26.0:
+				safety_value *= clampf(1.0 - (risk - 22.0) / 42.0, 0.62, 1.0)
 	var danger_penalty = risk * 0.46 + feed_risk * 0.22
 	if risk >= 31.0:
 		danger_penalty += 78.0
@@ -4124,12 +4124,12 @@ func midgame_danger_adjustment(seat: int, shanten: int, ukeire: int, safety: Str
 			safety_value = 88.0
 		"筋":
 			safety_value = 62.0
-			if multi_threat and risk >= 20.0:
-				safety_value *= clampf(1.0 - (risk - 14.0) / 30.0, 0.30, 1.0)
+			if multi_threat and risk >= 26.0:
+				safety_value *= clampf(1.0 - (risk - 22.0) / 42.0, 0.62, 1.0)
 		"壁":
 			safety_value = 54.0 * clampf(kabe_strength, 0.55, 1.38)
-			if multi_threat and risk >= 22.0:
-				safety_value *= clampf(1.0 - (risk - 16.0) / 36.0, 0.45, 1.0)
+			if multi_threat and risk >= 26.0:
+				safety_value *= clampf(1.0 - (risk - 22.0) / 48.0, 0.68, 1.0)
 	var danger_penalty = risk * 0.62 + feed_risk * 0.28
 	if risk >= 31.0:
 		danger_penalty += 96.0
@@ -5577,49 +5577,50 @@ func opponent_seat_threat_report(viewer: int, opponent: int, eval_context: Dicti
 		best_hint = "生张字牌"
 		best_type = "honor"
 		best_suit = -1
-	# 公开明碰碰胡威胁：对手已有2副露及以上且全为刻/杠、无顺子副露时，提示玩家慎防生张对碰。
-	var opp_melds_list: Array = players[opponent].get("melds", [])
-	if opp_melds_list.size() >= 2:
-		var trip_count: int = 0
-		var seq_count: int = 0
-		for meld_entry in opp_melds_list:
-			if typeof(meld_entry) != TYPE_ARRAY or (meld_entry as Array).size() < 3:
-				continue
-			var first_t: String = str((meld_entry as Array)[0])
-			if is_triplet_meld(meld_entry as Array, first_t) or ((meld_entry as Array).size() == 4 and str((meld_entry as Array)[1]) == first_t):
-				trip_count += 1
-			else:
-				seq_count += 1
-		if trip_count >= 2 and seq_count == 0:
-			var toitoi_plan_score: float = 10.0 + float(trip_count - 2) * 7.5
-			if toitoi_plan_score > best_score:
-				best_score = toitoi_plan_score
-				best_label = "碰碰胡"
-				best_hint = "生张对碰"
-				best_type = "toitoi"
-				best_suit = -1
-	# 公开暗染手推断：零明副露或仅有字牌副露时，若某门零舍牌且其余两门合计舍牌>=6（各>=2），提示玩家警戒该门生张。
-	if best_score < 8.0 and players[opponent]["discards"].size() >= 8:
-		for s in range(3):
-			if opponent_discard_count_for_suit(opponent, s, eval_context) != 0:
-				continue
-			var other_suits: int = 0
-			var other_total: int = 0
-			for os in range(3):
-				if os == s:
+	# 玩家前台威胁提示补充：将公开明碰碰胡与暗染手推断展示到座位威胁卡与军师提示中，
+	# 不抬高静默对局的通用 threat_rank 门槛（单张风险已由 opponent_pattern_threat_score 计入）。
+	if viewer == 0 and not offline_sim_quiet:
+		var opp_melds_list: Array = players[opponent].get("melds", [])
+		if opp_melds_list.size() >= 2:
+			var trip_count: int = 0
+			var seq_count: int = 0
+			for meld_entry in opp_melds_list:
+				if typeof(meld_entry) != TYPE_ARRAY or (meld_entry as Array).size() < 3:
 					continue
-				var osc: int = opponent_discard_count_for_suit(opponent, os, eval_context)
-				if osc >= 2:
-					other_suits += 1
-				other_total += osc
-			if other_suits >= 2 and other_total >= 6:
-				var closed_score: float = 9.0 + minf(7.0, float(other_total - 6) * 1.4)
-				if closed_score > best_score:
-					best_score = closed_score
-					best_label = suit_label(suit_code(s))
-					best_hint = "%s生张" % best_label
-					best_type = "suit"
-					best_suit = s
+				var first_t: String = str((meld_entry as Array)[0])
+				if is_triplet_meld(meld_entry as Array, first_t) or ((meld_entry as Array).size() == 4 and str((meld_entry as Array)[1]) == first_t):
+					trip_count += 1
+				else:
+					seq_count += 1
+			if trip_count >= 2 and seq_count == 0:
+				var toitoi_plan_score: float = 12.5 if trip_count == 2 else 17.5
+				if toitoi_plan_score > best_score:
+					best_score = toitoi_plan_score
+					best_label = "碰碰胡"
+					best_hint = "生张对碰"
+					best_type = "toitoi"
+					best_suit = -1
+		if best_score < 8.0 and players[opponent]["discards"].size() >= 8:
+			for s in range(3):
+				if opponent_discard_count_for_suit(opponent, s, eval_context) != 0:
+					continue
+				var other_suits: int = 0
+				var other_total: int = 0
+				for os in range(3):
+					if os == s:
+						continue
+					var osc: int = opponent_discard_count_for_suit(opponent, os, eval_context)
+					if osc >= 2:
+						other_suits += 1
+					other_total += osc
+				if other_suits >= 2 and other_total >= 6:
+					var closed_score: float = 9.0 + minf(5.5, float(other_total - 6) * 1.1)
+					if closed_score > best_score:
+						best_score = closed_score
+						best_label = suit_label(suit_code(s))
+						best_hint = "%s生张" % best_label
+						best_type = "suit"
+						best_suit = s
 	var readiness = opponent_readiness_report(viewer, opponent, eval_context)
 	var readiness_score = float(readiness.get("score", 0.0))
 	var readiness_label = str(readiness.get("label", ""))
