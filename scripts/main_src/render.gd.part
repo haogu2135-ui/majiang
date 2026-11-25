@@ -2602,7 +2602,7 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("wind_label_content_size_snapshot", center_content_size)
 	center.set_meta("wind_label_content_size_snapshot_policy", "one_content_size_snapshot_per_wind_label_pass")
 	var center_current_seat := get_current_seat()
-	var wind_font_size := 20 if wide_center else (15 if compact_center else 17)
+	var wind_font_size := 15 if compact_center else 17
 	var center_resolved_table_px := game_table_pixel_size()
 	var center_resolved_height_px := maxf(center.size.y, center_resolved_table_px.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y))
 	for i in range(4):
