@@ -13007,7 +13007,6 @@ func draw_hand(parent: Control) -> void:
 			hand_box.add_child(drawn_mount)
 			drawn_mount.add_child(tile_node)
 			apply_rect(tile_node, rect_full(0.0, 0.0, 1.0, 1.0))
-			tile_node.size = Vector2(tile_width, tile_height)
 			# Keep the mount and frame stable; lift the shared visual/hit body once.
 			# This moves the authored face and its native button together.
 			var drawn_body := tile_node.get_child(0) as Control if tile_node.get_child_count() > 0 else null
@@ -21085,8 +21084,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# size and focus geometry remain stable.
 	var text_right := 0.465 if compact_settings and large_text_settings else (0.430 if compact_settings else (0.595 if title == "播放曲目" else 0.565))
 	var button_left := 0.495 if compact_settings else (0.610 if title == "播放曲目" else 0.595)
-	var single_line_reset := not large_text_settings and title == "本地进度"
-	if single_line_reset and compact_settings:
+	var single_line_reset := compact_settings and not large_text_settings and title == "本地进度"
+	if single_line_reset:
 		text_right = 0.615
 		button_left = 0.645
 	var row_title_size := 14 if compact_settings or large_text_settings else guofeng_card_title_font_size(17)
@@ -21120,7 +21119,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 		compact_reset_status = "清空续局·保留战绩"
 	var visible_status := compact_reset_status if compact_settings and title == "本地进度" else (status if show_full_status else (consequence_status if compact_settings or large_text_settings or title == "画面质量" or title == "本地进度" else status))
 	if title == "本地进度":
-		visible_status = ("清空续局·保留战绩" if compact_settings else "仅清续局 · 保留战绩") if single_line_reset else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
+		visible_status = "清空续局·保留战绩" if single_line_reset else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
 	var status_label = make_label(row, visible_status, row_status_size, Color(0.28, 0.34, 0.27, 1.0), false)
 	status_label.name = "SettingRowStatus_%s" % title
 	status_label.add_theme_color_override("font_color", Color(0.08, 0.18, 0.13, 1.0))

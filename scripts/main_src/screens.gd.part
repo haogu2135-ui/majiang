@@ -9248,7 +9248,7 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 	if compact_settings or large_text_enabled or setting_key == "画面质量" or setting_key == "本地进度":
 		visible_status = compact_setting_status(setting_key, full_status)
 	if setting_key == "本地进度":
-		visible_status = "清空续局·保留战绩" if compact_settings and not large_text_enabled else ("清空续局\n保留战绩" if compact_settings else "仅清续局 · 保留战绩")
+		visible_status = "清空续局·保留战绩" if compact_settings and not large_text_enabled else ("清空续局\n保留战绩" if compact_settings else "清空续局存档\n保留战绩")
 	status_label.text = visible_status
 	set_ui_full_text(status_label, full_status, "%s完整状态" % setting_key)
 	status_label.set_meta("local_update_revision", int(settings_panel.get_meta("settings_local_update_revision", 0)) + 1)
