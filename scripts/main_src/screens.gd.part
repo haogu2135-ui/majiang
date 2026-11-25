@@ -1544,7 +1544,7 @@ func _show_online_lobby_impl() -> void:
 	connection_help.name = "OnlineLobbyConnectionHelpButton"
 	connection_help.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
 	form_panel.add_child(connection_help)
-	apply_rect(connection_help, rect_full(0.54, 0.015, 0.94, 0.104))
+	apply_rect(connection_help, rect_full(0.54, 0.004, 0.94, 0.104))
 	style_guofeng_secondary_action(connection_help)
 	set_ui_full_text(connection_help, "查看本机、局域网服务器地址和好友入房步骤", "连接帮助")
 	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.668))
@@ -1555,7 +1555,7 @@ func _show_online_lobby_impl() -> void:
 	form.name = "OnlineLobbyConnectionFields"
 	configure_passive_container(form)
 	form.anchor_left = 0.06
-	form.anchor_top = 0.130 if compact_lobby_form else 0.133
+	form.anchor_top = 0.155 if compact_lobby_form else 0.133
 	form.anchor_right = 0.94
 	form.anchor_bottom = 0.630
 	form.add_theme_constant_override("separation", 6 if (compact_lobby_form and not large_text_enabled) else 8)
@@ -1699,7 +1699,7 @@ func _show_online_lobby_impl() -> void:
 	log_panel.set_meta("retry_clearance_px", 8.0)
 	log_panel.set_meta("wide_content_policy", "bounded_operational_columns" if wide_lobby_layout else "full_safe_width")
 	panel.add_child(log_panel)
-	var empty_state_backplate := make_layout_host(rect_full(0.045, 0.155, 0.955, 0.895))
+	var empty_state_backplate := make_layout_host(rect_full(0.050, 0.155, 0.950, 0.925))
 	empty_state_backplate.name = "OnlineLobbyEmptyStateReadabilityBackplate"
 	empty_state_backplate.visible = not room_snapshot_visible
 	log_panel.add_child(empty_state_backplate)
@@ -1743,12 +1743,12 @@ func _show_online_lobby_impl() -> void:
 	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
-	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.500, 0.018, 0.635, 0.102)
-	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else rect_full(0.790, 0.018, 0.950, 0.102))
+	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.475, 0.018, 0.610, 0.102)
+	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else rect_full(0.790, 0.008, 0.950, 0.098))
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
-	var room_badge_rect := rect_full(0.625, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.665, 0.022, 0.950, 0.098)
+	var room_badge_rect := rect_full(0.625, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.630, 0.022, 0.915, 0.098)
 	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
@@ -2013,8 +2013,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
-		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.500, 0.018, 0.635, 0.102)
-		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else rect_full(0.790, 0.018, 0.950, 0.102))
+		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.475, 0.018, 0.610, 0.102)
+		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else rect_full(0.790, 0.008, 0.950, 0.098))
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3563,18 +3563,18 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else Color(0.60, 0.16, 0.13)
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.60, 0.24, 0.20)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.060, 0.290, 0.175, 0.710), buy_icon_color)
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.145, 0.290, 0.245, 0.710), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.set_meta("preserve_semantic_color", true)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.205, 0.220, 0.975, 0.780))
+		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.265, 0.220, 0.935, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
 		# GridContainer/VBoxContainer has resolved its row geometry.
-		fit_label_font_size(command_label, maxf(64.0, shop_viewport_size.x * (0.165 if shop_wide_layout else 0.100)), accessibility_font_size(commercial_ui_font_size(15, 2)), accessibility_font_size(14))
+		fit_label_font_size(command_label, maxf(64.0, shop_viewport_size.x * (0.165 if shop_wide_layout else 0.095)), accessibility_font_size(commercial_ui_font_size(15, 2)), accessibility_font_size(14))
 		command_label.set_meta("cta_width_contract", "single_line_measured_text_lane")
 		configure_clipped_label(command_label)
 		set_ui_full_text(command_label, buy_btn.tooltip_text, "购买操作：" + name_label.text)
@@ -5623,20 +5623,21 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	panel.add_child(progress_panel)
 	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.660, 0.820, 0.960), Color.WHITE, "battle_ink_plaque_20261112")
 	progress_rail.name = "DailyLoginProgressRail"
-	progress_rail.self_modulate = Color(1.0, 1.0, 1.0, 0.36)
+	progress_rail.modulate = Color.WHITE
+	progress_rail.clip_contents = true
 	configure_guofeng_button_slice(progress_rail as TextureRect, true, 32, 0.25)
+	var rail_edges := progress_rail.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+	if rail_edges != null:
+		rail_edges.self_modulate = Color(1.0, 1.0, 1.0, 0.44)
+	else:
+		progress_rail.self_modulate = Color(1.0, 1.0, 1.0, 0.44)
 	progress_panel.add_child(progress_rail)
 	var progress_ratio := 0.0 if progress <= 0 else clampf(float(progress) / 7.0, 0.0, 1.0)
-	var progress_fill_key := "button_face_jiangnan_active_gpt" if optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null else "battle_ink_plaque_20261112"
 	var fill_left := 0.010 if progress_ratio > 0.0 else 0.0
 	var fill_right := maxf(fill_left + 0.020, progress_ratio - 0.010) if progress_ratio > 0.0 else 0.0
-	var progress_fill = make_gpt_plate_rect(rect_full(fill_left, 0.200, minf(0.990, fill_right), 0.800), Color.WHITE, progress_fill_key)
+	var progress_fill = make_gpt_center_crop_plate_rect(rect_full(fill_left, 0.240, minf(0.990, fill_right), 0.760), Color.WHITE, "menu_ink_primary", 0.35)
 	progress_fill.name = "DailyLoginProgressFill"
-	progress_fill.self_modulate = Color.WHITE
-	if progress_fill_key == "button_face_jiangnan_active_gpt":
-		configure_guofeng_button_slice(progress_fill as TextureRect, true, 96, 0.08)
-	else:
-		configure_guofeng_button_slice(progress_fill as TextureRect, true, 32, 0.25)
+	progress_fill.self_modulate = Color(1.0, 1.0, 1.0, 0.96)
 	progress_fill.set_meta("progress_value", progress_ratio)
 	progress_fill.set_meta("animated_role", "daily_login_progress_flow")
 	progress_rail.add_child(progress_fill)
@@ -7134,7 +7135,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.045, 0.130, 0.875 if not compact_replay_layout else 0.955, 0.275))
+	apply_rect(search, rect_full(0.045, 0.130, 0.844 if not compact_replay_layout else 0.955, 0.275))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -7151,7 +7152,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.965))
+	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.905 if not compact_replay_layout else 0.935))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
