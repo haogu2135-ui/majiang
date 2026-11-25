@@ -7866,8 +7866,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	# lane. A changing row height can move the action lane beneath the viewport
 	# edge when the archive list is already at its tail.
 	var compact_archive_actions: bool = archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
-	var compact_archive_row: bool = compact_archive_actions and not large_text_enabled and not delete_confirming
-	row.custom_minimum_size = Vector2(0, (148 if large_text_enabled else 128) if delete_confirming else (124 if large_text_enabled else (80 if compact_archive_row else 104)))
+	row.custom_minimum_size = Vector2(0, (148 if large_text_enabled else 128) if delete_confirming else (124 if large_text_enabled else 104))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
 	row.set_meta("archive_favorite_state", "favorite" if bool(entry.get("favorite", false)) else "normal")
@@ -7887,36 +7886,36 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	row.set_meta("archive_date_text_snapshot_policy", "one_date_parse_per_row")
 	row.set_meta("archive_date_build_policy", "shared_precomputed_date" if archive_date_text_snapshot != "" else "one_date_parse_in_row")
 	var archive_context := "归档：" + archive_display_date_text
-	var primary := make_label(row, archive_display_date_text, 12 if compact_archive_row else 13, Color(0.92, 0.88, 0.74), true)
+	var primary := make_label(row, archive_display_date_text, 13, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
-	apply_rect(primary, rect_full(0.045, 0.045 if compact_archive_row else 0.060, 0.560, 0.255 if compact_archive_row else 0.270))
+	apply_rect(primary, rect_full(0.045, 0.060, 0.560, 0.270))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	style_guofeng_label(primary)
 	primary.set_meta("measured_column_policy", "date_and_result_columns_keep_trailing_gutter")
 	primary.tooltip_text = archive_date_text
 	set_ui_full_text(primary, archive_date_text, "回放日期")
-	var result := make_label(row, result_label, 12 if compact_archive_row else 13, Color(0.72, 0.90, 0.68), true)
+	var result := make_label(row, result_label, 13, Color(0.72, 0.90, 0.68), true)
 	result.name = "ReplayArchiveRowResult"
-	apply_rect(result, rect_full(0.560, 0.045 if compact_archive_row else 0.060, 0.955, 0.255 if compact_archive_row else 0.270))
+	apply_rect(result, rect_full(0.560, 0.060, 0.955, 0.270))
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(result)
 	style_guofeng_label(result)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
-	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 11 if compact_archive_row else 12, Color(0.70, 0.80, 0.72), false)
+	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 12, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
-	apply_rect(secondary, rect_full(0.045, 0.240 if compact_archive_row else 0.265, 0.955, 0.340 if delete_confirming else 0.390))
+	apply_rect(secondary, rect_full(0.045, 0.265, 0.955, 0.340 if delete_confirming else 0.390))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(secondary)
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
-	var action_top := 0.555 if delete_confirming else (0.415 if compact_archive_row else 0.445)
-	var action_bottom := 0.965 if compact_archive_row else 0.915
+	var action_top := 0.555 if delete_confirming else 0.445
+	var action_bottom := 0.915
 	# The archive scrollbar reserves a 44px touch lane. Inset action targets cleanly
 	# clear of the outer card L-corners while keeping all four targets >= 44px.
-	var action_left := 0.036 if compact_archive_actions else 0.036
+	var action_left := 0.036
 	var action_slot_width := 0.218 if compact_archive_actions else 0.224
-	var action_step := 0.234 if compact_archive_actions else 0.234
+	var action_step := 0.234
 	var action_min_width := 44.0 if compact_archive_actions else 58.0
 	var is_favorite := bool(entry.get("favorite", false))
 	var favorite := make_small_button("已收藏" if is_favorite else "收藏", Color(0.60, 0.48, 0.22) if is_favorite else Color(0.30, 0.48, 0.42), func() -> void:
@@ -7990,9 +7989,9 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	style_guofeng_reading_tree(row)
 	for action in [favorite, open, copy]:
 		style_guofeng_secondary_action(action, action == open)
-		action.add_theme_font_size_override("font_size", accessibility_font_size(12 if compact_archive_row else 13))
+		action.add_theme_font_size_override("font_size", accessibility_font_size(13))
 	mark_guofeng_danger_button(delete, delete_confirming)
-	delete.add_theme_font_size_override("font_size", accessibility_font_size(12 if compact_archive_row else 13))
+	delete.add_theme_font_size_override("font_size", accessibility_font_size(13))
 	return row
 
 
