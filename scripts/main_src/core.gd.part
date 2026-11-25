@@ -4646,7 +4646,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane.
-		context_height_px = 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
@@ -10845,7 +10845,10 @@ func chat_panel_rect() -> Rect2:
 			if visible_melds.has(0):
 				var bottom_meld_rect := seat_meld_rect(0, seat_viewport)
 				modal_bottom = minf(modal_bottom, bottom_meld_rect.position.y - 0.008)
-			return rect_full(0.300, modal_top, 0.700, maxf(modal_top + 0.240, modal_bottom))
+			var compact_modal := seat_viewport.x <= 1000.0 or seat_viewport.y <= 580.0
+			var modal_left := 0.360 if compact_modal else 0.300
+			var modal_right := 0.640 if compact_modal else 0.700
+			return rect_full(modal_left, modal_top, modal_right, maxf(modal_top + 0.240, modal_bottom))
 		return rect_full(0.115, 0.460, left_route_right, 0.720)
 	return best
 
@@ -10953,7 +10956,7 @@ func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
 	var rect := chat_panel_rect()
-	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
+	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.size.x, 0.640)):
 		return "center_table_modal"
 	if rect.position.x < 0.30:
 		if rect.position.y < 0.40:

@@ -27998,13 +27998,18 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	tile_preview.tooltip_text = "%s打出的%s · 点击行动按钮选择响应" % [source_name, tile_label(tile)]
 	panel.add_child(tile_preview)
 	var narrow_context := viewport_size.x <= 960.0
+	var compact_large_context := narrow_context and large_text_enabled
 	apply_rect(tile_preview, rect_full(0.025, 0.040, 0.165 if narrow_context else 0.210, 0.960))
 	var text_left := 0.195 if narrow_context else 0.240
 	var panel_px_width := maxf(180.0, safe_content_pixel_size().x * maxf(0.10, context_rect.size.x - context_rect.position.x))
+	var top_lane_top := 0.000 if compact_large_context else 0.020
+	var top_lane_bottom := 0.500 if compact_large_context else 0.520
+	var bottom_lane_top := 0.530 if compact_large_context else 0.540
+	var bottom_lane_bottom := 1.000 if compact_large_context else 0.980
 	var title := make_label(panel, "%s 打出" % source_name, 13, Color.WHITE, true)
 	title.name = "PendingClaimSourceText"
 	title.add_theme_font_override("font", ui_heading_font())
-	apply_rect(title, rect_full(text_left, 0.020, 0.720, 0.520))
+	apply_rect(title, rect_full(text_left, top_lane_top, 0.720, top_lane_bottom))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	configure_clipped_label(title)
@@ -28013,7 +28018,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var tile_name := make_label(panel, tile_label(tile), 14, Color.WHITE, true)
 	tile_name.name = "PendingClaimTileName"
 	tile_name.add_theme_font_override("font", ui_heading_font())
-	apply_rect(tile_name, rect_full(0.735, 0.020, 0.970, 0.520))
+	apply_rect(tile_name, rect_full(0.735, top_lane_top, 0.970, top_lane_bottom))
 	tile_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(tile_name)
 	tile_name.add_theme_color_override("font_color", Color(0.58, 0.16, 0.12, 1.0))
@@ -28022,7 +28027,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var urgency_text := pending_claim_urgency_text()
 	var urgency := make_label(panel, urgency_text.split(" · ")[0], 11, Color.WHITE, false)
 	urgency.name = "PendingClaimUrgencyText"
-	apply_rect(urgency, rect_full(text_left, 0.540, 0.515, 0.980))
+	apply_rect(urgency, rect_full(text_left, bottom_lane_top, 0.515, bottom_lane_bottom))
 	urgency.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(urgency)
 	urgency.add_theme_color_override("font_color", Color(0.60, 0.16, 0.12, 1.0) if urgency_text.contains("高") else Color(0.14, 0.26, 0.20, 1.0))
@@ -28037,7 +28042,7 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 			break
 	var focus := make_label(panel, focus_text, 11, Color.WHITE, false)
 	focus.name = "PendingClaimFocusText"
-	apply_rect(focus, rect_full(0.525, 0.540, 0.970, 0.980))
+	apply_rect(focus, rect_full(0.525, bottom_lane_top, 0.970, bottom_lane_bottom))
 	focus.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(focus)
 	configure_clipped_label(focus)
@@ -28050,8 +28055,10 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	var timer_rect := rect_full(0.640, 0.535, 0.972, 0.588)
 	if root_slot:
 		var content_size := safe_content_pixel_size()
-		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], effective_viewport_size())
-		var timer_top := 0.108 + 56.0 / content_size.y
+		var timer_viewport := effective_viewport_size()
+		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
+		var context_offset_px := 62.0 if (timer_viewport.x <= 960.0 and large_text_enabled) else 56.0
+		var timer_top := 0.108 + context_offset_px / content_size.y
 		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
 	var timer := make_gpt_center_crop_plate_rect(timer_rect, Color.WHITE, "menu_card_readable_gpt", 1.0)
@@ -32661,12 +32668,13 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 	yaku_scroll.set_meta("measurement_source", "detail_panel_content_width_minus_scrollbar")
 	detail_panel.add_child(yaku_scroll)
 	place_round_summary_control(yaku_scroll, Rect2(0.0, float(layout["yaku_top"]), detail_rect.size.x, float(layout["yaku_height"])))
+	var compact_yaku_list := reasons.size() > 10 and (large_text_enabled or win_detail_viewport.x <= 960.0)
 	var badges := HFlowContainer.new()
 	badges.name = "WinDetailYakuBadges"
 	badges.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	badges.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	badges.add_theme_constant_override("h_separation", 8)
-	badges.add_theme_constant_override("v_separation", 4)
+	badges.add_theme_constant_override("h_separation", 6 if compact_yaku_list else 8)
+	badges.add_theme_constant_override("v_separation", 2 if compact_yaku_list else 4)
 	yaku_scroll.add_child(badges)
 	var reason_items: Array = score_data.get("reason_items", [])
 	for i in range(reasons.size()):
@@ -32677,19 +32685,20 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 			item_fan = int((reason_items[i] as Dictionary).get("fan", 0))
 		if item_fan <= 0:
 			item_fan = yaku_default_fan_points(raw_name)
-		var badge_text := ("%s +%d番" % [raw_name, item_fan]) if item_fan > 0 else raw_name
+		var badge_text := raw_name if compact_yaku_list else (("%s +%d番" % [raw_name, item_fan]) if item_fan > 0 else raw_name)
 		var reason := make_label(badges, badge_text, 13, Color.WHITE, false)
 		reason.name = "WinDetailYakuBadge_%d" % i
 		reason.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		style_guofeng_label(reason)
 		if item_fan >= 3:
 			reason.add_theme_color_override("font_color", Color(0.52, 0.14, 0.10, 1.0))
-		var chip_pad := StyleBoxEmpty.new()
-		chip_pad.content_margin_left = 7.0
-		chip_pad.content_margin_right = 7.0
-		chip_pad.content_margin_top = 1.0
-		chip_pad.content_margin_bottom = 1.0
-		reason.add_theme_stylebox_override("normal", chip_pad)
+		if not compact_yaku_list:
+			var chip_pad := StyleBoxEmpty.new()
+			chip_pad.content_margin_left = 7.0
+			chip_pad.content_margin_right = 7.0
+			chip_pad.content_margin_top = 1.0
+			chip_pad.content_margin_bottom = 1.0
+			reason.add_theme_stylebox_override("normal", chip_pad)
 		var chip_bg := add_optional_gpt_illustration_texture(reason, "quiet_gold_accent", rect_full(0.0, 0.0, 1.0, 1.0), 0.30 if item_fan >= 3 else 0.20, false)
 		if chip_bg != null:
 			chip_bg.name = "WinDetailYakuChipBg_%d" % i
@@ -38042,7 +38051,7 @@ func _show_online_lobby_impl() -> void:
 	logs_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	logs_label.add_theme_color_override("default_color", Color(0.11, 0.23, 0.18))
-	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(12 if compact_lobby_log else commercial_ui_font_size(13, 2)))
+	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(13 if compact_lobby_log else commercial_ui_font_size(13, 2)))
 	logs_label.add_theme_constant_override("outline_size", 0)
 	logs_label.add_theme_constant_override("shadow_offset_x", 0)
 	logs_label.add_theme_constant_override("shadow_offset_y", 0)
@@ -39780,13 +39789,14 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else Color(0.60, 0.16, 0.13)
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.60, 0.24, 0.20)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.145, 0.290, 0.245, 0.710), buy_icon_color)
+		var compact_centered_cta := not shop_wide_layout and not large_text_enabled
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else (rect_full(0.145, 0.290, 0.245, 0.710) if compact_centered_cta else rect_full(0.060, 0.290, 0.175, 0.710)), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.set_meta("preserve_semantic_color", true)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.265, 0.220, 0.935, 0.780))
+		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else (rect_full(0.265, 0.220, 0.935, 0.780) if compact_centered_cta else rect_full(0.205, 0.220, 0.975, 0.780)))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
@@ -41132,7 +41142,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		control.size_flags_vertical = Control.SIZE_FILL
 	var available_body_h := maxf(120.0, panel.size.y - (edge + header_height + edge * 2.0))
-	var natural_noncompact_order := not compact
+	var natural_noncompact_order := not compact and available_body_h >= 186.0
 	if natural_noncompact_order:
 		messages.custom_minimum_size.y = clampf(available_body_h - 144.0, 52.0, 190.0)
 	else:
@@ -43120,9 +43130,10 @@ func _show_replay_import_screen_impl() -> void:
 		replay_import_code_draft = ""
 	var panel := make_guofeng_secondary_page("ReplayImportPanel", "Replay", effective_viewport_size())
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var title := make_heading(panel, "回放复盘", 30, Color(0.10, 0.22, 0.16), true)
+	var compact_replay_large := effective_viewport_size().y <= 560.0 and large_text_enabled
+	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else 30, Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.055, 0.026, 0.210, 0.095))
+	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
@@ -43152,7 +43163,7 @@ func _show_replay_import_screen_impl() -> void:
 	var input_label := make_label(panel, "回放码", 13, Color(0.11, 0.23, 0.18), true)
 	input_label.name = "ReplayImportInputLabel"
 	input_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(input_label, rect_full(0.055, 0.124, 0.260, 0.162))
+	apply_rect(input_label, rect_full(0.055, 0.116 if compact_replay_large else 0.124, 0.260, 0.162))
 	set_ui_full_text(input_label, "回放码", "回放码输入字段")
 	mark_ui_optimization(input_label, "F-506")
 	var input := LineEdit.new()
@@ -51913,7 +51924,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane.
-		context_height_px = 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
@@ -58112,7 +58123,10 @@ func chat_panel_rect() -> Rect2:
 			if visible_melds.has(0):
 				var bottom_meld_rect := seat_meld_rect(0, seat_viewport)
 				modal_bottom = minf(modal_bottom, bottom_meld_rect.position.y - 0.008)
-			return rect_full(0.300, modal_top, 0.700, maxf(modal_top + 0.240, modal_bottom))
+			var compact_modal := seat_viewport.x <= 1000.0 or seat_viewport.y <= 580.0
+			var modal_left := 0.360 if compact_modal else 0.300
+			var modal_right := 0.640 if compact_modal else 0.700
+			return rect_full(modal_left, modal_top, modal_right, maxf(modal_top + 0.240, modal_bottom))
 		return rect_full(0.115, 0.460, left_route_right, 0.720)
 	return best
 
@@ -58220,7 +58234,7 @@ func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
 	var rect := chat_panel_rect()
-	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
+	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.size.x, 0.640)):
 		return "center_table_modal"
 	if rect.position.x < 0.30:
 		if rect.position.y < 0.40:

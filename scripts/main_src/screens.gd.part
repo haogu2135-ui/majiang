@@ -1827,7 +1827,7 @@ func _show_online_lobby_impl() -> void:
 	logs_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	logs_label.add_theme_color_override("default_color", Color(0.11, 0.23, 0.18))
-	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(12 if compact_lobby_log else commercial_ui_font_size(13, 2)))
+	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(13 if compact_lobby_log else commercial_ui_font_size(13, 2)))
 	logs_label.add_theme_constant_override("outline_size", 0)
 	logs_label.add_theme_constant_override("shadow_offset_x", 0)
 	logs_label.add_theme_constant_override("shadow_offset_y", 0)
@@ -3565,13 +3565,14 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else Color(0.60, 0.16, 0.13)
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.60, 0.24, 0.20)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.145, 0.290, 0.245, 0.710), buy_icon_color)
+		var compact_centered_cta := not shop_wide_layout and not large_text_enabled
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else (rect_full(0.145, 0.290, 0.245, 0.710) if compact_centered_cta else rect_full(0.060, 0.290, 0.175, 0.710)), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.set_meta("preserve_semantic_color", true)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.265, 0.220, 0.935, 0.780))
+		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else (rect_full(0.265, 0.220, 0.935, 0.780) if compact_centered_cta else rect_full(0.205, 0.220, 0.975, 0.780)))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
@@ -4917,7 +4918,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		control.size_flags_vertical = Control.SIZE_FILL
 	var available_body_h := maxf(120.0, panel.size.y - (edge + header_height + edge * 2.0))
-	var natural_noncompact_order := not compact
+	var natural_noncompact_order := not compact and available_body_h >= 186.0
 	if natural_noncompact_order:
 		messages.custom_minimum_size.y = clampf(available_body_h - 144.0, 52.0, 190.0)
 	else:
@@ -6905,9 +6906,10 @@ func _show_replay_import_screen_impl() -> void:
 		replay_import_code_draft = ""
 	var panel := make_guofeng_secondary_page("ReplayImportPanel", "Replay", effective_viewport_size())
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var title := make_heading(panel, "回放复盘", 30, Color(0.10, 0.22, 0.16), true)
+	var compact_replay_large := effective_viewport_size().y <= 560.0 and large_text_enabled
+	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else 30, Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.055, 0.026, 0.210, 0.095))
+	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
@@ -6937,7 +6939,7 @@ func _show_replay_import_screen_impl() -> void:
 	var input_label := make_label(panel, "回放码", 13, Color(0.11, 0.23, 0.18), true)
 	input_label.name = "ReplayImportInputLabel"
 	input_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(input_label, rect_full(0.055, 0.124, 0.260, 0.162))
+	apply_rect(input_label, rect_full(0.055, 0.116 if compact_replay_large else 0.124, 0.260, 0.162))
 	set_ui_full_text(input_label, "回放码", "回放码输入字段")
 	mark_ui_optimization(input_label, "F-506")
 	var input := LineEdit.new()
