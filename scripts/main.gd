@@ -9059,6 +9059,16 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_round_summary_for_render()
 	var reopen_exit_confirm := exit_confirm_panel != null and is_instance_valid(exit_confirm_panel) and not exit_confirm_panel.is_queued_for_deletion()
 	var saved_exit_restore_id := exit_confirm_focus_restore_id
+	var preserved_exit_confirm: Control = null
+	var saved_exit_focus: Control = null
+	if reopen_exit_confirm:
+		var active_viewport := get_viewport()
+		var current_focus := active_viewport.gui_get_focus_owner() if active_viewport != null else null
+		if current_focus != null and is_instance_valid(current_focus) and (current_focus == exit_confirm_panel or exit_confirm_panel.is_ancestor_of(current_focus)):
+			saved_exit_focus = current_focus
+		preserved_exit_confirm = exit_confirm_panel
+		if preserved_exit_confirm.get_parent() != null:
+			preserved_exit_confirm.get_parent().remove_child(preserved_exit_confirm)
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -9131,10 +9141,15 @@ func render_game(state_changed: bool = false) -> void:
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
-	if reopen_exit_confirm and mode == "offline":
-		exit_confirm_panel = null
-		show_exit_confirm()
-		exit_confirm_focus_restore_id = saved_exit_restore_id
+	if preserved_exit_confirm != null and is_instance_valid(preserved_exit_confirm):
+		if mode == "offline" and root_layer != null and is_instance_valid(root_layer):
+			root_layer.add_child(preserved_exit_confirm)
+			exit_confirm_panel = preserved_exit_confirm
+			exit_confirm_focus_restore_id = saved_exit_restore_id
+			if saved_exit_focus != null and is_instance_valid(saved_exit_focus) and saved_exit_focus.is_inside_tree():
+				saved_exit_focus.grab_focus()
+		else:
+			preserved_exit_confirm.queue_free()
 	# Contract registration belongs to the mounted root generation. Partial lane
 	# updates never enter this path, so they do not rescan the page tree.
 	var contract_generation_key := "%d|%d" % [ui_page_generation, int(root_layer.get_meta("ui_contract_structure_revision", 0))]
@@ -11006,6 +11021,15 @@ func schedule_ai_until_human() -> void:
 	offline_ai_queued_callback = Callable(self, "run_ai_until_human").bind(offline_ai_run_generation, active_round_id)
 	get_tree().process_frame.connect(offline_ai_queued_callback, CONNECT_ONE_SHOT)
 
+func is_exit_confirm_open() -> bool:
+	return exit_confirm_panel != null and is_instance_valid(exit_confirm_panel) and not exit_confirm_panel.is_queued_for_deletion()
+
+
+func wait_while_exit_confirm_open(run_generation: int, run_round_id: String) -> void:
+	while offline_ai_run_is_current(run_generation, run_round_id) and is_exit_confirm_open():
+		await wait_for_runtime_delay(0.05)
+
+
 func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "") -> void:
 	var run_generation := offline_ai_run_generation
 	var run_round_id := active_round_id
@@ -11020,10 +11044,14 @@ func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "
 	offline_ai_active = true
 	if last_discard_seat == 0:
 		await pace_after_human_discard_response()
+		await wait_while_exit_confirm_open(run_generation, run_round_id)
 		if not offline_ai_run_is_current(run_generation, run_round_id):
 			finish_offline_ai_run(run_generation)
 			return
 	while offline_ai_run_is_current(run_generation, run_round_id) and offline_phase == "await_discard" and current_seat != 0:
+		await wait_while_exit_confirm_open(run_generation, run_round_id)
+		if not offline_ai_run_is_current(run_generation, run_round_id) or offline_phase != "await_discard" or current_seat == 0:
+			break
 		var seat = current_seat
 		var tsumo_continue_discard = ""
 		# 杠后补牌留下的当前自摸资格也必须走同一套 AI 决策；此前这里会
@@ -11042,6 +11070,7 @@ func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "
 				finish_wall_draw()
 				break
 			await wait_for_runtime_delay(ai_draw_delay())
+			await wait_while_exit_confirm_open(run_generation, run_round_id)
 			if not offline_ai_run_is_current(run_generation, run_round_id) or offline_phase != "await_discard" or current_seat != seat:
 				break
 			var drawn = draw_turn_tile_or_finish(seat)
@@ -11085,6 +11114,7 @@ func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "
 				if not offline_ai_run_is_current(run_generation, run_round_id):
 					break
 			await wait_for_runtime_delay(ai_discard_delay())
+		await wait_while_exit_confirm_open(run_generation, run_round_id)
 		if not offline_ai_run_is_current(run_generation, run_round_id) or offline_phase != "await_discard" or current_seat != seat:
 			break
 		seat = current_seat
@@ -11109,6 +11139,7 @@ func run_ai_until_human(queued_generation: int = -1, queued_round_id: String = "
 			finish_wall_draw()
 		else:
 			await wait_for_runtime_delay(human_draw_delay())
+			await wait_while_exit_confirm_open(run_generation, run_round_id)
 			if offline_ai_run_is_current(run_generation, run_round_id) and offline_phase == "await_discard" and current_seat == 0 and offline_turn_needs_draw:
 				var drawn = draw_turn_tile_or_finish(0)
 				if drawn != "":
@@ -28231,8 +28262,19 @@ func round_summary_body_text() -> String:
 			continue
 		if idx == 0 and (clause.contains("%d番" % fan) or clause.contains("自摸") or clause.contains("点炮") or clause.contains("胡")):
 			continue
-		if reasons_joined != "" and (clause == reasons_joined or (reasons_arr.size() >= 2 and clause.begins_with(str(reasons_arr[0]) + "、" + str(reasons_arr[1])))):
-			continue
+		if reasons_joined != "":
+			if clause == reasons_joined:
+				continue
+			if clause.begins_with(reasons_joined):
+				clause = clause.substr(reasons_joined.length()).strip_edges()
+				while clause.begins_with("，") or clause.begins_with("；") or clause.begins_with("：") or clause.begins_with("·"):
+					clause = clause.substr(1).strip_edges()
+				if clause == "":
+					continue
+			elif reasons_arr.size() >= 2 and clause.contains(reasons_joined):
+				clause = clause.replace(reasons_joined, "").strip_edges()
+				if clause == "":
+					continue
 		var is_pkg := clause.contains("包三搭") or clause.contains("包赔")
 		if is_pkg:
 			if seen_package:
@@ -37796,14 +37838,15 @@ func _show_online_lobby_impl() -> void:
 	lobby_chat_button.add_theme_font_size_override("font_size", 12)
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
 	style_guofeng_secondary_action(lobby_chat_button, false)
+	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.018, 0.635, 0.102) if room_snapshot_visible else rect_full(0.790, 0.018, 0.950, 0.102))
+	var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if compact_room_badge else rect_full(0.500, 0.018, 0.635, 0.102)
+	apply_rect(lobby_chat_button, connected_chat_rect if room_snapshot_visible else rect_full(0.790, 0.018, 0.950, 0.102))
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
-	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
-	var room_badge_rect := rect_full(0.655, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.665, 0.022, 0.950, 0.098)
+	var room_badge_rect := rect_full(0.625, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.665, 0.022, 0.950, 0.098)
 	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
@@ -38068,7 +38111,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
-		apply_rect(lobby_chat_button, rect_full(0.500, 0.018, 0.635, 0.102) if show_room_snapshot else rect_full(0.790, 0.018, 0.950, 0.102))
+		var connected_chat_rect := rect_full(0.430, 0.018, 0.610, 0.102) if lobby_viewport_size.x <= 960.0 else rect_full(0.500, 0.018, 0.635, 0.102)
+		apply_rect(lobby_chat_button, connected_chat_rect if show_room_snapshot else rect_full(0.790, 0.018, 0.950, 0.102))
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -57924,7 +57968,17 @@ func chat_panel_rect() -> Rect2:
 		# when no side drawer fits. The existing shield owns table input until close.
 		var visible_melds: Dictionary = occupancy_snapshot.get("visible_meld_seats", {})
 		if visible_melds.has(0) or visible_melds.has(3):
-			return rect_full(0.300, 0.200, 0.700, 0.690)
+			var seat_viewport := effective_viewport_size()
+			var top_seat_rect := battle_seat_layout_rect(2, SEAT_LAYOUTS[0][1], seat_viewport)
+			var modal_top := maxf(0.245, top_seat_rect.size.y + 0.010)
+			if visible_melds.has(2):
+				var top_meld_rect := seat_meld_rect(2, seat_viewport)
+				modal_top = maxf(modal_top, top_meld_rect.size.y + 0.010)
+			var modal_bottom := 0.695
+			if visible_melds.has(0):
+				var bottom_meld_rect := seat_meld_rect(0, seat_viewport)
+				modal_bottom = minf(modal_bottom, bottom_meld_rect.position.y - 0.008)
+			return rect_full(0.300, modal_top, 0.700, maxf(modal_top + 0.240, modal_bottom))
 		return rect_full(0.115, 0.460, left_route_right, 0.720)
 	return best
 
@@ -58032,7 +58086,7 @@ func chat_panel_route_name() -> String:
 	if mode == "online_lobby":
 		return "lobby_drawer"
 	var rect := chat_panel_rect()
-	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.position.y, 0.200)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
+	if (is_equal_approx(rect.position.x, 0.300) and is_equal_approx(rect.size.x, 0.700)) or (is_equal_approx(rect.position.x, 0.360) and is_equal_approx(rect.position.y, 0.300)):
 		return "center_table_modal"
 	if rect.position.x < 0.30:
 		if rect.position.y < 0.40:
