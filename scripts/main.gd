@@ -35013,10 +35013,16 @@ func use_jiangnan_secondary_composition(viewport_snapshot: Vector2 = Vector2.ZER
 	return viewport.x >= 1100.0 and viewport.y > 560.0 and not large_text_enabled
 
 
-func make_guofeng_secondary_page(page_name: String, prefix: String, viewport_snapshot: Vector2) -> Control:
-	var garden := add_optional_gpt_illustration_texture(root_layer, "menu_guofeng_moonlit", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+func add_guofeng_page_garden(prefix: String) -> void:
+	var garden := add_optional_gpt_illustration_texture(screen_layer, "menu_guofeng_moonlit", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if garden != null:
 		garden.name = prefix + "GuofengGardenBackdrop"
+		garden.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		screen_layer.move_child(garden, root_layer.get_index())
+
+
+func make_guofeng_secondary_page(page_name: String, prefix: String, viewport_snapshot: Vector2) -> Control:
+	add_guofeng_page_garden(prefix)
 	var page_rect := rect_full(0.02, 0.02, 0.98, 0.98)
 	if use_jiangnan_secondary_composition(viewport_snapshot):
 		var content_size := safe_content_pixel_size()
@@ -38014,9 +38020,7 @@ func _show_shop_screen_impl() -> void:
 	var shop_viewport_size := effective_viewport_size()
 	var shop_content_size := safe_content_pixel_size()
 	var shop_ink := Color(0.11, 0.23, 0.18)
-	var garden := add_optional_gpt_illustration_texture(root_layer, "menu_guofeng_moonlit", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
-	if garden != null:
-		garden.name = "ShopGuofengGardenBackdrop"
+	add_guofeng_page_garden("Shop")
 	var shop_panel_rect := rect_full(0.070, 0.050, 0.930, 0.950) if shop_viewport_size.x >= 1200.0 and not large_text_enabled else rect_full(0.02, 0.02, 0.98, 0.98)
 	var shop_panel_size := shop_content_size * (shop_panel_rect.size - shop_panel_rect.position)
 	var panel := make_layout_host(shop_panel_rect)
@@ -41359,9 +41363,7 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	bg.set_meta("viewport_snapshot", loading_viewport_size)
 	bg.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	root_layer.add_child(bg)
-	var garden := add_optional_gpt_illustration_texture(bg, "menu_guofeng_moonlit", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
-	if garden != null:
-		garden.name = "LoadingGuofengGardenBackdrop"
+	add_guofeng_page_garden("Loading")
 	var content_size := safe_content_pixel_size()
 	var paper_width := minf(content_size.x * 0.90, 680.0)
 	var paper_height := minf(content_size.y * 0.94, 480.0 if large_text_enabled else 440.0)
