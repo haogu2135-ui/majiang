@@ -22783,7 +22783,7 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_layout_host(rect_full(0.585, 0.110, 0.865, 0.230))
+	var simple_seal = make_layout_host(rect_full(0.580, 0.105, 0.875, 0.242))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
 	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.085), 11, 18)
@@ -25985,8 +25985,9 @@ func draw_hand(parent: Control) -> void:
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
-		var hint_height := 48.0 if hand_viewport_size.y >= 650.0 else float(UI_MIN_TOUCH_TARGET)
-		var tutorial_gap_px := 22.0 if hand_viewport_size.y >= 900.0 else (20.0 if hand_viewport_size.y >= 650.0 else 10.0)
+		var has_self_melds := not get_melds(0).is_empty()
+		var hint_height := (48.0 if hand_viewport_size.y >= 650.0 and not has_self_melds else float(UI_MIN_TOUCH_TARGET))
+		var tutorial_gap_px := (22.0 if hand_viewport_size.y >= 900.0 else 20.0) if (hand_viewport_size.y >= 650.0 and not has_self_melds) else (12.0 if hand_viewport_size.y >= 650.0 else 10.0)
 		var hint_bottom := HAND_TRAY_TILES_RECT.position.y - tutorial_gap_px / maxf(1.0, hand_tray_size.y)
 		var hint_top := hint_bottom - hint_height / maxf(1.0, hand_tray_size.y)
 		var content_size := safe_content_pixel_size()
@@ -26009,11 +26010,7 @@ func draw_hand(parent: Control) -> void:
 		hint_panel.z_index = 8
 		hint_panel.clip_contents = false
 		draw_hand_tutorial_hint_art(hint_panel, hint_width)
-		var raw_hint_text := tutorial_hand_hint_text()
-		var tutorial_step_num := 4 if tutorial_step == TUTORIAL_STEP_WIN else 1
-		var hint_text := raw_hint_text.replace("第1步", "第1/4步").replace("第2步", "第2/4步").replace("第3步", "第3/4步").replace("第4步", "第4/4步")
-		if not hint_text.contains("/4步"):
-			hint_text = "第%d/4步 · %s" % [tutorial_step_num, raw_hint_text]
+		var hint_text := tutorial_hand_hint_text()
 		var hint_label := make_label(hint_panel, hint_text, 12, Color.WHITE, false)
 		hint_label.name = "HandTrayTutorialHintText"
 		apply_rect(hint_label, rect_full(36.0 / hint_width, 0.0, 1.0 - 70.0 / hint_width, 1.0))
@@ -29641,14 +29638,14 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		var empty_name := StyleBoxEmpty.new()
 		empty_name.set_content_margin_all(0 if narrow_score_strip else 4)
 		name.add_theme_stylebox_override("normal", empty_name)
-		apply_rect(name, rect_full(0.04, 0.00, 0.96, 0.50) if stacked_score_strip else rect_full(0.08, 0.14, 0.36, 0.62))
+		apply_rect(name, rect_full(0.04, 0.00, 0.96, 0.50) if stacked_score_strip else rect_full(0.08, 0.14, 0.33, 0.62))
 		if stacked_score_strip:
 			name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		configure_clipped_label(name)
 		var score = make_label(chip, compact_score_text(int(player.get("score", 0))), 14 if wide_score_strip else (9 if compact_score_strip else 12), Color(0.96, 0.94, 0.88), true)
 		score.name = "ScoreStripScore_%d" % seat
 		score.z_index = 2
-		apply_rect(score, rect_full(0.04, 0.50, 0.96, 1.00) if stacked_score_strip else rect_full(0.36, 0.12, 0.93, 0.64))
+		apply_rect(score, rect_full(0.04, 0.50, 0.96, 1.00) if stacked_score_strip else rect_full(0.37, 0.12, 0.94, 0.64))
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if stacked_score_strip else HORIZONTAL_ALIGNMENT_RIGHT
 		configure_clipped_label(score)
 		var delta_text := score_delta_text(seat)

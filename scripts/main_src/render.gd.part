@@ -9687,7 +9687,7 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_layout_host(rect_full(0.580, 0.105, 0.875, 0.255))
+	var simple_seal = make_layout_host(rect_full(0.580, 0.105, 0.875, 0.242))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
 	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.085), 11, 18)
