@@ -4834,18 +4834,18 @@ func show_achievements_screen(instant: bool = false) -> void:
 		play_screen_transition(_build, false, "ink_wash")
 
 func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Label, close: Button, history: Button, messages: ScrollContainer, quick_title: Label, quick_actions: Control, custom_title: Label, input: LineEdit, send: Button, cooldown: Label, compact: bool) -> void:
-	var edge := 6.0
+	var edge := 6.0 if compact else 10.0
 	var target := float(UI_MIN_TOUCH_TARGET)
 	var close_left := panel.size.x - edge - target
 	var history_left := close_left - edge - target if history != null else close_left
 	var title_height := title.get_minimum_size().y
 	var range_height := message_range.get_minimum_size().y
-	var header_height := maxf(target, title_height + 2.0 + range_height)
+	var header_height := maxf(target, title_height + 4.0 + range_height)
 	apply_rect(title, rect_full(0.0, 0.0, 0.0, 0.0))
 	title.position = Vector2(edge, edge)
 	title.size = Vector2(maxf(1.0, history_left - edge * 2.0), title_height)
 	apply_rect(message_range, rect_full(0.0, 0.0, 0.0, 0.0))
-	message_range.position = Vector2(edge, edge + title_height + 2.0)
+	message_range.position = Vector2(edge, edge + title_height + 4.0)
 	message_range.size = Vector2(title.size.x, range_height)
 	var decorative_header := panel.find_child("ChatPanelHeader", true, false) as Control
 	var count_badge := panel.find_child("ChatPanelCountBadge", true, false) as Control
@@ -4853,24 +4853,24 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		var title_width := title.get_theme_font("font").get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title.get_theme_font_size("font_size")).x
 		count_badge.reparent(panel, false)
 		apply_rect(count_badge, rect_full(0.0, 0.0, 0.0, 0.0))
-		var badge_w := clampf(float(str(chat_messages.size()).length() * 8 + 24), 28.0, 38.0)
-		count_badge.position = Vector2(edge + title_width + 4.0, edge + maxf(0.0, (title_height - 18.0) * 0.5))
-		count_badge.size = Vector2(badge_w, minf(title_height, 18.0))
+		var badge_w := clampf(float(str(chat_messages.size()).length() * 9 + 26), 36.0, 50.0)
+		var badge_h := maxf(20.0, minf(title_height + 2.0, 22.0))
+		count_badge.position = Vector2(edge + title_width + 8.0, edge + maxf(0.0, (title_height - badge_h) * 0.5))
+		count_badge.size = Vector2(badge_w, badge_h)
 		title.size.x = title_width
 		var badge_plate := count_badge.get_node_or_null("GptPanelPlate") as TextureRect
 		if badge_plate != null:
-			var paper_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+			var paper_tex := optional_gpt_illustration_texture("quiet_gold_accent")
 			if paper_tex == null:
-				paper_tex = optional_gpt_illustration_texture("quiet_gold_accent")
+				paper_tex = optional_gpt_illustration_texture("menu_card_readable_gpt")
 			if paper_tex != null:
-				badge_plate.texture = paper_tex
-				if paper_tex == optional_gpt_illustration_texture("button_face_jiangnan_gpt"):
-					configure_guofeng_button_slice(badge_plate, true, 96, 0.125)
+				badge_plate.texture = gpt_center_crop_texture(paper_tex, "quiet_gold_accent", 0.65)
+				configure_guofeng_button_slice(badge_plate, false)
 			badge_plate.modulate = Color.WHITE
-			badge_plate.self_modulate = Color(0.96, 0.92, 0.80)
+			badge_plate.self_modulate = Color(0.96, 0.91, 0.76, 0.90)
 		for child in count_badge.get_children():
 			if child is Label:
-				child.add_theme_color_override("font_color", Color(0.12, 0.24, 0.18))
+				child.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	if decorative_header != null:
 		decorative_header.visible = false
 	# The legacy art uses fixed message-row positions; the body now scrolls
@@ -4905,7 +4905,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	content.name = "ChatPanelBodyContent"
 	configure_passive_container(content)
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 6)
+	content.add_theme_constant_override("separation", 6 if compact else 4)
 	body.add_child(content)
 	for control in [custom_title, messages, quick_title, quick_actions]:
 		control.reparent(content, false)
@@ -4915,7 +4915,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	var available_body_h := maxf(120.0, panel.size.y - (edge + header_height + edge * 2.0))
 	var natural_noncompact_order := not compact
 	if natural_noncompact_order:
-		messages.custom_minimum_size.y = clampf(available_body_h - 166.0, 84.0, 210.0)
+		messages.custom_minimum_size.y = clampf(available_body_h - 144.0, 52.0, 190.0)
 	else:
 		messages.custom_minimum_size.y = 72.0
 	quick_actions.clip_contents = false
@@ -4955,8 +4955,19 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	cooldown.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	cooldown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if natural_noncompact_order:
-		# Natural top-to-bottom reading flow: messages -> quick pills -> input -> meta.
-		var ordered_nodes: Array[Control] = [messages, quick_title, quick_actions, input_row, custom_title, cooldown, latest]
+		var meta_row := HBoxContainer.new()
+		meta_row.name = "ChatComposerMetaRow"
+		configure_passive_container(meta_row)
+		meta_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		meta_row.add_theme_constant_override("separation", 8)
+		content.add_child(meta_row)
+		custom_title.reparent(meta_row, false)
+		custom_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cooldown.reparent(meta_row, false)
+		cooldown.size_flags_horizontal = Control.SIZE_SHRINK_END
+		cooldown.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		# Natural top-to-bottom reading flow: messages -> quick pills -> input -> meta row.
+		var ordered_nodes: Array[Control] = [messages, quick_title, quick_actions, input_row, meta_row, latest]
 		for idx in range(ordered_nodes.size()):
 			content.move_child(ordered_nodes[idx], idx)
 	else:
@@ -5259,14 +5270,7 @@ func show_chat_panel() -> void:
 		chat_panel.add_child(chat_input)
 	var chat_clear_proxy := add_line_edit_clear_proxy(chat_panel, chat_input, "ChatInputClearButton", Callable(self, "refresh_chat_send_button_state"))
 	if chat_clear_proxy != null:
-		chat_clear_proxy.flat = true
-		var chat_clear_empty := StyleBoxEmpty.new()
-		for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
-			chat_clear_proxy.add_theme_stylebox_override(style_key, chat_clear_empty)
-		chat_clear_proxy.add_theme_color_override("icon_normal_color", Color(0.24, 0.34, 0.28, 0.86))
-		chat_clear_proxy.add_theme_color_override("icon_hover_color", Color(0.58, 0.16, 0.13, 1.0))
-		chat_clear_proxy.add_theme_color_override("icon_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
-		chat_clear_proxy.add_theme_color_override("icon_focus_color", Color(0.11, 0.23, 0.18, 1.0))
+		style_flat_clear_proxy(chat_clear_proxy)
 		chat_clear_proxy.set_meta("chat_clear_contract", "44px_input_clear_fixed_gap_to_send")
 		chat_clear_proxy.set_meta("clear_send_gap_px", 8.0 if compact_chat else 6.0)
 		mark_ui_optimization(chat_clear_proxy, "F-178")
@@ -5397,11 +5401,11 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	mark_ui_optimization(days_label, "F-489")
 	days_label.set_meta("normalized_consecutive_days", days)
 
-	# 7天签到指示器 - 使用短卡片，避免程序点线装饰
+	# 7天签到指示器 - 使用短卡片，与页头与底部预告齐平
 	var day_indicators_container = Control.new()
 	day_indicators_container.name = "DailyLoginDayIndicators"
 	day_indicators_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(day_indicators_container, rect_full(0.06, 0.265, 0.94, 0.445))
+	apply_rect(day_indicators_container, rect_full(0.055, 0.265, 0.945, 0.445))
 	panel.add_child(day_indicators_container)
 
 	var current_day_in_cycle = 1 if days <= 0 else days % 7
@@ -5422,8 +5426,8 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var is_milestone = day_num == 7
 
 		var indicator_gap := 0.010
-		var indicator_width := (0.976 - indicator_gap * 6.0) / 7.0
-		var x_pos = 0.012 + float(i) * (indicator_width + indicator_gap)
+		var indicator_width := (1.0 - indicator_gap * 6.0) / 7.0
+		var x_pos = float(i) * (indicator_width + indicator_gap)
 		var indicator_rect = rect_full(x_pos, 0.050, x_pos + indicator_width, 0.950)
 
 		# 选择颜色
@@ -5485,14 +5489,14 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		set_ui_full_text(day_label, day_state_text, "签到第%d天" % day_num)
 		style_guofeng_label(day_label, is_current)
 		configure_clipped_label(day_label)
-		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 14, Color(0.54, 0.13, 0.10) if is_claimed else text_color, true)
+		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 14, Color(0.13, 0.27, 0.20) if is_claimed else text_color, true)
 		day_state_label.name = "DailyLoginDayStateLabel_%d" % day_num
 		apply_rect(day_state_label, rect_full(0.070, 0.360, 0.930, 0.630))
 		day_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(day_state_label, day_state_label.text, day_state_text)
 		style_guofeng_label(day_state_label, is_current)
 		if is_claimed:
-			day_state_label.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+			day_state_label.add_theme_color_override("font_color", Color(0.13, 0.27, 0.20))
 			day_state_label.set_meta("preserve_semantic_color", true)
 		elif not is_current:
 			day_state_label.add_theme_color_override("font_color", Color(0.18, 0.24, 0.21))
@@ -5507,17 +5511,17 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		set_ui_full_text(icon_label, day_state_text, "第%d天奖励" % day_num)
 		style_guofeng_label(icon_label, is_current)
 		if is_milestone and not is_current:
-			icon_label.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+			icon_label.add_theme_color_override("font_color", Color(0.58, 0.14, 0.11))
 			icon_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(icon_label)
 
-		# 已签到的天数添加对勾；第7天未领时在右上角展示双倍铜钱符小徽章
+		# 已签到的天数添加对勾；第7天未领时在右上角展示双倍铜钱符小徽章（避开L角标）
 		if is_claimed:
-			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.790, 0.075, 0.945, 0.255), Color(0.76, 0.20, 0.14, 0.95))
+			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.730, 0.115, 0.895, 0.285), Color(0.16, 0.42, 0.28, 0.90))
 			if claimed_check != null:
 				claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
 		elif is_milestone:
-			var milestone_charm := add_optional_gpt_illustration_texture(indicator, "shop_charm_bei", rect_full(0.750, 0.055, 0.955, 0.295), 0.92, false)
+			var milestone_charm := add_optional_gpt_illustration_texture(indicator, "shop_charm_bei", rect_full(0.700, 0.110, 0.890, 0.315), 0.92, false)
 			if milestone_charm != null:
 				milestone_charm.name = "DailyLoginMilestoneCharm_%d" % day_num
 				milestone_charm.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -5591,7 +5595,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	reward_panel.set_meta("reserved_bottom_lane_top", progress_top)
 	mark_ui_optimization(reward_panel, "F-234")
 	panel.add_child(reward_panel)
-	var current_reward_kicker := make_label(reward_panel, "当前奖励", 13, Color(0.96, 0.84, 0.50), true)
+	var current_reward_kicker := make_label(reward_panel, "当前奖励", 13, Color(0.16, 0.25, 0.20), false)
 	current_reward_kicker.name = "DailyLoginCurrentRewardLabel"
 	apply_rect(current_reward_kicker, rect_full(0.08, 0.0, 0.92, 0.34))
 	current_reward_kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -5605,7 +5609,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	set_ui_full_text(reward_label, reward_text, "今日签到奖励")
 	mark_ui_optimization(reward_label, "F-491")
 
-	# 签到进度条 - 增强版
+	# 签到进度条 - 增强版（内嵌于鎏金轨道内，不覆盖轨道边框）
 	var progress: int = days % 7
 	if days > 0 and progress == 0:
 		progress = 7
@@ -5615,15 +5619,22 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	progress_panel.set_meta("bottom_lane_top", claim_top)
 	mark_ui_optimization(progress_panel, "F-234")
 	panel.add_child(progress_panel)
-	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.680, 0.820, 0.940), Color.WHITE, "battle_ink_plaque_20261112")
+	var progress_rail = make_gpt_plate_rect(rect_full(0.180, 0.660, 0.820, 0.960), Color.WHITE, "battle_ink_plaque_20261112")
 	progress_rail.name = "DailyLoginProgressRail"
-	progress_rail.self_modulate = Color(1.0, 1.0, 1.0, 0.28)
+	progress_rail.self_modulate = Color(1.0, 1.0, 1.0, 0.36)
 	configure_guofeng_button_slice(progress_rail as TextureRect, true, 32, 0.25)
 	progress_panel.add_child(progress_rail)
 	var progress_ratio := 0.0 if progress <= 0 else clampf(float(progress) / 7.0, 0.0, 1.0)
-	var progress_fill = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, progress_ratio, 1.0), Color.WHITE, "table_gpt_backdrop_bright", 0.35)
+	var progress_fill_key := "button_face_jiangnan_active_gpt" if optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null else "battle_ink_plaque_20261112"
+	var fill_left := 0.010 if progress_ratio > 0.0 else 0.0
+	var fill_right := maxf(fill_left + 0.020, progress_ratio - 0.010) if progress_ratio > 0.0 else 0.0
+	var progress_fill = make_gpt_plate_rect(rect_full(fill_left, 0.200, minf(0.990, fill_right), 0.800), Color.WHITE, progress_fill_key)
 	progress_fill.name = "DailyLoginProgressFill"
-	progress_fill.self_modulate = Color(0.95, 1.0, 0.94, 0.96)
+	progress_fill.self_modulate = Color.WHITE
+	if progress_fill_key == "button_face_jiangnan_active_gpt":
+		configure_guofeng_button_slice(progress_fill as TextureRect, true, 96, 0.08)
+	else:
+		configure_guofeng_button_slice(progress_fill as TextureRect, true, 32, 0.25)
 	progress_fill.set_meta("progress_value", progress_ratio)
 	progress_fill.set_meta("animated_role", "daily_login_progress_flow")
 	progress_rail.add_child(progress_fill)
@@ -5790,7 +5801,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var forecast_badge_text = "已领取" if claimed_today else ("今日可领" if progress >= 7 else "还差 %d 天" % days_to_bonus)
 	var forecast_body_text = "奖励已入账，明日可继续签到" if claimed_today else ("今日可领取双倍铜钱卡" if progress >= 7 else "第7天领取双倍铜钱卡")
 	var forecast_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
-	var forecast_panel = make_gpt_plate_rect(rect_full(0.06, forecast_top, 0.94, forecast_bottom), Color.WHITE, forecast_frame_key)
+	var forecast_panel = make_gpt_plate_rect(rect_full(0.055, forecast_top, 0.945, forecast_bottom), Color.WHITE, forecast_frame_key)
 	forecast_panel.self_modulate = Color(0.98, 0.96, 0.91)
 	configure_guofeng_button_slice(forecast_panel as TextureRect, true, 104 if forecast_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if forecast_frame_key == "guofeng_card_frame_gpt" else 0.125)
 	forecast_panel.name = "DailyLoginForecastPanel"
@@ -5803,29 +5814,29 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	var forecast_title = make_label(forecast_panel, "七日奖励预告", 14, Color(0.96, 0.88, 0.58, 0.92), true)
 	forecast_title.name = "DailyLoginForecastTitle"
 	forecast_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(forecast_title, rect_full(0.035, 0.0, 0.620, 0.0))
+	apply_rect(forecast_title, rect_full(0.048, 0.0, 0.620, 0.0))
 	configure_clipped_label(forecast_title)
 	var forecast_badge = make_label(forecast_panel, forecast_badge_text, 14, Color(0.96, 0.92, 0.72, 0.92), true)
 	forecast_badge.name = "DailyLoginForecastBadge"
 	forecast_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	apply_rect(forecast_badge, rect_full(0.650, 0.0, 0.965, 0.0))
+	forecast_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	apply_rect(forecast_badge, rect_full(0.650, 0.0, 0.952, 1.0))
 	configure_clipped_label(forecast_badge)
 	set_ui_full_text(forecast_badge, forecast_badge_text, "七日奖励预告状态")
 	var forecast_body = make_label(forecast_panel, forecast_body_text, 14, Color(0.84, 0.88, 0.78, 0.90), true)
 	forecast_body.name = "DailyLoginForecastBody"
-	apply_rect(forecast_body, rect_full(0.035, 0.0, 0.965, 0.0))
+	apply_rect(forecast_body, rect_full(0.048, 0.0, 0.650, 0.0))
 	forecast_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(forecast_body)
 	set_ui_full_text(forecast_body, forecast_body_text, "七日奖励预告详情")
 	forecast_body.set_meta("forecast_state", "claimed" if claimed_today else ("claimable" if progress >= 7 else "in_progress"))
 	forecast_body.set_meta("days_to_bonus", days_to_bonus)
-	var forecast_header_height := ceilf(maxf(forecast_title.get_minimum_size().y, forecast_badge.get_minimum_size().y))
+	var forecast_header_height := ceilf(forecast_title.get_minimum_size().y)
 	var forecast_body_height := ceilf(forecast_body.get_minimum_size().y)
 	var forecast_line_gap := 2.0
 	var forecast_inset := maxf(0.0, floorf((forecast_panel.size.y - forecast_header_height - forecast_line_gap - forecast_body_height) * 0.5))
-	for header in [forecast_title, forecast_badge]:
-		header.offset_top = forecast_inset
-		header.offset_bottom = forecast_inset + forecast_header_height
+	forecast_title.offset_top = forecast_inset
+	forecast_title.offset_bottom = forecast_inset + forecast_header_height
 	forecast_body.offset_top = forecast_inset + forecast_header_height + forecast_line_gap
 	forecast_body.offset_bottom = forecast_body.offset_top + forecast_body_height
 	mark_ui_optimization(forecast_body, "F-611")
@@ -6457,8 +6468,8 @@ func show_exit_confirm() -> void:
 	var exit_viewport := effective_viewport_size()
 	var compact_exit := exit_viewport.y <= 600.0 or exit_viewport.x <= 1000.0
 	var content_size := safe_content_pixel_size()
-	var dialog_width := minf(content_size.x * 0.88, 660.0 if large_text_enabled else 620.0)
-	var dialog_height := minf(content_size.y * 0.88, 340.0 if large_text_enabled else 310.0)
+	var dialog_width := minf(content_size.x * 0.88, 620.0 if large_text_enabled else 560.0)
+	var dialog_height := minf(content_size.y * 0.88, 340.0 if large_text_enabled else 306.0)
 	var dialog_rect := rect_full(0.5 - dialog_width / content_size.x * 0.5, 0.5 - dialog_height / content_size.y * 0.5, 0.5 + dialog_width / content_size.x * 0.5, 0.5 + dialog_height / content_size.y * 0.5)
 	var dialog = make_gpt_center_crop_plate_rect(dialog_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	dialog.name = "ExitConfirmDialog"
@@ -6480,7 +6491,7 @@ func show_exit_confirm() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# 提示文本
-	var message = "是否退出当前游戏？\n进度将自动保存。"
+	var message = "是否暂离当前牌局？\n下次进入可随时续局。"
 	var msg_label = make_label(dialog, message, 16, Color(0.14, 0.24, 0.18), false)
 	apply_rect(msg_label, rect_full(0.10, 0.29, 0.90, 0.49))
 	style_guofeng_label(msg_label)
@@ -6891,18 +6902,18 @@ func _show_replay_import_screen_impl() -> void:
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var title := make_heading(panel, "回放复盘", 30, Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.055, 0.026, 0.285, 0.095))
+	apply_rect(title, rect_full(0.055, 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
 	mark_ui_optimization(title, "F-503")
-	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.24, 0.34, 0.28), false)
+	var digest_hint := make_label(panel, "校验链 · SHA-256", 12, Color(0.20, 0.30, 0.25), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	style_guofeng_label(digest_hint)
-	digest_hint.add_theme_color_override("font_color", Color(0.24, 0.34, 0.28))
+	digest_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
 	digest_hint.set_meta("preserve_semantic_color", true)
 	digest_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(digest_hint, rect_full(0.295, 0.046, 0.720, 0.092))
+	apply_rect(digest_hint, rect_full(0.215, 0.046, 0.560, 0.092))
 	configure_clipped_label(digest_hint)
 	set_ui_full_text(digest_hint, "校验链 · SHA-256", "回放完整性校验方式")
 	mark_ui_optimization(digest_hint, "F-504")
@@ -7011,10 +7022,13 @@ func _show_replay_import_screen_impl() -> void:
 	mark_ui_optimization(import_button, "F-508")
 	apply_rect(import_button, rect_full(0.755, 0.172, 0.945, 0.262))
 	panel.add_child(import_button)
-	var status := make_label(panel, "等待粘贴回放码", 14, Color(0.24, 0.34, 0.28), true)
+	var status := make_label(panel, "等待粘贴回放码", 14, Color(0.24, 0.34, 0.28), false)
 	status.name = "ReplayImportStatus"
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status.set_meta("preserve_semantic_color", true)
+	status.add_theme_constant_override("outline_size", 0)
+	status.add_theme_constant_override("shadow_offset_x", 0)
+	status.add_theme_constant_override("shadow_offset_y", 0)
 	apply_rect(status, rect_full(0.055, 0.278, 0.735, 0.330))
 	configure_clipped_label(status)
 	set_ui_full_text(status, "等待粘贴回放码", "回放导入状态：粘贴回放码后点击导入并校验")
@@ -7063,7 +7077,7 @@ func _show_replay_import_screen_impl() -> void:
 	panel.add_child(archive_pane)
 	var archive_pane_plate := add_optional_gpt_illustration_texture(archive_pane, pane_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if archive_pane_plate != null:
-		archive_pane_plate.name = "ReplayArchiveFrame"
+		archive_pane_plate.name = "ReplaySavedListFrame"
 		archive_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
 		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.11, 0.23, 0.18), true)
@@ -7118,7 +7132,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.045, 0.130, 0.955, 0.275))
+	apply_rect(search, rect_full(0.045, 0.130, 0.875 if not compact_replay_layout else 0.955, 0.275))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -7244,14 +7258,7 @@ func _show_replay_import_screen_impl() -> void:
 	for action in [paste_button, clear_button, import_button, copy_code_button]:
 		style_guofeng_secondary_action(action, action == import_button)
 	if search_clear_proxy != null:
-		search_clear_proxy.flat = true
-		var search_clear_empty := StyleBoxEmpty.new()
-		for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
-			search_clear_proxy.add_theme_stylebox_override(style_key, search_clear_empty)
-		search_clear_proxy.add_theme_color_override("icon_normal_color", Color(0.24, 0.34, 0.28, 0.86))
-		search_clear_proxy.add_theme_color_override("icon_hover_color", Color(0.58, 0.16, 0.13, 1.0))
-		search_clear_proxy.add_theme_color_override("icon_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
-		search_clear_proxy.add_theme_color_override("icon_focus_color", Color(0.11, 0.23, 0.18, 1.0))
+		style_flat_clear_proxy(search_clear_proxy)
 	configure_button_focus_navigation(panel, "ReplayImportCodeInput")
 	call_deferred("focus_named_control", "ReplayImportCodeInput")
 	render_replay_archive_list()
@@ -7699,7 +7706,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	var row_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
 	var row_plate := add_optional_gpt_illustration_texture(row, row_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if row_plate != null:
-		row_plate.name = "ReplayArchiveRowFrame"
+		row_plate.name = "ReplaySavedRowFrame"
 		row_plate.self_modulate = Color(0.99, 0.97, 0.93)
 		configure_guofeng_button_slice(row_plate, true, 96 if row_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if row_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
@@ -7729,7 +7736,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	var archive_context := "归档：" + archive_display_date_text
 	var primary := make_label(row, archive_display_date_text, 13, Color(0.92, 0.88, 0.74), true)
 	primary.name = "ReplayArchiveRowPrimary"
-	apply_rect(primary, rect_full(0.035, 0.040, 0.520, 0.260))
+	apply_rect(primary, rect_full(0.045, 0.060, 0.560, 0.270))
 	primary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(primary)
 	style_guofeng_label(primary)
@@ -7738,26 +7745,27 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	set_ui_full_text(primary, archive_date_text, "回放日期")
 	var result := make_label(row, result_label, 13, Color(0.72, 0.90, 0.68), true)
 	result.name = "ReplayArchiveRowResult"
-	apply_rect(result, rect_full(0.520, 0.040, 0.965, 0.260))
-	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(result, rect_full(0.560, 0.060, 0.955, 0.270))
+	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(result)
 	style_guofeng_label(result)
 	result.tooltip_text = result_label
 	set_ui_full_text(result, result_label, "回放结果")
 	var secondary := make_label(row, "%s · %s" % [rule_variant_short_label(str(entry.get("rule_variant", ""))), str(entry.get("replay_digest", "")).left(8).to_upper()], 12, Color(0.70, 0.80, 0.72), false)
 	secondary.name = "ReplayArchiveRowSecondary"
-	apply_rect(secondary, rect_full(0.035, 0.265, 0.965, 0.335 if delete_confirming else 0.390))
+	apply_rect(secondary, rect_full(0.045, 0.275, 0.955, 0.345 if delete_confirming else 0.405))
 	secondary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(secondary)
 	set_ui_full_text(secondary, str(entry.get("rule_variant", "")) + " · " + str(entry.get("replay_digest", "")).to_upper(), "回放规则与摘要")
-	var action_top := 0.570 if delete_confirming else 0.435
-	var action_bottom := 0.970
+	var action_top := 0.555 if delete_confirming else 0.435
+	var action_bottom := 0.915
 	var compact_archive_actions := archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
 	# The archive scrollbar reserves a 44px touch lane. Compact rows therefore
 	# use four 44px targets in the remaining content lane instead of letting the
 	# fourth target drift underneath that scrollbar.
-	var action_slot_width := 0.190 if compact_archive_actions else 0.238
-	var action_step := 0.200 if compact_archive_actions else 0.245
+	var action_left := 0.012 if compact_archive_actions else 0.032
+	var action_slot_width := 0.190 if compact_archive_actions else 0.226
+	var action_step := 0.200 if compact_archive_actions else 0.236
 	var action_min_width := 44.0 if compact_archive_actions else 58.0
 	var is_favorite := bool(entry.get("favorite", false))
 	var favorite := make_small_button("已收藏" if is_favorite else "收藏", Color(0.60, 0.48, 0.22) if is_favorite else Color(0.30, 0.48, 0.42), func() -> void:
@@ -7771,7 +7779,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	mark_ui_optimization(favorite, "F-053")
 	favorite.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	favorite.add_theme_font_size_override("font_size", accessibility_font_size(11))
-	apply_rect(favorite, rect_full(0.006, action_top, 0.006 + action_slot_width, action_bottom))
+	apply_rect(favorite, rect_full(action_left, action_top, action_left + action_slot_width, action_bottom))
 	row.add_child(favorite)
 	var open := make_small_button("打开", Color(0.34, 0.56, 0.52), func() -> void:
 		open_replay_archive(archive_id)
@@ -7784,7 +7792,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	mark_ui_optimization(open, "F-053")
 	open.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	open.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(open, rect_full(0.006 + action_step, action_top, 0.006 + action_step + action_slot_width, action_bottom))
+	apply_rect(open, rect_full(action_left + action_step, action_top, action_left + action_step + action_slot_width, action_bottom))
 	row.add_child(open)
 	var copy := make_small_button("复制", Color(0.30, 0.52, 0.54), func() -> void:
 		copy_replay_archive_share_code(archive_id)
@@ -7797,7 +7805,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	mark_ui_optimization(copy, "F-053")
 	copy.custom_minimum_size = Vector2(action_min_width, UI_MIN_TOUCH_TARGET)
 	copy.add_theme_font_size_override("font_size", accessibility_font_size(12))
-	apply_rect(copy, rect_full(0.006 + action_step * 2.0, action_top, 0.006 + action_step * 2.0 + action_slot_width, action_bottom))
+	apply_rect(copy, rect_full(action_left + action_step * 2.0, action_top, action_left + action_step * 2.0 + action_slot_width, action_bottom))
 	row.add_child(copy)
 	var delete := make_small_button("确认" if delete_confirming else "删除", Color(0.76, 0.36, 0.24) if delete_confirming else Color(0.60, 0.32, 0.26), func() -> void:
 		request_delete_replay_archive(archive_id)
@@ -7813,7 +7821,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	delete.set_meta("delete_confirmation_state", "confirm" if delete_confirming else "armed_on_second_press")
 	delete.set_meta("focus_fallback_name", "ReplayArchiveOpenButton_%s" % archive_id.left(8))
 	mark_ui_optimization(delete, "F-614")
-	apply_rect(delete, rect_full(0.006 + action_step * 3.0, action_top, 0.006 + action_step * 3.0 + action_slot_width, action_bottom))
+	apply_rect(delete, rect_full(action_left + action_step * 3.0, action_top, action_left + action_step * 3.0 + action_slot_width, action_bottom))
 	row.add_child(delete)
 	if delete_confirming:
 		# The row keeps its fixed height. The confirmation instruction owns the
@@ -7884,7 +7892,11 @@ func replay_event_line_text(event: Dictionary) -> String:
 	elif kind == "item_swap":
 		detail = " · " + tile_label(str(event.get("old_tile", ""))) + " → " + tile_label(str(event.get("new_tile", "")))
 	elif kind == "claim":
-		detail = " · " + claim_display_label(str(event.get("claim", "")))
+		var claim_seat := int(event.get("seat", -1))
+		if claim_seat >= 0 and claim_seat < 4:
+			detail = " · %s家" % seat_wind_label(claim_seat)
+		else:
+			detail = ""
 	elif kind == "win":
 		detail = " · " + str(event.get("points", 0)) + "分"
 	return "%03d  %s%s" % [sequence, display_kind, detail]
