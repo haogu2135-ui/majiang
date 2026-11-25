@@ -7647,7 +7647,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if not compact_replay_layout else 0.935))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:

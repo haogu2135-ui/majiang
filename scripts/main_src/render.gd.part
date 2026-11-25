@@ -532,10 +532,12 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		text_color = Color(0.90, 0.92, 0.86)
 		on_ink = true
 	elif role == "chi" and not focused:
-		text_color = Color(0.24, 0.14, 0.05)
+		text_color = Color(0.32, 0.16, 0.04)
+		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
 	elif role == "pass" and not focused:
-		text_color = Color(0.19, 0.25, 0.22)
+		text_color = Color(0.24, 0.30, 0.28)
+		button.add_theme_font_override("font", ui_cjk_font())
 		on_ink = false
 	elif group == "tools" and not focused:
 		text_color = Color(0.99, 0.95, 0.82)
@@ -1396,7 +1398,8 @@ func draw_actions(parent: Control) -> void:
 				if net_face != null and utility_plaque != null:
 					net_face.texture = utility_plaque
 					configure_guofeng_button_slice(net_face, true, 32, 0.25)
-					net_face.self_modulate = Color(0.20, 0.34, 0.28, 0.92)
+					net_face.modulate = Color.WHITE
+					net_face.self_modulate = Color.WHITE
 					network_menu_button.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
 				sync_action_button_focus_art(network_menu_button, network_menu_button.has_focus())
 				pending_claim_network_lane.add_child(network_menu_button)
@@ -1412,12 +1415,17 @@ func draw_actions(parent: Control) -> void:
 				voice.set_meta("pending_lane", "voice")
 				voice.set_meta("pending_utility_button", true)
 				var voice_face := voice.get_node_or_null("GptButtonFacePlate") as TextureRect
-				var utility_voice_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+				var utility_voice_key := "button_face_danger_cinnabar_gpt" if voice_enabled else "battle_ink_plaque_20261112"
+				var utility_voice_plaque := optional_gpt_illustration_texture(utility_voice_key)
 				if voice_face != null and utility_voice_plaque != null:
 					voice_face.texture = utility_voice_plaque
-					configure_guofeng_button_slice(voice_face, true, 32, 0.25)
-					voice_face.self_modulate = Color(0.56, 0.20, 0.16, 0.94) if voice_enabled else Color(0.20, 0.34, 0.28, 0.92)
-					voice.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
+					if utility_voice_key == "battle_ink_plaque_20261112":
+						configure_guofeng_button_slice(voice_face, true, 32, 0.25)
+					else:
+						configure_guofeng_button_slice(voice_face, true, 96, 0.125, utility_voice_plaque, false)
+					voice_face.modulate = Color.WHITE
+					voice_face.self_modulate = Color.WHITE
+					voice.set_meta("guofeng_button_face_key", utility_voice_key)
 				sync_action_button_focus_art(voice, voice.has_focus())
 				pending_claim_voice_lane.add_child(voice)
 			else:
@@ -20525,12 +20533,7 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 				action_face.texture = face_source
 				configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
 			action_face.modulate = Color.WHITE
-			if role == "chi":
-				action_face.self_modulate = Color(1.00, 0.91, 0.70)
-			elif role == "pass":
-				action_face.self_modulate = Color(0.84, 0.86, 0.84)
-			else:
-				action_face.self_modulate = Color.WHITE
+			action_face.self_modulate = Color.WHITE
 			button.set_meta("guofeng_button_face_key", face_key)
 	if is_cinnabar_role:
 		var danger_text_color := Color(0.99, 0.95, 0.84) if has_cinnabar else Color(0.62, 0.16, 0.13)

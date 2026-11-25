@@ -1471,8 +1471,8 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			allow = false
 			reason = "序盘蓄力"
 			declined_by_opening = true
-	if allow and exposed_melds == 0 and claim == "chi" and after_shanten >= 2 and after_shanten >= before_shanten and claim_diff == AI_DIFFICULTY_HARD and own_flowers == 0 and before_plan_label == "标准" and after_plan_label_now == "标准" and claim_wall_count >= wall_phase_threshold(44):
-		# 困难档早中盘不以脏吃破坏门清（保留+1番与后盘防守手牌厚度）。
+	if allow and exposed_melds == 0 and claim == "chi" and after_shanten >= 2 and after_shanten >= before_shanten and shape_gain < threshold + 10.0 and claim_diff == AI_DIFFICULTY_HARD and own_flowers == 0 and before_plan_label == "标准" and after_plan_label_now == "标准" and claim_wall_count >= wall_phase_threshold(44):
+		# 困难档早中盘不以低收益脏吃破坏门清（保留+1番与后盘防守手牌厚度）。
 		allow = false
 		reason = "保门清"
 		declined_by_opening = true
@@ -1676,13 +1676,13 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 			decline = forced_risk >= risk_limit or pressure >= pressure_limit
 	if not decline and claim != "gang" and after_shanten >= 1:
 		var claim_diff_now: int = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
-		if claim_diff_now != AI_DIFFICULTY_EASY:
+		if claim_diff_now == AI_DIFFICULTY_HARD:
 			var claim_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
 			var claim_multi: bool = bool(pressure_context.get("multi_threat", false))
-			# 未达听牌时，绝不为加速副露而被迫直切无依据高危张（>=31）点炮。
+			# 困难档未达听牌时，绝不为加速副露而被迫直切无依据高危张（>=31）点炮。
 			if forced_safety == "" and forced_risk >= AI_DANGER_RISK_HIGH and (claim_readiness >= 9.5 or claim_multi or defense >= 1.45):
 				decline = true
-			elif after_shanten >= 2 and claim_diff_now == AI_DIFFICULTY_HARD and claim_multi and forced_safety == "" and forced_risk >= 26.0:
+			elif after_shanten >= 2 and claim_multi and forced_safety == "" and forced_risk >= 26.0:
 				var ctx_exposed: int = int(claim_context.get("exposed_melds", -1)) if is_ai_claim_context_for_seat(claim_context, seat) else -1
 				if ctx_exposed < 0:
 					ctx_exposed = exposed_meld_count_for_seat(seat)
@@ -3384,10 +3384,10 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		if rejection_reason.is_empty() and shanten_delta > 0:
 			var cand_safety_lbl: String = str(candidate.get("safety_label", ""))
 			var severe_table_one_away_fold: bool = best_shanten == 1 \
-				and best_risk >= AI_DANGER_RISK_HIGH + 15.0 \
-				and (cand_safety_lbl == "安" or cand_safety_lbl == "现") \
-				and float(candidate.get("risk", 0.0)) <= 10.0 \
-				and pressure_gain >= 28.0
+				and best_risk >= AI_DANGER_RISK_HIGH + 11.0 \
+				and (cand_safety_lbl == "安" or cand_safety_lbl == "现" or cand_safety_lbl == "熟") \
+				and float(candidate.get("risk", 0.0)) <= 14.0 \
+				and pressure_gain >= 24.0
 			if best_human_pressure < 18.0 and not catastrophe_tenpai and not human_exposure_tenpai and not severe_table_one_away_fold:
 				rejection_reason = "human_pressure_gate"
 			elif not severe_table_one_away_fold:
@@ -3946,9 +3946,9 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	if rule_min_fan() >= 3 and plan_label != "标准":
 		# 高起胡番规则（如广东3番起胡）：强化大牌路线权重，尽早向可起胡番型靠拢；已副露更需锁死达标番型。
 		effective_route_focus *= 1.45 if exposed_melds >= 1 else 1.35
-	elif rule_min_fan() <= 1 and shanten <= 1 and report_wall_count <= wall_phase_threshold(24):
-		# 残墙末盘（低起胡番规则）：近听/听牌阶段适度淡化慢路线，果断转向速听保和或查听。
-		effective_route_focus *= 0.65
+	elif diff_idx == AI_DIFFICULTY_HARD and rule_min_fan() <= 1 and shanten == 1 and risk < AI_DANGER_RISK_SOFT and report_wall_count <= wall_phase_threshold(24):
+		# 困难档残墙末盘（低起胡番规则）：安全张前提下适度淡化慢路线，果断转向速听。
+		effective_route_focus *= 0.72
 	var ruleset_shape_adj: float = 0.0
 	if not rule_allows_chi() and shanten >= 1:
 		# 四川等无吃牌规则：对子与刻子是唯一提速途径，提高留对/留刻牌形权重。
@@ -4013,19 +4013,19 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				danger_pen *= 0.72
 		if risk >= AI_DANGER_RISK_HIGH:
 			danger_pen += 28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0
-		# 中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张炮弹」与「两见幺九/字牌」（高危张>=31不予减免）。
-		if safety == "" and risk >= 20.0 and diff_idx >= AI_DIFFICULTY_NORMAL and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
+		# 困难档中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张炮弹」与「两见幺九/字牌」（高危张>=31不予减免）。
+		if safety == "" and risk >= 20.0 and diff_idx == AI_DIFFICULTY_HARD and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
 			var tile_vis: int = int(risk_vector.get("visible", -1))
 			if tile_vis == 0:
 				var is_mid_num: bool = candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and (candidate_tile_index_snapshot % 9) >= 2 and (candidate_tile_index_snapshot % 9) <= 6
 				if is_mid_num:
-					danger_pen += 20.0 if diff_idx == AI_DIFFICULTY_HARD else 8.0
+					danger_pen += 22.0
 				else:
-					danger_pen += 9.0 if diff_idx == AI_DIFFICULTY_HARD else 4.0
+					danger_pen += 10.0
 			elif tile_vis >= 2 and risk < AI_DANGER_RISK_HIGH:
 				var is_term_or_hon: bool = candidate_tile_index_snapshot >= 27 or (candidate_tile_index_snapshot >= 0 and candidate_tile_index_snapshot < 27 and ((candidate_tile_index_snapshot % 9) == 0 or (candidate_tile_index_snapshot % 9) == 8))
 				if is_term_or_hon:
-					danger_pen = maxf(0.0, danger_pen - (6.0 if diff_idx == AI_DIFFICULTY_HARD else 3.0))
+					danger_pen = maxf(0.0, danger_pen - 6.0)
 		score -= danger_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure, diff_idx)
@@ -4802,12 +4802,12 @@ func tenpai_fold_adjustment(seat: int, shanten: int, ukeire: int, wait_best_poin
 	var raw_attack := float(ai_profile_source(seat).get("attack", 1.0))
 	var strength_cut: float = (0.56 if multi_threat else 0.62) - clampf((raw_attack - 1.0) * 0.14, -0.06, 0.08)
 	if fold_diff_check == AI_DIFFICULTY_HARD:
-		if shanten == 1 and risk >= AI_DANGER_RISK_HIGH + 4.0:
-			# 困难档面对重危张（>=35）时，未听牌的一向听除非极厚强牌，否则纳入弃攻权衡。
-			strength_cut = maxf(strength_cut, 0.74)
-		elif shanten == 0 and wait_best_points > 0 and wait_best_points <= score_points_for_fan(2) and risk >= AI_DANGER_RISK_HIGH + 7.0 and (readiness >= 10.5 or threat_rank >= 2 or multi_threat):
-			# 困难档廉价低番听牌面对极端危张（>=38）与强压时，允许评估转守。
-			strength_cut = maxf(strength_cut, 0.74)
+		if shanten == 1 and risk >= AI_DANGER_RISK_HIGH:
+			# 困难档面对高危张（>=31）时，未听牌的一向听除非极厚强牌，否则必须纳入弃攻权衡。
+			strength_cut = maxf(strength_cut, 0.82)
+		elif shanten == 0 and wait_best_points > 0 and wait_best_points <= score_points_for_fan(2) and risk >= AI_DANGER_RISK_HIGH + 5.0 and (readiness >= 10.5 or threat_rank >= 2 or multi_threat):
+			# 困难档廉价低番听牌面对高危炸弹张（>=36）与近听/副露强压时，允许评估转守。
+			strength_cut = maxf(strength_cut, 0.78)
 	if own_strength >= strength_cut:
 		return 0.0
 	var weakness = clamp(1.0 - own_strength, 0.0, 1.0)
@@ -4889,10 +4889,10 @@ func wall_draw_tenpai_preservation_adjustment(seat: int, shanten: int, ukeire: i
 		diff = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 	var diff_scale = 0.72 if diff == AI_DIFFICULTY_EASY else (1.18 if diff == AI_DIFFICULTY_HARD else 1.0)
 	if shanten <= 0:
-		# 已听：安全/中低危张保住查听收入；若需直切高危张（>=31），压低保听权重避免赔大炮保小罚。
+		# 已听：安全/中低危张保住查听收入；困难档面对高危张（>=31）压低保听权重避免赔大炮保小罚。
 		var tenpai_keep: float = (52.0 + ba * 0.028) * urgency * diff_scale
-		if risk >= AI_DANGER_RISK_HIGH and diff != AI_DIFFICULTY_EASY:
-			tenpai_keep *= 0.35 if diff == AI_DIFFICULTY_HARD else 0.65
+		if risk >= AI_DANGER_RISK_HIGH and diff == AI_DIFFICULTY_HARD:
+			tenpai_keep *= 0.30
 		return tenpai_keep
 	if shanten == 1:
 		# 一向听：极残墙（<=16张）面对高危张不再追加追听奖励。
@@ -13619,10 +13619,12 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		text_color = Color(0.90, 0.92, 0.86)
 		on_ink = true
 	elif role == "chi" and not focused:
-		text_color = Color(0.24, 0.14, 0.05)
+		text_color = Color(0.32, 0.16, 0.04)
+		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
 	elif role == "pass" and not focused:
-		text_color = Color(0.19, 0.25, 0.22)
+		text_color = Color(0.24, 0.30, 0.28)
+		button.add_theme_font_override("font", ui_cjk_font())
 		on_ink = false
 	elif group == "tools" and not focused:
 		text_color = Color(0.99, 0.95, 0.82)
@@ -14483,7 +14485,8 @@ func draw_actions(parent: Control) -> void:
 				if net_face != null and utility_plaque != null:
 					net_face.texture = utility_plaque
 					configure_guofeng_button_slice(net_face, true, 32, 0.25)
-					net_face.self_modulate = Color(0.20, 0.34, 0.28, 0.92)
+					net_face.modulate = Color.WHITE
+					net_face.self_modulate = Color.WHITE
 					network_menu_button.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
 				sync_action_button_focus_art(network_menu_button, network_menu_button.has_focus())
 				pending_claim_network_lane.add_child(network_menu_button)
@@ -14499,12 +14502,17 @@ func draw_actions(parent: Control) -> void:
 				voice.set_meta("pending_lane", "voice")
 				voice.set_meta("pending_utility_button", true)
 				var voice_face := voice.get_node_or_null("GptButtonFacePlate") as TextureRect
-				var utility_voice_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+				var utility_voice_key := "button_face_danger_cinnabar_gpt" if voice_enabled else "battle_ink_plaque_20261112"
+				var utility_voice_plaque := optional_gpt_illustration_texture(utility_voice_key)
 				if voice_face != null and utility_voice_plaque != null:
 					voice_face.texture = utility_voice_plaque
-					configure_guofeng_button_slice(voice_face, true, 32, 0.25)
-					voice_face.self_modulate = Color(0.56, 0.20, 0.16, 0.94) if voice_enabled else Color(0.20, 0.34, 0.28, 0.92)
-					voice.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
+					if utility_voice_key == "battle_ink_plaque_20261112":
+						configure_guofeng_button_slice(voice_face, true, 32, 0.25)
+					else:
+						configure_guofeng_button_slice(voice_face, true, 96, 0.125, utility_voice_plaque, false)
+					voice_face.modulate = Color.WHITE
+					voice_face.self_modulate = Color.WHITE
+					voice.set_meta("guofeng_button_face_key", utility_voice_key)
 				sync_action_button_focus_art(voice, voice.has_focus())
 				pending_claim_voice_lane.add_child(voice)
 			else:
@@ -15689,7 +15697,7 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("wind_label_content_size_snapshot", center_content_size)
 	center.set_meta("wind_label_content_size_snapshot_policy", "one_content_size_snapshot_per_wind_label_pass")
 	var center_current_seat := get_current_seat()
-	var wind_font_size := 20 if wide_center else (15 if compact_center else 17)
+	var wind_font_size := 15 if compact_center else 17
 	var center_resolved_table_px := game_table_pixel_size()
 	var center_resolved_height_px := maxf(center.size.y, center_resolved_table_px.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y))
 	for i in range(4):
@@ -33612,12 +33620,7 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 				action_face.texture = face_source
 				configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
 			action_face.modulate = Color.WHITE
-			if role == "chi":
-				action_face.self_modulate = Color(1.00, 0.91, 0.70)
-			elif role == "pass":
-				action_face.self_modulate = Color(0.84, 0.86, 0.84)
-			else:
-				action_face.self_modulate = Color.WHITE
+			action_face.self_modulate = Color.WHITE
 			button.set_meta("guofeng_button_face_key", face_key)
 	if is_cinnabar_role:
 		var danger_text_color := Color(0.99, 0.95, 0.84) if has_cinnabar else Color(0.62, 0.16, 0.13)
@@ -44459,7 +44462,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if not compact_replay_layout else 0.935))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
