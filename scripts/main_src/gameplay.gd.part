@@ -1934,6 +1934,8 @@ func render_game(state_changed: bool = false) -> void:
 	retain_battle_table_surface_for_render()
 	retain_battle_chat_action_button_for_render()
 	retain_battle_round_summary_for_render()
+	var reopen_exit_confirm := exit_confirm_panel != null and is_instance_valid(exit_confirm_panel) and not exit_confirm_panel.is_queued_for_deletion()
+	var saved_exit_restore_id := exit_confirm_focus_restore_id
 	clear_screen()
 	# 延迟AI辅助计算，优先渲染关键UI. Keep a same-hand snapshot mounted until
 	# the next evaluation commits, avoiding an empty advice frame during HUD-only
@@ -2006,6 +2008,10 @@ func render_game(state_changed: bool = false) -> void:
 		call_deferred("update_ai_assistance_async")
 	draw_settings_overlay(root_layer)
 	ensure_update_dialog()
+	if reopen_exit_confirm and mode == "offline":
+		exit_confirm_panel = null
+		show_exit_confirm()
+		exit_confirm_focus_restore_id = saved_exit_restore_id
 	# Contract registration belongs to the mounted root generation. Partial lane
 	# updates never enter this path, so they do not rescan the page tree.
 	var contract_generation_key := "%d|%d" % [ui_page_generation, int(root_layer.get_meta("ui_contract_structure_revision", 0))]

@@ -7659,7 +7659,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	var row_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
 	var row_plate := add_optional_gpt_illustration_texture(row, row_frame_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if row_plate != null:
-		row_plate.name = "ReplayArchiveRowPlate"
+		row_plate.name = "ReplayArchiveRowFrame"
 		row_plate.self_modulate = Color(0.99, 0.97, 0.93)
 		configure_guofeng_button_slice(row_plate, true, 96 if row_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if row_frame_key == "button_face_jiangnan_gpt" else 0.22)
 	# Keep metadata and a compact 44px action lane in one scan-friendly row. The
