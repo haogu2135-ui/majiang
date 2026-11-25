@@ -655,6 +655,12 @@ func telemetry_permission_summary_text() -> String:
 	return "数据收集：%s · 本地队列 %d 条" % [permission, telemetry_outbox.size()]
 
 
+func telemetry_recent_action_display_text() -> String:
+	if telemetry_last_action == "尚未操作" and telemetry_consent_decided and not telemetry_consent:
+		return "已关闭记录并清空本地队列"
+	return telemetry_last_action
+
+
 func toggle_telemetry_consent() -> void:
 	if telemetry_mutation_in_flight:
 		return

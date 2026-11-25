@@ -480,15 +480,15 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 	var shortcut_hint := str(button.get_meta("action_shortcut", ""))
 	var shortcut_label: Label = null
 	if shortcut_hint != "":
-		shortcut_label = make_label(art, shortcut_hint, 8, Color.WHITE, false)
+		shortcut_label = make_label(art, shortcut_hint, 10, Color.WHITE, true)
 		shortcut_label.name = "ActionButtonShortcutHint"
-		shortcut_label.add_theme_font_size_override("font_size", 10 if large_text_enabled else 8)
+		shortcut_label.add_theme_font_size_override("font_size", 11 if large_text_enabled else 10)
 		shortcut_label.tooltip_text = "快捷键 %s" % shortcut_hint
 		shortcut_label.set_meta("accessible_name", "快捷键：" + shortcut_hint)
 		shortcut_label.set_meta("ui_shortcut_hint", shortcut_hint)
-		apply_rect(shortcut_label, rect_full(0.440, 0.045, 0.865, 0.300))
+		apply_rect(shortcut_label, rect_full(0.420, 0.035, 0.890, 0.320))
 		shortcut_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		shortcut_label.modulate = Color(1.0, 1.0, 1.0, 0.80)
+		shortcut_label.modulate = Color.WHITE
 	var focus_marker := make_label(art, "•", 14, Color.WHITE, false)
 	focus_marker.name = "ActionButtonFocusMarker"
 	focus_marker.add_theme_font_size_override("font_size", 14)
@@ -558,8 +558,12 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var shortcut_label := button.find_child("ActionButtonShortcutHint", true, false) as Label
 	if shortcut_label != null:
 		style_guofeng_label(shortcut_label, on_ink)
-		if is_danger and not focused and not has_cinnabar_face:
-			shortcut_label.add_theme_color_override("font_color", Color(0.62, 0.16, 0.13))
+		if on_ink:
+			shortcut_label.add_theme_color_override("font_color", Color(0.99, 0.94, 0.78, 1.0))
+		elif is_danger and not focused and not has_cinnabar_face:
+			shortcut_label.add_theme_color_override("font_color", Color(0.62, 0.16, 0.13, 1.0))
+		else:
+			shortcut_label.add_theme_color_override("font_color", Color(0.16, 0.28, 0.22, 1.0))
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		button.add_theme_color_override(state, text_color)
 	if group != "" and not is_danger:
@@ -1885,11 +1889,12 @@ func refresh_advisor_detail_hero_card(hero: Control) -> void:
 	for child in hero.get_children():
 		if str(child.name) != "AdvisorDetailHeroFrame":
 			child.queue_free()
+	var compact_hero := effective_viewport_size().y <= 560.0 or large_text_enabled
 	var vbox := VBoxContainer.new()
 	vbox.name = "AdvisorDetailHeroBody"
 	configure_passive_container(vbox)
-	apply_rect(vbox, rect_full(0.07, 0.06, 0.93, 0.94))
-	vbox.add_theme_constant_override("separation", 6)
+	apply_rect(vbox, rect_full(0.06, 0.04, 0.94, 0.96) if compact_hero else rect_full(0.07, 0.06, 0.93, 0.94))
+	vbox.add_theme_constant_override("separation", 2 if compact_hero else 6)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hero.add_child(vbox)
 	if can_self_discard():
@@ -1903,46 +1908,53 @@ func refresh_advisor_detail_hero_card(hero: Control) -> void:
 			tile_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			vbox.add_child(tile_holder)
 			if best_tile != "":
-				var mini_tile := make_tile_view(best_tile, Vector2(46, 64), false, Callable(), false)
+				var mini_tile_size := Vector2(34, 48) if compact_hero else Vector2(46, 64)
+				var mini_tile := make_tile_view(best_tile, mini_tile_size, false, Callable(), false)
 				mini_tile.name = "AdvisorDetailHeroTile"
 				mini_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				mini_tile.focus_mode = Control.FOCUS_NONE
 				tile_holder.add_child(mini_tile)
-			var headline := make_label(vbox, "推荐打 %s" % tile_label(best_tile), 15, Color.WHITE, true)
+			var headline := make_label(vbox, "推荐打 %s" % tile_label(best_tile), 13 if compact_hero else 15, Color.WHITE, true)
 			headline.name = "AdvisorDetailHeroHeadline"
 			headline.add_theme_font_override("font", ui_heading_font())
 			headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			style_guofeng_label(headline)
+			configure_clipped_label(headline)
 			var shanten_num := int(best.get("shanten", 8))
 			var shanten_copy := shanten_label(shanten_num) + (" · 仅自摸" if bool(best.get("wait_discard_furiten", false)) else "")
-			var shanten_lbl := make_label(vbox, shanten_copy, 12, Color.WHITE, false)
+			var shanten_lbl := make_label(vbox, shanten_copy, 10 if compact_hero else 12, Color.WHITE, false)
 			shanten_lbl.name = "AdvisorDetailHeroShanten"
 			shanten_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			style_guofeng_label(shanten_lbl)
+			configure_clipped_label(shanten_lbl)
 			var draw_copy := "待牌 %d张 / %d种" % [int(best.get("wait_total_remaining", best.get("ukeire", 0))), int(best.get("variety", 0))] if shanten_num == 0 else "进张 %d张 / %d种" % [int(best.get("ukeire", 0)), int(best.get("variety", 0))]
-			var draw_lbl := make_label(vbox, draw_copy, 12, Color.WHITE, false)
+			var draw_lbl := make_label(vbox, draw_copy, 10 if compact_hero else 12, Color.WHITE, false)
 			draw_lbl.name = "AdvisorDetailHeroDraws"
 			draw_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			style_guofeng_label(draw_lbl)
+			configure_clipped_label(draw_lbl)
 			var safety_text := advisor_readable_safety_text(best)
-			var safety_lbl := make_label(vbox, safety_text, 12, Color.WHITE, true)
+			var safety_lbl := make_label(vbox, safety_text, 10 if compact_hero else 12, Color.WHITE, true)
 			safety_lbl.name = "AdvisorDetailHeroSafety"
 			safety_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			style_guofeng_label(safety_lbl)
+			configure_clipped_label(safety_lbl)
 			if safety_text.contains("高"):
 				safety_lbl.add_theme_color_override("font_color", Color(0.58, 0.14, 0.11))
 			elif safety_text.contains("安全") or safety_text.contains("低"):
 				safety_lbl.add_theme_color_override("font_color", Color(0.09, 0.28, 0.21))
 			return
-	var idle_title := make_label(vbox, "观局分析" if offline_phase != "pending_claim" else "响应决策", 15, Color.WHITE, true)
+	var idle_title := make_label(vbox, "观局分析" if offline_phase != "pending_claim" else "响应决策", 13 if compact_hero else 15, Color.WHITE, true)
 	idle_title.name = "AdvisorDetailHeroIdleTitle"
 	idle_title.add_theme_font_override("font", ui_heading_font())
 	idle_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(idle_title)
-	var idle_sub := make_label(vbox, "余牌 %d 张" % get_wall_count(), 12, Color.WHITE, false)
+	configure_clipped_label(idle_title)
+	var idle_sub := make_label(vbox, "余牌 %d 张" % get_wall_count(), 10 if compact_hero else 12, Color.WHITE, false)
 	idle_sub.name = "AdvisorDetailHeroIdleSub"
 	idle_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(idle_sub)
+	configure_clipped_label(idle_sub)
 
 
 func draw_advisor_detail_panel(parent: Control) -> void:
@@ -1958,7 +1970,8 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	backdrop_scrim.name = "AdvisorDetailBackdropScrim"
 	input_shield.add_child(backdrop_scrim)
 	parent.add_child(input_shield)
-	var panel := make_layout_host(rect_full(0.100, 0.125, 0.900, 0.625))
+	var compact_detail := effective_viewport_size().y <= 560.0 or large_text_enabled
+	var panel := make_layout_host(rect_full(0.090, 0.105, 0.910, 0.665) if compact_detail else rect_full(0.100, 0.125, 0.900, 0.625))
 	panel.name = "AdvisorDetailPanel"
 	panel.z_index = 69
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -2050,6 +2063,7 @@ func draw_advisor_detail_panel(parent: Control) -> void:
 	var body_top := header_bottom + 10.0
 	var hero_card := make_layout_host(rect_full(0.04, 0.0, 0.27, 1.0))
 	hero_card.name = "AdvisorDetailHeroCard"
+	hero_card.clip_contents = true
 	hero_card.offset_top = body_top
 	hero_card.offset_bottom = -34.0
 	panel.add_child(hero_card)
@@ -2406,33 +2420,33 @@ func draw_center(parent: Control) -> void:
 	style_guofeng_label(wall_label, true)
 	wall_label.add_theme_font_override("font", ui_heading_font())
 	if compact_center:
-		wall_label.add_theme_font_size_override("font_size", 11)
+		wall_label.add_theme_font_size_override("font_size", 10)
 	wall_label.add_theme_color_override("font_color", Color(0.96, 0.92, 0.80, 1.0))
 	wall_label.name = "CenterWallStatusLabel"
 	wall_label.set_meta("layout_role", "center_wall_status")
 	wall_label.set_meta("content_slot", "wall_label")
 	wall_label.tooltip_text = str(center_wall_model.get("tooltip", ""))
-	apply_rect(wall_label, rect_full(0.28, 0.220, 0.72, 0.355) if compact_center else CENTER_WALL_LABEL_RECT)
+	apply_rect(wall_label, rect_full(0.28, 0.190, 0.72, 0.320) if compact_center else CENTER_WALL_LABEL_RECT)
 	wall_label.anchor_bottom = wall_label.anchor_top
 	wall_label.offset_bottom = wall_label.get_combined_minimum_size().y
 	var wide_center := center_viewport_size.x >= 1600.0 and center_viewport_size.y >= 900.0
-	var wall_count_font_size := 24 if wide_center else (18 if compact_center else (19 if large_text_enabled else 22))
+	var wall_count_font_size := 24 if wide_center else (16 if compact_center else (19 if large_text_enabled else 22))
 	var wall_text = make_label(center, "%d" % center_wall_count, wall_count_font_size, Color(0.99, 0.94, 0.80), true)
 	style_guofeng_label(wall_text, true)
 	wall_text.add_theme_font_override("font", ui_heading_font())
 	if compact_center:
 		# This small instrument has a fixed pixel budget even in large text mode.
 		# Keep its number readable and reserve actual glyph height below the caption.
-		wall_text.add_theme_font_size_override("font_size", 18)
+		wall_text.add_theme_font_size_override("font_size", 16)
 	var wall_num_color := Color(1.0, 0.45, 0.32) if center_wall_low else Color(0.99, 0.94, 0.80)
 	wall_text.add_theme_color_override("font_color", wall_num_color)
 	set_ui_full_text(wall_text, "牌墙剩余 %d/%d 张" % [center_wall_count, center_wall_total], "牌墙剩余数量")
 	wall_text.name = "CenterWallCount"
 	wall_text.set_meta("layout_role", "center_wall_count")
 	wall_text.set_meta("wall_view_token", "%d/%d" % [center_wall_count, center_wall_total])
-	apply_rect(wall_text, rect_full(0.30, 0.400, 0.70, 0.635) if compact_center else CENTER_WALL_COUNT_RECT)
+	apply_rect(wall_text, rect_full(0.30, 0.360, 0.70, 0.590) if compact_center else CENTER_WALL_COUNT_RECT)
 	wall_text.anchor_top = wall_label.anchor_top
-	wall_text.offset_top = wall_label.get_combined_minimum_size().y + 2.0
+	wall_text.offset_top = wall_label.get_combined_minimum_size().y + (1.0 if compact_center else 2.0)
 	wall_text.anchor_bottom = wall_text.anchor_top
 	wall_text.offset_bottom = wall_text.offset_top + wall_text.get_combined_minimum_size().y
 
@@ -2455,9 +2469,9 @@ func draw_center(parent: Control) -> void:
 		set_ui_full_text(last_label, last_label_text, str(last_discard_model.get("accessible_text", last_label_text)))
 		fit_label_font_size(last_label, maxf(72.0, center_content_size.x * 0.105), 12, 9)
 		mark_ui_optimization(last_label, "F-041")
-		apply_rect(last_label, rect_full(0.25, 0.650, 0.75, 0.770) if compact_center else CENTER_LAST_LABEL_RECT)
+		apply_rect(last_label, rect_full(0.25, 0.600, 0.75, 0.730) if compact_center else CENTER_LAST_LABEL_RECT)
 		last_label.anchor_top = wall_text.anchor_bottom
-		last_label.offset_top = wall_text.offset_bottom + 2.0
+		last_label.offset_top = wall_text.offset_bottom + (1.0 if compact_center else 2.0)
 		last_label.anchor_bottom = last_label.anchor_top
 		last_label.offset_bottom = last_label.offset_top + last_label.get_combined_minimum_size().y
 
@@ -2501,7 +2515,7 @@ func draw_center(parent: Control) -> void:
 			tile.visible = false
 			var compact_discard_label := "上·%s" % str(last_discard_model.get("tile_label", ""))
 			last_label.text = compact_discard_label
-			var compact_label_font_size := clampi(roundi(center_size_px.x * 0.068), 11, 13)
+			var compact_label_font_size := clampi(roundi(center_size_px.x * 0.064), 10, 12)
 			last_label.add_theme_font_size_override("font_size", compact_label_font_size)
 			set_ui_full_text(last_label, compact_discard_label, str(last_discard_model.get("accessible_text", compact_discard_label)) + "；牌面请看牌河")
 			center.set_meta("center_last_discard_fallback", "tile_identity_in_latest_discard_label")
@@ -11334,6 +11348,12 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		ensure_button_gpt_face_plate(archive_button, Color.WHITE, "menu_ink_primary")
 		archive_button.name = "DiscardRiverArchiveButton_%d" % seat
 		apply_guofeng_button_face(archive_button, true)
+		var archive_face := archive_button.get_node_or_null("GptButtonFacePlate") as TextureRect
+		var archive_plaque_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+		if archive_face != null and archive_plaque_tex != null:
+			archive_face.texture = archive_plaque_tex
+			configure_guofeng_button_slice(archive_face, true, 32, 0.25)
+			archive_face.self_modulate = Color.WHITE
 		archive_button.text = discard_archive_button_text(discard_count, visible_start, visible_capacity)
 		archive_button.z_index = 12
 		archive_button.custom_minimum_size = Vector2(44, 44)
@@ -11423,7 +11443,10 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			archive_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 			var gutter_height := maxf(UI_MIN_TOUCH_TARGET, archive_height) if seat == 1 else UI_MIN_TOUCH_TARGET
 			archive_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, gutter_height)
-			var gutter_top := tile_bottom + 4.0
+			var gutter_top := tile_bottom + 7.0
+			var bottom_river_local_top := (seat_discard_rect(0, parent.size).position.y - zone_rect.position.y) * parent.size.y
+			if bottom_river_local_top > 0.0 and gutter_top + gutter_height > bottom_river_local_top - 4.0:
+				gutter_top = maxf(tile_bottom + 4.0, bottom_river_local_top - 4.0 - gutter_height)
 			# The right history control shares the corner with the top pager and
 			# response dock. A compact target leaves a horizontal gap beside the
 			# top pager instead of pushing the whole control into the action rows.
@@ -12350,7 +12373,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.set_meta("viewport_snapshot_policy", "one_snapshot_per_hud_build")
 	var compact_top_hud := hud_viewport_snapshot.x <= 960.0 or hud_viewport_snapshot.y <= 560.0
 	var room_code := str(online_game.get("roomCode", selected_room))
-	var title_text = ("第%d局 · 庄%s" if compact_top_hud or large_text_enabled else "修炼场 · 第%d局 · 庄%s") % [offline_hand_number, dealer_wind] if mode == "offline" else "房间 " + online_room_code_summary(room_code)
+	var title_text = ("第%d局" if compact_top_hud or large_text_enabled else "修炼场 · 第%d局") % offline_hand_number if mode == "offline" else "房间 " + online_room_code_summary(room_code)
 	var title_rect := TOP_HUD_TITLE_RECT
 	var status_rect := TOP_HUD_STATUS_RECT
 	var wall_rect := TOP_HUD_WALL_RECT
@@ -12497,9 +12520,11 @@ func draw_game_top_hud(parent: Control) -> void:
 	wall.set_meta("header_lane_owner", "TopHudWallText")
 	wall.set_meta("score_action_clearance_px", 8.0)
 	mark_ui_optimization(wall, "F-255")
-	var wall_state = make_label(hud, "状态 · %s · 上张%s" % [hud_wall_state.replace("牌墙", ""), hud_last_discard_text], 10, Color(0.14, 0.24, 0.17), false)
+	var wall_state_short := hud_wall_state.replace("牌墙", "")
+	var wall_state_copy := ("%s · 上%s" % [wall_state_short, hud_last_discard_text]) if compact_top_hud else ("状态 · %s · 上张%s" % [wall_state_short, hud_last_discard_text])
+	var wall_state = make_label(hud, wall_state_copy, 10, Color(0.14, 0.24, 0.17), false)
 	if compact_wall_count:
-		wall_state.text = "余牌 · %s" % hud_wall_state.replace("牌墙", "")
+		wall_state.text = "余牌 · %s" % wall_state_short
 	style_guofeng_label(wall_state)
 	wall_state.add_theme_font_override("font", ui_heading_font())
 	wall_state.add_theme_color_override("font_color", Color(0.55, 0.17, 0.10, 1.0) if wall_is_low(hud_wall_count) else Color(0.20, 0.28, 0.23, 1.0))
@@ -12737,7 +12762,8 @@ func draw_hand(parent: Control) -> void:
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
 		var hint_height := float(UI_MIN_TOUCH_TARGET)
-		var hint_bottom := HAND_TRAY_TILES_RECT.position.y - 8.0 / maxf(1.0, hand_tray_size.y)
+		var tutorial_gap_px := 12.0 if hand_viewport_size.y >= 650.0 else 10.0
+		var hint_bottom := HAND_TRAY_TILES_RECT.position.y - tutorial_gap_px / maxf(1.0, hand_tray_size.y)
 		var hint_top := hint_bottom - hint_height / maxf(1.0, hand_tray_size.y)
 		var content_size := safe_content_pixel_size()
 		var tray_width := HAND_TRAY_RECT.size.x - HAND_TRAY_RECT.position.x
@@ -12821,9 +12847,7 @@ func draw_hand(parent: Control) -> void:
 	var drawn_gap_width := float(hand_layout.get("drawn_gap_width", 0.0))
 	var drawn_tile = str(offline_last_draw.get("tile", ""))
 	var drawn_serial = int(offline_last_draw.get("serial", -1))
-	var stable_drawn_index := int(offline_last_draw.get("hand_index", -1))
-	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0 or drawn_tile == "" or hand.size() % 3 != 2 or stable_drawn_index < 0 or stable_drawn_index >= hand.size() or str(hand[stable_drawn_index]) != drawn_tile:
-		stable_drawn_index = -1
+	var stable_drawn_index := hand_layout_drawn_index(hand)
 	# Consume an announced draw on the first hand render even when reduced motion
 	# suppresses the visual tween; otherwise the same replacement draw is retried
 	# on every subsequent render.
@@ -12866,7 +12890,7 @@ func draw_hand(parent: Control) -> void:
 	apply_rect(hand_box, HAND_TRAY_TILES_RECT)
 	# Keep the 46px compact hit target clear of the tray's bottom lip while
 	# retaining a visible separation from the tutorial lane above it.
-	hand_box.offset_top = -2.5
+	hand_box.offset_top = -1.0 if tutorial_hint_visible else -2.5
 	hand_box.offset_bottom = -8.0
 	tray.add_child(hand_box)
 
@@ -12982,6 +13006,7 @@ func draw_hand(parent: Control) -> void:
 			drawn_mount.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			hand_box.add_child(drawn_mount)
 			drawn_mount.add_child(tile_node)
+			apply_rect(tile_node, rect_full(0.0, 0.0, 1.0, 1.0))
 			tile_node.size = Vector2(tile_width, tile_height)
 			# Keep the mount and frame stable; lift the shared visual/hit body once.
 			# This moves the authored face and its native button together.
@@ -13528,7 +13553,8 @@ func meld_lane_pager_rect(seat: int, meld_rect: Rect2, content_size: Vector2 = V
 	if seat_meld_is_vertical(seat):
 		# The page action lives above its seat plaque. Its full touch target must
 		# never consume the height needed by a complete four-tile kong.
-		var center_x := 0.0675 if seat == 3 else 0.9325
+		var compact_width := measured_content_size.x <= 1000.0
+		var center_x := (0.054 if compact_width else 0.0675) if seat == 3 else (0.946 if compact_width else 0.9325)
 		var half_width := maxf(50.0, UI_MIN_TOUCH_TARGET) * 0.5 / measured_content_size.x
 		if seat == 3 and has_pending_claim_window():
 			var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], effective_viewport_size())
@@ -15219,7 +15245,8 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
 		var context_offset_px := 62.0 if large_text_enabled else 56.0
-		var timer_top := 0.108 + context_offset_px / content_size.y
+		var base_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / content_size.y)
+		var timer_top := base_top + context_offset_px / content_size.y
 		var timer_bottom := minf(timer_top + 50.0 / content_size.y, seat_rect.position.y - 8.0 / content_size.y)
 		timer_rect = rect_full(seat_rect.position.x, timer_top, seat_rect.size.x, timer_bottom)
 	var timer := make_gpt_center_crop_plate_rect(timer_rect, Color.WHITE, "menu_card_readable_gpt", 1.0)
@@ -15497,7 +15524,7 @@ func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	var yaku_top := maxf(62.0, winner_height + score_height + 8.0)
 	var yaku_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(13))) * 2.0 + 12.0
 	var show_hand_strip := not large_text_enabled and panel_size.x >= 760.0 and panel_size.y >= 310.0
-	var hand_strip_height := 48.0 if show_hand_strip else 0.0
+	var hand_strip_height := (64.0 if panel_size.y >= 370.0 else 48.0) if show_hand_strip else 0.0
 	var hand_strip_top := yaku_top + yaku_height + small_height + 10.0
 	var detail_height := (hand_strip_top + hand_strip_height + 4.0) if show_hand_strip else (yaku_top + yaku_height + small_height + 6.0)
 	var body_top := content_top + detail_height + 8.0
@@ -15578,7 +15605,7 @@ func draw_round_summary(parent: Control) -> void:
 	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 16.0
 	var body_min_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(14))) * 2.0 + 4.0
 	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 20.0)
-	var preferred_height := 332.0 if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
+	var preferred_height := (396.0 if content_size.y >= 640.0 else 332.0) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
 	var panel_height_px := minf(maxf(maxf(312.0, minimum_height), preferred_height), minf(520.0, panel_bottom_px - 10.0))
 	var panel_left := (content_size.x - panel_width_px) * 0.5 / content_size.x
 	var panel_top := (panel_bottom_px - panel_height_px) / content_size.y
@@ -15814,11 +15841,11 @@ func draw_round_summary_rank_header(parent: Control, _compact_summary: bool) -> 
 	parent.add_child(header)
 	place_round_summary_control(header, layout["rank_header"])
 	var columns := [
-		["名次", 0.0, 0.11, HORIZONTAL_ALIGNMENT_LEFT],
-		["玩家", 0.12, 0.38, HORIZONTAL_ALIGNMENT_LEFT],
-		["总分", 0.39, 0.59, HORIZONTAL_ALIGNMENT_RIGHT],
-		["本局", 0.61, 0.83, HORIZONTAL_ALIGNMENT_RIGHT],
-		["花数", 0.85, 1.0, HORIZONTAL_ALIGNMENT_RIGHT],
+		["名次", 0.0, 0.10, HORIZONTAL_ALIGNMENT_LEFT],
+		["玩家", 0.11, 0.40, HORIZONTAL_ALIGNMENT_LEFT],
+		["总分", 0.41, 0.60, HORIZONTAL_ALIGNMENT_RIGHT],
+		["本局", 0.62, 0.84, HORIZONTAL_ALIGNMENT_RIGHT],
+		["花数", 0.86, 1.0, HORIZONTAL_ALIGNMENT_RIGHT],
 	]
 	for column in columns:
 		var label := make_label(header, str(column[0]), 12, Color.WHITE, false)
@@ -15848,13 +15875,19 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 		var winner_bg := add_optional_gpt_illustration_texture(row, "quiet_gold_accent", rect_full(-0.015, 0.0, 1.015, 1.0), 0.36, false)
 		if winner_bg != null:
 			winner_bg.name = "RoundSummaryWinnerHighlight_%d" % seat
+	elif rank % 2 == 0:
+		var zebra_bg := add_optional_gpt_illustration_texture(row, "quiet_gold_accent", rect_full(-0.015, 0.0, 1.015, 1.0), 0.07, false)
+		if zebra_bg != null:
+			zebra_bg.name = "RoundSummaryRowTint_%d" % seat
 	var delta := round_summary_score_delta(seat)
+	var seat_tag := "%s%s" % [seat_wind_label(seat), "庄" if seat == dealer_seat else ""]
+	var player_display := "%s · %s" % [seat_tag, str(players[seat]["name"])]
 	var columns := [
-		["RoundSummaryRankLabel", str(rank), 0.0, 0.11, HORIZONTAL_ALIGNMENT_LEFT, 15],
-		["RoundSummaryPlayerLabel", str(players[seat]["name"]), 0.12, 0.38, HORIZONTAL_ALIGNMENT_LEFT, 15],
-		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.39, 0.59, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryDeltaLabel", "%+d" % delta, 0.61, 0.83, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.85, 1.0, HORIZONTAL_ALIGNMENT_RIGHT, 13],
+		["RoundSummaryRankLabel", str(rank), 0.0, 0.10, HORIZONTAL_ALIGNMENT_LEFT, 15],
+		["RoundSummaryPlayerLabel", player_display, 0.11, 0.40, HORIZONTAL_ALIGNMENT_LEFT, 14],
+		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.41, 0.60, HORIZONTAL_ALIGNMENT_RIGHT, 15],
+		["RoundSummaryDeltaLabel", "%+d" % delta, 0.62, 0.84, HORIZONTAL_ALIGNMENT_RIGHT, 15],
+		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.86, 1.0, HORIZONTAL_ALIGNMENT_RIGHT, 13],
 	]
 	for column in columns:
 		var label := make_label(row, str(column[1]), int(column[5]), Color.WHITE, false)
@@ -15864,6 +15897,9 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 			label.add_theme_font_override("font", ui_heading_font())
 		apply_rect(label, rect_full(float(column[2]), 0.0, float(column[3]), 1.0))
 		label.horizontal_alignment = int(column[4])
+		if label.name == "RoundSummaryPlayerLabel":
+			var player_lane_w := maxf(48.0, header_rect.size.x * (float(column[3]) - float(column[2])))
+			fit_label_font_size(label, player_lane_w, accessibility_font_size(int(column[5])), 11)
 		if label.name == "RoundSummaryDeltaLabel" and delta != 0:
 			label.add_theme_color_override("font_color", Color(0.08, 0.27, 0.18, 1.0) if delta > 0 else Color(0.54, 0.13, 0.10, 1.0))
 		set_ui_full_text(label, str(column[1]), "%s · %s" % [str(players[seat]["name"]), str(column[1])])
@@ -16322,9 +16358,8 @@ func draw_score_strip(parent: Control, rect: Rect2) -> void:
 		configure_clipped_label(score)
 		var delta_text := score_delta_text(seat)
 		var delta_detail_text := "暂无本局结算变化" if delta_text == "" else delta_text
-		if delta_text == "":
-			delta_text = " --"
-		var delta = make_label(chip, "变化" + delta_text, 8 if compact_score_strip else 9, Color(0.78, 0.86, 0.76, 0.92), false)
+		var delta_visible_text := "—" if delta_text == "" else ("变化" + delta_text)
+		var delta = make_label(chip, delta_visible_text, 9 if compact_score_strip else 10, Color(0.78, 0.86, 0.76, 0.92), false)
 		delta.name = "ScoreStripDelta_%d" % seat
 		delta.z_index = 2
 		apply_rect(delta, SCORE_STRIP_NARROW_DELTA_RECT if narrow_score_strip else SCORE_STRIP_DELTA_RECT)
@@ -16568,7 +16603,8 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 		apply_rect(dealer_seal_plate, rect_full(0.0, 0.0, 1.0, 1.0))
 		dealer.add_child(dealer_seal_plate)
 	var is_pending_self := seat == 0 and has_pending_claim_window()
-	var status_text := "行牌" if active else ("响应" if is_pending_self else ("打" + tile_label(last_tile) if is_source else ""))
+	var is_round_ended := (mode == "offline" and offline_phase == "ended") or (mode == "online_game" and str(online_game.get("phase", "")) == "ended")
+	var status_text := ("结算" if seat == 0 else "") if is_round_ended else ("行牌" if active else ("响应" if is_pending_self else ("打" + tile_label(last_tile) if is_source else "")))
 	var status := make_label(panel, status_text, 16 if wide_seat else 11, Color.WHITE, false)
 	status.name = "SeatCompactStatus_%d" % seat
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -16602,14 +16638,14 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 				apply_rect(threat, rect_full(0.835, 0.52, 0.955, 0.94))
 		score.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	else:
-		apply_rect(name, rect_full(0.090, 0.065, 0.720 if dealer != null else 0.925, 0.285))
+		apply_rect(name, rect_full(0.105, 0.075, 0.720 if dealer != null else 0.910, 0.285))
 		if dealer != null:
-			apply_rect(dealer, rect_full(0.735, 0.065, 0.920, 0.285))
-		apply_rect(score, rect_full(0.090, 0.295, 0.925, 0.545))
-		apply_rect(meta, rect_full(0.090, 0.555, 0.925, 0.740))
-		apply_rect(status, rect_full(0.090, 0.750, 0.530, 0.940))
+			apply_rect(dealer, rect_full(0.735, 0.075, 0.910, 0.285))
+		apply_rect(score, rect_full(0.105, 0.295, 0.910, 0.545))
+		apply_rect(meta, rect_full(0.105, 0.555, 0.910, 0.740))
+		apply_rect(status, rect_full(0.105, 0.750, 0.535, 0.930))
 		if threat != null:
-			apply_rect(threat, rect_full(0.560, 0.750, 0.925, 0.940))
+			apply_rect(threat, rect_full(0.560, 0.750, 0.910, 0.930))
 	name.add_theme_font_override("font", ui_heading_font())
 	score.add_theme_font_override("font", ui_heading_font())
 	if dealer != null:
@@ -19173,6 +19209,13 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	update_release_notes_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(update_release_notes_art, rect_full(0.08, 0.595, 0.92, 0.79))
 	parent.add_child(update_release_notes_art)
+	var notes_card_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "menu_card_readable_gpt"
+	var notes_card := add_optional_gpt_illustration_texture(update_release_notes_art, notes_card_key, rect_full(0.0, 0.0, 0.98, 0.71), 0.92, false)
+	if notes_card != null:
+		notes_card.name = "UpdateReleaseNotesCardSurface"
+		notes_card.self_modulate = Color(0.98, 0.95, 0.89, 0.92)
+		if notes_card_key == "guofeng_card_frame_gpt":
+			configure_guofeng_button_slice(notes_card, true, 104, 0.22)
 	var notes_scroll := ScrollContainer.new()
 	notes_scroll.name = "UpdateReleaseNotesScroll"
 	configure_scroll_container(notes_scroll, "上下滚动查看完整更新说明")
@@ -19180,7 +19223,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	notes_scroll.clip_contents = true
 	notes_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(notes_scroll, rect_full(0.0, 0.02, 0.88, 0.68))
+	apply_rect(notes_scroll, rect_full(0.02, 0.05, 0.88, 0.67))
 	notes_scroll.set_meta("fixed_action_lane", true)
 	notes_scroll.set_meta("max_reading_height", 0.840 if update_dialog_compact_layout() else 0.570)
 	notes_scroll.set_meta("range_status_owner", "UpdateReleaseNotesStatus")
@@ -19386,7 +19429,8 @@ func draw_voice_button_art(button: Control, active: bool, peak: float = 0.0) -> 
 	# bitmap replaces the old layers that covered the microphone action label.
 	if button is Button:
 		var voice_button := button as Button
-		voice_button.icon = optional_gpt_illustration_texture("voice_gpt_channel")
+		var mic_tex := optional_gpt_illustration_texture("icon_mic_ink_gpt")
+		voice_button.icon = mic_tex if mic_tex != null else optional_gpt_illustration_texture("voice_gpt_channel")
 		voice_button.expand_icon = true
 		voice_button.add_theme_constant_override("icon_max_width", 18)
 		voice_button.add_theme_constant_override("h_separation", 8)
@@ -19601,6 +19645,7 @@ func draw_walls(parent: Control, show_summary: bool = true) -> void:
 	var low_wall := wall_is_low(wall_count)
 	var recent_feedback = mode == "offline" and bool(offline_last_draw.get("announce", false))
 	var active_counts = wall_visual_active_counts(progress)
+	var wall_back_tex: Texture2D = table_tile_back_texture()
 	# Visible untinted 2D tile backs share the same retained wall geometry.
 	for i in range(WALL_LAYOUTS.size()):
 		var item = WALL_LAYOUTS[i]
@@ -19612,12 +19657,22 @@ func draw_walls(parent: Control, show_summary: bool = true) -> void:
 		if can_reuse_strip:
 			strip = retained_strip
 			retained_battle_wall_strips.erase(i)
+			if wall_back_tex != null and strip.wall_back_texture_cache != wall_back_tex:
+				strip.wall_back_texture_cache = wall_back_tex
+				for face in strip.wall_face_pool:
+					if face != null and is_instance_valid(face):
+						face.texture = wall_back_tex
 			strip.configure(int(active_counts[i]), bool(item[3]), WALL_BACK_TILE_SIZE, Color(0.20, 0.34, 0.27, 0.72), Color(0.82, 0.66, 0.36, 0.24), capacity, progress, low_wall, recent_feedback)
 		else:
 			if retained_strip != null and is_instance_valid(retained_strip):
 				retained_strip.queue_free()
 			retained_battle_wall_strips.erase(i)
 			strip = make_wall_back_strip(int(active_counts[i]), bool(item[3]), capacity, progress, low_wall, recent_feedback) as WallBackStrip
+			if wall_back_tex != null and strip.wall_back_texture_cache != wall_back_tex:
+				strip.wall_back_texture_cache = wall_back_tex
+				for face in strip.wall_face_pool:
+					if face != null and is_instance_valid(face):
+						face.texture = wall_back_tex
 		# Keep names unique among siblings so smoke/layout probes can find all four sides.
 		strip.name = "WallBackStrip_%s_%d_%d" % ["h" if bool(item[3]) else "v", capacity, i]
 		strip.set_meta("wall_layout_index", i)
@@ -19890,10 +19945,15 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		var limit := make_label(detail_panel, limit_name, 11, Color.WHITE, false)
 		limit.name = "WinDetailLimitBadge"
 		style_guofeng_label(limit)
-		limit.add_theme_color_override("font_color", Color(0.48, 0.14, 0.10))
+		limit.add_theme_color_override("font_color", Color(0.48, 0.14, 0.10, 1.0))
 		limit.add_theme_font_override("font", ui_heading_font())
-		place_round_summary_control(limit, Rect2(detail_rect.size.x - 74.0, status.position.y, 74.0, float(layout["small_height"])))
-		limit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var limit_seal_bg := add_optional_gpt_illustration_texture(limit, "quiet_gold_accent", rect_full(0.0, 0.0, 1.0, 1.0), 0.22, false)
+		if limit_seal_bg != null:
+			limit_seal_bg.name = "WinDetailLimitSealWash"
+			limit_seal_bg.self_modulate = Color(0.82, 0.30, 0.20, 0.26)
+			limit_seal_bg.show_behind_parent = true
+		place_round_summary_control(limit, Rect2(detail_rect.size.x - 62.0, status.position.y, 62.0, float(layout["small_height"])))
+		limit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var hand_strip_h := float(layout.get("hand_strip_height", 0.0))
 	if hand_strip_h >= 24.0:
 		var raw_hand: Array = score_data.get("winner_hand", players[winner].get("hand", []))
@@ -19936,7 +19996,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 				var max_row_h := floorf((hand_strip_h - 2.0) * 0.5)
 				var max_w1 := floorf((avail_w - float(maxi(0, row1_tiles + row1_gaps - 1)) * float(row_sep) - float(row1_gaps) * row_gap_w) / float(maxi(1, row1_tiles)))
 				var max_w2 := floorf((avail_w - float(maxi(0, row2_tiles + row2_gaps - 1)) * float(row_sep) - float(row2_gaps) * row_gap_w) / float(maxi(1, row2_tiles)))
-				var tile_w := clampf(minf(minf(max_w1, max_w2), floorf(max_row_h / 1.4)), 10.0, 22.0)
+				var tile_w := clampf(minf(minf(max_w1, max_w2), floorf(max_row_h / 1.4)), 10.0, 26.0)
 				var tile_h := minf(max_row_h, floorf(tile_w * 1.4))
 				tile_w = floorf(tile_h / 1.4)
 				var concealed_row := HBoxContainer.new()
@@ -21364,7 +21424,7 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		tile_body = panel
 	var highlight_lift := 0.0
 	if highlighted:
-		highlight_lift = 8.0 if hint_badge == "确认" else (4.0 if hint_badge == "荐" else 6.0)
+		highlight_lift = 8.0 if hint_badge == "确认" else (4.0 if (hint_badge == "荐" or interactive_guide_active) else 6.0)
 	if frame != null:
 		frame.add_child(tile_body)
 		apply_centered_rect(tile_body, Vector2(0.5, 0.5), size)

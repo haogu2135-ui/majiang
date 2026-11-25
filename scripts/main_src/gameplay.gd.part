@@ -2351,7 +2351,10 @@ func table_log_tag_color(tag: String) -> Color:
 	return Color(0.48, 0.40, 0.30, 0.92)  # r407 warm
 
 func table_log_display_text(text: String) -> String:
-	return text.replace("。", "")
+	var clean := text.replace("。", "")
+	if clean.begins_with("预览："):
+		clean = clean.substr(3).strip_edges()
+	return clean
 
 func discard_report_map_for_hand() -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard():

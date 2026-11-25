@@ -3325,11 +3325,16 @@ func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count
 func hand_layout_drawn_index(hand: Array) -> int:
 	if mode != "offline" or int(offline_last_draw.get("seat", -1)) != 0:
 		return -1
-	var drawn_index := int(offline_last_draw.get("hand_index", -1))
 	var drawn_tile := str(offline_last_draw.get("tile", ""))
-	if drawn_tile == "" or hand.size() % 3 != 2 or drawn_index < 0 or drawn_index >= hand.size() or str(hand[drawn_index]) != drawn_tile:
+	if drawn_tile == "" or hand.size() % 3 != 2:
 		return -1
-	return drawn_index
+	var drawn_index := int(offline_last_draw.get("hand_index", -1))
+	if drawn_index >= 0 and drawn_index < hand.size() and str(hand[drawn_index]) == drawn_tile:
+		return drawn_index
+	for i in range(hand.size() - 1, -1, -1):
+		if str(hand[i]) == drawn_tile:
+			return i
+	return -1
 
 func hand_drawn_gap_applies(hand: Array, drawn_index: int) -> bool:
 	return drawn_index > 0 and drawn_index < hand.size()
@@ -4097,7 +4102,7 @@ func action_intent_text(count: int) -> String:
 	elif mode == "offline" and can_self_discard():
 		result = "出牌 · 点击下方手牌"
 	elif mode == "online_game":
-		result = "在线操作 · 等待或提交响应" if count <= 1 else "在线操作 · 处理当前响应"
+		result = "联机对局 · 等待响应" if count <= 1 else "联机对局 · 处理响应"
 	action_intent_text_cache_key = cache_key
 	action_intent_text_cache_value = result
 	return result
@@ -4240,8 +4245,35 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 	var width = action_button_width_for_count(count, separation, resolved_viewport)
 	if count == 1 and not danger_confirm_mode and not ended_action_mode:
 		width = minf(width, 100.0)
-	var dock_pixels = ended_action_bar_required_width(count) + 24.0 if ended_action_mode else float(count) * width + float(max(0, count - 1) * separation) + (16.0 if count == 1 else 24.0)
-	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else dock_rect.position.x
+	var disconnected_online := mode == "online_game" and online_game_disconnected()
+	var dock_pixels: float = 0.0
+	if ended_action_mode:
+		dock_pixels = ended_action_bar_required_width(count) + 24.0
+	else:
+		var measured_total := 0.0
+		var live_buttons: Array[Button] = action_bar_buttons()
+		if not live_buttons.is_empty():
+			var base_font_size := action_button_font_size(width)
+			for live_btn in live_buttons:
+				var btn_w := maxf(width, float(ACTION_BUTTON_MIN_TOUCH_WIDTH))
+				var action_font := live_btn.get_theme_font("font")
+				var clean_text := live_btn.text.strip_edges()
+				var h_pad := 18.0
+				var normal_style := live_btn.get_theme_stylebox("normal")
+				if normal_style != null:
+					h_pad = maxf(8.0, normal_style.get_content_margin(SIDE_LEFT) + normal_style.get_content_margin(SIDE_RIGHT))
+				var resolved_fs := maxi(12, base_font_size)
+				var text_w := action_font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_fs).x if action_font != null else float(clean_text.length()) * float(resolved_fs) * 0.98
+				while text_w + h_pad > btn_w and resolved_fs > 12:
+					resolved_fs -= 1
+					text_w = action_font.get_string_size(clean_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, resolved_fs).x if action_font != null else float(clean_text.length()) * float(resolved_fs) * 0.98
+				if text_w + h_pad > btn_w:
+					btn_w = text_w + h_pad
+				measured_total += btn_w
+			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + (16.0 if live_buttons.size() == 1 else 24.0)
+		var solver_total := float(count) * width + float(max(0, count - 1) * separation) + (16.0 if count == 1 else 24.0)
+		dock_pixels = maxf(solver_total, measured_total)
+	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else (minf(dock_rect.position.x, 0.480) if disconnected_online else dock_rect.position.x)
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
@@ -4655,7 +4687,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	# HUD and left of the transformed top wall, so the wall gutter remains real
 	# screen space instead of depending on a center candidate that can collapse.
 	var header_left := 0.020
-	var header_top := 0.108
+	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
@@ -4858,7 +4890,10 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 			# Secondary actions keep practical targets at the right edge instead of
 			# turning a lone pass into a larger CTA than the claim above it.
 			var tail_budget := (full_width - float(maxi(0, pending_tail_buttons.size() - 1) * separation)) / float(maxi(1, pending_tail_buttons.size()))
-			button_width = minf(action_button_max_width_for_viewport(layout_viewport_snapshot), tail_budget)
+			var tail_cap := action_button_max_width_for_viewport(layout_viewport_snapshot)
+			if pending_tail_buttons.size() == 1:
+				tail_cap = minf(tail_cap, maxf(76.0, floorf(response_width * 0.84)))
+			button_width = minf(tail_cap, tail_budget)
 			button_font_size = 15
 			button.size_flags_horizontal = Control.SIZE_SHRINK_END
 			button.set_meta("fixed_action_width", true)
@@ -5488,15 +5523,17 @@ func ensure_update_dialog() -> void:
 	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.0), 10, Color(0.22, 0.30, 0.30, 0.0), 0, 0))
 	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.0), 10, Color(0.54, 0.76, 0.60, 0.0), 0, 0))
 	panel.add_child(update_progress)
-	var progress_rect := rect_full(0.08, 0.33, 0.92, 0.35)
+	var progress_rect := rect_full(0.08, 0.326, 0.92, 0.354)
 	apply_rect(update_progress, progress_rect)
 	var update_track = add_optional_gpt_illustration_texture(panel, "menu_card_readable_gpt", progress_rect, 1.0, false)
 	if update_track != null:
 		update_track.name = "UpdateProgressGptTrack"
+		update_track.self_modulate = Color(0.76, 0.72, 0.63, 1.0)
 		panel.move_child(update_track, update_progress.get_index())
 	var update_fill_face = add_optional_gpt_illustration_texture(panel, "menu_ink_primary", progress_rect, 1.0, false)
 	if update_fill_face != null:
 		update_fill_face.name = "UpdateProgressGptFillFace"
+		update_fill_face.self_modulate = Color(0.18, 0.56, 0.40, 1.0)
 		panel.move_child(update_fill_face, update_progress.get_index() + 1)
 	update_progress_label = make_label(panel, "", 15, Color(0.88, 0.90, 0.78), false)
 	update_progress_label.name = "UpdateProgressLabel"
@@ -5608,8 +5645,10 @@ func update_stage_index() -> int:
 			result = 0
 		"downloading":
 			result = 1
-		"ready", "current":
+		"current":
 			result = 2
+		"ready":
+			result = 3
 		"error":
 			result = 1
 	update_stage_index_cache_key = update_state
@@ -5726,7 +5765,7 @@ func _update_progress_text_uncached() -> String:
 			return "%s / %s  %d%%" % [format_bytes(update_downloaded_bytes), format_bytes(update_total_bytes), wide_percent]
 		return "已下载 %s\n%s" % [format_bytes(update_downloaded_bytes), update_download_url]
 	if update_state == "ready":
-		return "已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
+		return "100% · 已保存 v%s 升级包%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "current":
 		return "远端版本 v%s%s" % [update_remote_version, update_manifest_detail_text()]
 	if update_state == "error":
@@ -9971,6 +10010,7 @@ func _build_fx_toast() -> void:
 	toast_container.set_meta("ui_contract_hardening", true)
 	mark_ui_optimization(toast_container, "F-1062")
 	apply_safe_area_offsets(toast_container)
+	elevate_toast_container_layer(toast_container)
 	toast_container.visible = false
 	fx_layer.add_child(toast_container)
 
@@ -10803,21 +10843,19 @@ func chat_panel_rect() -> Rect2:
 	# The drawer is selected from several authored safe lanes. A fixed choice used
 	# to cover whichever side happened to contain a meld; scoring the candidates
 	# keeps the reading surface and its 44px controls away from active table data.
-	var upper_left_right := 0.320
-	var left_route_right := 0.295 if effective_viewport_size().x >= 1600.0 else 0.320
-	# Keep the compact drawer above the left-seat plaque. The previous .420
-	# bottom edge crossed that plaque at 960px and hid the seat identity while
-	# the modal was open.
-	var upper_left_bottom := 0.400
+	var upper_left_right := 0.335
+	var left_route_right := 0.310 if effective_viewport_size().x >= 1600.0 else 0.335
+	# Keep the compact drawer clear of SeatPanel_3 (x<=0.115) and above the left-seat
+	# plaque vertically so the seat identity stays fully visible with >=12px breathing room.
+	var upper_left_bottom := 0.395
 	var candidates: Array[Rect2] = [
 		# Leave a gap below the top seat plaque; the occupancy score rejects this
 		# lane when the right meld area is active.
 		rect_full(0.620, 0.120, 0.880, 0.430),
-		rect_full(0.115, 0.110, upper_left_right, upper_left_bottom),
+		rect_full(0.130, 0.110, upper_left_right, upper_left_bottom),
 		# When the upper-left reading lane is reserved by an active meld, keep the
-		# compact controls below the last visible side-wall tile and above the
-		# bottom seat and river.
-		rect_full(0.115, 0.460, left_route_right, 0.720),
+		# compact controls clear of SeatPanel_3 on the left and above the hand tray.
+		rect_full(0.130, 0.460, left_route_right, 0.720),
 		rect_full(0.645, 0.400, 0.985, 0.680),
 	]
 	# Candidate scoring runs once per authored lane. Capture all shared geometry
@@ -10849,7 +10887,7 @@ func chat_panel_rect() -> Rect2:
 			var modal_left := 0.360 if compact_modal else 0.300
 			var modal_right := 0.640 if compact_modal else 0.700
 			return rect_full(modal_left, modal_top, modal_right, maxf(modal_top + 0.240, modal_bottom))
-		return rect_full(0.115, 0.460, left_route_right, 0.720)
+		return rect_full(0.130, 0.460, left_route_right, 0.720)
 	return best
 
 func chat_panel_occupancy_snapshot(visible_meld_seats_snapshot = null) -> Dictionary:
@@ -11947,7 +11985,7 @@ func battle_chat_action_button_rect(viewport_snapshot: Vector2 = Vector2.ZERO, c
 	var lane_left := 0.285 if viewport.x < 1100.0 or viewport.y < 650.0 else 0.300
 	var left := HAND_TRAY_RECT.position.x + 8.0 / content.x
 	var width := clampf((lane_left - left) * content.x - 8.0, UI_MIN_TOUCH_TARGET, 82.0)
-	var bottom := HAND_TRAY_RECT.position.y - 8.0 / content.y
+	var bottom := HAND_TRAY_RECT.position.y - 12.0 / content.y
 	return rect_full(left, bottom - UI_MIN_TOUCH_TARGET / content.y, left + width / content.x, bottom)
 
 
@@ -11962,7 +12000,8 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 			var lower_wall := battle_table_anchor_root_rect(Rect2(WALL_LAYOUTS[1][0], WALL_LAYOUTS[1][1]), viewport_size)
 			var wall_bottom := (lower_wall.position.y + lower_wall.size.y) * 0.5 * content_size.y + WALL_BACK_TILE_SIZE.y * 0.5
 			var hand_tiles_top := (HAND_TRAY_RECT.position.y + (HAND_TRAY_RECT.size.y - HAND_TRAY_RECT.position.y) * HAND_TRAY_TILES_RECT.position.y) * content_size.y
-			var tutorial_top := hand_tiles_top - 8.0 - UI_MIN_TOUCH_TARGET
+			var tutorial_gap_px := 12.0 if viewport_size.y >= 650.0 else 10.0
+			var tutorial_top := hand_tiles_top - tutorial_gap_px - UI_MIN_TOUCH_TARGET
 			var lane_top := wall_bottom + 8.0
 			var lane_bottom := HAND_TRAY_RECT.position.y * content_size.y - 8.0
 			if tutorial_visible or (viewport_size.x >= 1100.0 and viewport_size.y >= 650.0):
