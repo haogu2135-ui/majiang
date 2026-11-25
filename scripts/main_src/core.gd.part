@@ -375,6 +375,20 @@ func update_pending_claim_live_state() -> void:
 				warning_label.set_meta("accessible_name", auto_pass_text)
 				warning_label.set_meta("live_state_owner", "pending_claim_auto_pass_warning")
 			pending_claim_last_warning_text = auto_pass_text
+	if root_layer != null and is_instance_valid(root_layer):
+		var time_bar := root_layer.find_child("PendingClaimTimeBar", true, false) as Control
+		if time_bar != null and is_instance_valid(time_bar):
+			var remaining_now := pending_claim_remaining_seconds()
+			var ratio_now := clampf(pending_claim_remaining_ratio(), 0.04, 1.0) if remaining_now >= 0 else 0.68
+			time_bar.anchor_right = ratio_now
+			if remaining_now < 0:
+				time_bar.self_modulate = Color(0.86, 0.64, 0.24, 0.92)
+			elif ratio_now <= 0.28:
+				time_bar.self_modulate = Color(0.84, 0.24, 0.18, 0.96)
+			elif ratio_now <= 0.55:
+				time_bar.self_modulate = Color(0.88, 0.60, 0.18, 0.94)
+			else:
+				time_bar.self_modulate = Color(0.18, 0.56, 0.38, 0.94)
 func refresh_pending_claim_live_controls() -> void:
 	if root_layer == null or not is_instance_valid(root_layer):
 		return
@@ -4317,11 +4331,16 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
 	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
 
+func round_summary_panel_width_px(content_size: Vector2) -> float:
+	if content_size.x >= 1600.0:
+		return minf(content_size.x - 48.0, floorf(content_size.x * 0.70))
+	return minf(content_size.x - 32.0, 1040.0)
+
 func round_summary_action_alignment_shift(content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if mode != "offline" or offline_phase != "ended":
 		return 0.0
 	var content_size := content_size_snapshot if content_size_snapshot.x > 1.0 else safe_content_pixel_size()
-	var paper_width := minf(content_size.x - 32.0, 1040.0)
+	var paper_width := round_summary_panel_width_px(content_size)
 	var paper_right := (content_size.x + paper_width) * 0.5 / content_size.x
 	return maxf(0.0, ACTION_BAR_DOCK_RECT.size.x - paper_right)
 
@@ -10526,7 +10545,7 @@ func add_stat_row(parent: VBoxContainer, label_text: String, value_text: String,
 					meter_fill.self_modulate = Color(0.14, 0.48, 0.34, 1.0)
 	# The signed value already communicates direction. Keep the semantic detail in
 	# the accessible description instead of spending scarce value-column width.
-	var display_value_text := value_text
+	var display_value_text := value_text.replace("万 分", "万分").replace("亿 分", "亿分")
 	var value = make_label(row, display_value_text, value_font_size, Color(1.00, 0.94, 0.68), true)
 	style_guofeng_label(value)
 	if numeric_value < 0.0:
@@ -10581,7 +10600,12 @@ func stat_row_numeric_value(value_text: String) -> float:
 			cleaned += ch
 	if cleaned == "":
 		return 0.0
-	return -float(cleaned) if is_negative else float(cleaned)
+	var parsed: float = float(cleaned)
+	if value_text.contains("亿"):
+		parsed *= 100000000.0
+	elif value_text.contains("万"):
+		parsed *= 10000.0
+	return -parsed if is_negative else parsed
 
 # ============================================================
 # 成就系统界面
@@ -12018,6 +12042,11 @@ func seat_discard_rect(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 			var bounds: Rect2 = zone[1]
 			if seat == 0:
 				var resolved_size := table_size if table_size.y > 1.0 else game_table_pixel_size()
+				if resolved_size.x >= 1150.0 and not has_pending_claim_window() and not has_pending_danger_discard():
+					# On 1920x1080 wide tables, expand the bottom river's right bound
+					# so 8-tile rows center symmetrically on x=50% while staying strictly
+					# left of ActionButtonDock (root x=0.612 < 0.615).
+					bounds.size.x = maxf(bounds.size.x, 0.665)
 				var wall_center_y := (WALL_LAYOUTS[1][0].y + WALL_LAYOUTS[1][1].y) * 0.5
 				# Include the 1.5px frame, an 8px gutter and container pixel rounding.
 				var clearance := WALL_BACK_TILE_SIZE.y * 0.5 + 8.0 + 1.5 + 2.0
@@ -12052,10 +12081,14 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 			var tutorial_top := hand_tiles_top - tutorial_gap_px - UI_MIN_TOUCH_TARGET
 			var lane_top := wall_bottom + 8.0
 			var lane_bottom := HAND_TRAY_RECT.position.y * content_size.y - 8.0
-			if tutorial_visible or (viewport_size.x >= 1100.0 and viewport_size.y >= 650.0):
+			var wide_meld_table := viewport_size.x >= 1600.0 and viewport_size.y >= 900.0
+			if tutorial_visible or (not wide_meld_table and viewport_size.x >= 1100.0 and viewport_size.y >= 650.0):
 				lane_bottom = minf(tutorial_top - 8.0, lane_bottom)
 			var lane_left := 0.285 if viewport_size.x < 1100.0 or viewport_size.y < 650.0 else 0.300
-			var lane_right := DANGER_ACTION_BAR_DOCK_RECT.position.x - 8.0 / content_size.x
+			var dock_edge_x := DANGER_ACTION_BAR_DOCK_RECT.position.x
+			if wide_meld_table and not has_pending_danger_discard():
+				dock_edge_x = minf(ACTION_BAR_DOCK_RECT.position.x, pending_claim_action_dock_base_rect().position.x)
+			var lane_right := dock_edge_x - 8.0 / content_size.x
 			if lane_bottom - lane_top >= 36.0 and (lane_right - lane_left) * content_size.x >= 210.0:
 				return rect_full(lane_left, lane_top / content_size.y, lane_right, lane_bottom / content_size.y)
 		var left_wall := battle_table_anchor_root_rect(Rect2(WALL_LAYOUTS[2][0], WALL_LAYOUTS[2][1]), viewport_size)
@@ -12071,6 +12104,8 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 				return rect_full(0.815, 0.240, 0.875, 0.46 - 8.0 / content_height)
 			return rect_full(0.815, 0.240, 0.875, 0.660)
 	if viewport_size.x >= 1600.0 and viewport_size.y >= 900.0:
+		if seat == 2:
+			return rect_full(0.676, 0.128, 0.954, 0.195)
 		if seat == 3:
 			return rect_full(0.125, 0.240, 0.165, 0.600)
 		if seat == 1:

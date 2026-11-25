@@ -511,10 +511,11 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var group := str(button.get_meta("normal_action_group", ""))
 	var role := str(button.get_meta("action_role", ""))
+	var is_utility := bool(button.get_meta("pending_utility_button", false))
 	var is_danger := role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false))
 	var face_key_meta := str(button.get_meta("guofeng_button_face_key", ""))
 	var has_cinnabar_face := face_key_meta == "button_face_danger_cinnabar_gpt" and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face := face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt"] or has_cinnabar_face
+	var ink_face := face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt", "battle_ink_plaque_20261112"] or has_cinnabar_face or is_utility
 	var on_ink := (not focused and group == "tools") if group != "" else (focused or ink_face)
 	var text_color := Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18)
 	if is_danger or (role == "win" and has_cinnabar_face):
@@ -527,8 +528,17 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		else:
 			text_color = Color(0.62, 0.16, 0.13)
 			on_ink = false
+	elif is_utility and not focused:
+		text_color = Color(0.90, 0.92, 0.86)
+		on_ink = true
+	elif role == "chi" and not focused:
+		text_color = Color(0.24, 0.14, 0.05)
+		on_ink = false
+	elif role == "pass" and not focused:
+		text_color = Color(0.19, 0.25, 0.22)
+		on_ink = false
 	elif group == "tools" and not focused:
-		text_color = Color(0.88, 0.87, 0.78)
+		text_color = Color(0.99, 0.95, 0.82)
 	elif group == "advice" and not focused:
 		text_color = Color(0.06, 0.18, 0.12) if button.name == "RecommendedDiscardButton" else Color(0.12, 0.24, 0.19)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
@@ -680,12 +690,20 @@ func prepare_normal_action_groups() -> void:
 					button.set_meta("guofeng_button_face_key", "button_face_jiangnan_gpt")
 					face.texture = paper_tex
 					var is_primary_advice := button.name == "RecommendedDiscardButton"
-					var advice_tint := Color(1.00, 0.96, 0.82) if is_primary_advice else Color(0.84, 0.86, 0.80)
+					var advice_tint := Color(1.00, 0.95, 0.78) if is_primary_advice else Color(0.86, 0.88, 0.82)
 					face.self_modulate = advice_tint
 					configure_guofeng_button_slice(face, true, 96, 0.125, paper_tex, false)
 					var advice_edges := face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 					if advice_edges != null:
 						advice_edges.self_modulate = advice_tint
+					if is_primary_advice and effective_viewport_size().y > 560.0:
+						var advice_pad := StyleBoxEmpty.new()
+						advice_pad.set_content_margin(SIDE_LEFT, 10)
+						advice_pad.set_content_margin(SIDE_RIGHT, 10)
+						advice_pad.set_content_margin(SIDE_TOP, 4)
+						advice_pad.set_content_margin(SIDE_BOTTOM, 4)
+						for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+							button.add_theme_stylebox_override(st, advice_pad)
 				else:
 					face.visible = false
 			else:
@@ -694,7 +712,7 @@ func prepare_normal_action_groups() -> void:
 					face.visible = true
 					button.set_meta("guofeng_button_face_key", "button_face_jiangnan_active_gpt")
 					face.texture = active_tex
-					face.self_modulate = Color(0.94, 0.97, 0.94)
+					face.self_modulate = Color.WHITE
 					configure_guofeng_button_slice(face, true, 96, 0.125, active_tex, false)
 				else:
 					var plaque_tex := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
@@ -1370,8 +1388,17 @@ func draw_actions(parent: Control) -> void:
 				network_menu_button.name = "PendingClaimNetworkMenuButton"
 				network_menu_button.set_meta("pending_tail", true)
 				network_menu_button.set_meta("pending_lane", "network")
+				network_menu_button.set_meta("pending_utility_button", true)
 				network_menu_button.tooltip_text = "网络控制：打开取消等待或重试菜单"
 				set_ui_full_text(network_menu_button, network_menu_button.tooltip_text, "网络控制")
+				var net_face := network_menu_button.get_node_or_null("GptButtonFacePlate") as TextureRect
+				var utility_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+				if net_face != null and utility_plaque != null:
+					net_face.texture = utility_plaque
+					configure_guofeng_button_slice(net_face, true, 32, 0.25)
+					net_face.self_modulate = Color(0.20, 0.34, 0.28, 0.92)
+					network_menu_button.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
+				sync_action_button_focus_art(network_menu_button, network_menu_button.has_focus())
 				pending_claim_network_lane.add_child(network_menu_button)
 			draw_pending_claim_illustration(parent)
 		if mode == "online_game":
@@ -1383,6 +1410,15 @@ func draw_actions(parent: Control) -> void:
 			if pending_claim_window_snapshot:
 				voice.set_meta("pending_tail", true)
 				voice.set_meta("pending_lane", "voice")
+				voice.set_meta("pending_utility_button", true)
+				var voice_face := voice.get_node_or_null("GptButtonFacePlate") as TextureRect
+				var utility_voice_plaque := optional_gpt_illustration_texture("battle_ink_plaque_20261112")
+				if voice_face != null and utility_voice_plaque != null:
+					voice_face.texture = utility_voice_plaque
+					configure_guofeng_button_slice(voice_face, true, 32, 0.25)
+					voice_face.self_modulate = Color(0.56, 0.20, 0.16, 0.94) if voice_enabled else Color(0.20, 0.34, 0.28, 0.92)
+					voice.set_meta("guofeng_button_face_key", "battle_ink_plaque_20261112")
+				sync_action_button_focus_art(voice, voice.has_focus())
 				pending_claim_voice_lane.add_child(voice)
 			else:
 				action_bar.add_child(voice)
@@ -2410,6 +2446,17 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("overlay_readability_contract", "center wind/wall/latest discard remain readable")
 	parent.add_child(center)
 	center.clip_contents = true
+	var compass_inlay_tex := guofeng_compass_plate_texture()
+	if compass_inlay_tex != null:
+		var compass_inlay := TextureRect.new()
+		compass_inlay.name = "CenterBronzeInlay"
+		compass_inlay.texture = compass_inlay_tex
+		compass_inlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		compass_inlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		compass_inlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		compass_inlay.self_modulate = Color(1.0, 1.0, 1.0, 0.86)
+		apply_rect(compass_inlay, rect_full(0.02, 0.02, 0.98, 0.98))
+		center.add_child(compass_inlay)
 
 	# One quiet ink surface owns the live readings. The old painted compass
 	# competed with the native winds and numbers at the smallest table size.
@@ -2425,12 +2472,14 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("center_draw_content_size_snapshot", center_content_size)
 	center.set_meta("center_draw_content_size_snapshot_policy", "one_content_size_snapshot_per_center_draw")
 	var compact_center := center_viewport_size.x <= 960.0 or center_viewport_size.y < 720.0
+	var wide_center := center_viewport_size.x >= 1600.0 and center_viewport_size.y >= 900.0
 	var center_wall_model := center_wall_view_model(center_wall_count, center_wall_total, compact_center)
 	var center_wall_low := bool(center_wall_model.get("low", false))
 	center.set_meta("center_density_mode", "compact" if compact_center else "standard")
 	center.set_meta("center_density_policy", "compact_only_below_960_or_720_height")
 	var wall_label_text := str(center_wall_model.get("label_text", "余牌"))
-	var wall_label = make_label(center, wall_label_text, 9 if compact_center else (10 if not bool(center_wall_model.get("critical", false)) else 9), Color(0.96, 0.92, 0.80, 1.0), false)
+	var wall_label_font := 13 if wide_center else (9 if compact_center else (10 if not bool(center_wall_model.get("critical", false)) else 9))
+	var wall_label = make_label(center, wall_label_text, wall_label_font, Color(0.96, 0.92, 0.80, 1.0), false)
 	style_guofeng_label(wall_label, true)
 	wall_label.add_theme_font_override("font", ui_heading_font())
 	if compact_center:
@@ -2443,8 +2492,7 @@ func draw_center(parent: Control) -> void:
 	apply_rect(wall_label, rect_full(0.28, 0.190, 0.72, 0.320) if compact_center else CENTER_WALL_LABEL_RECT)
 	wall_label.anchor_bottom = wall_label.anchor_top
 	wall_label.offset_bottom = wall_label.get_combined_minimum_size().y
-	var wide_center := center_viewport_size.x >= 1600.0 and center_viewport_size.y >= 900.0
-	var wall_count_font_size := 24 if wide_center else (16 if compact_center else (19 if large_text_enabled else 22))
+	var wall_count_font_size := 28 if wide_center else (16 if compact_center else (19 if large_text_enabled else 22))
 	var wall_text = make_label(center, "%d" % center_wall_count, wall_count_font_size, Color(0.99, 0.94, 0.80), true)
 	style_guofeng_label(wall_text, true)
 	wall_text.add_theme_font_override("font", ui_heading_font())
@@ -2471,7 +2519,8 @@ func draw_center(parent: Control) -> void:
 		var center_last_discard_seat := get_last_discard_seat()
 		var last_discard_model := center_last_discard_view_model(last, center_last_discard_seat)
 		var last_label_text := str(last_discard_model.get("label_text", ""))
-		var last_label = make_label(center, last_label_text, 10 if compact_center else 12, Color(0.88, 0.82, 0.62), true)
+		var last_label_font := 14 if wide_center else (10 if compact_center else 12)
+		var last_label = make_label(center, last_label_text, last_label_font, Color(0.88, 0.82, 0.62), true)
 		style_guofeng_label(last_label, true)
 		last_label.add_theme_font_override("font", ui_heading_font())
 		last_label.add_theme_color_override("font_color", Color(0.96, 0.90, 0.72))
@@ -2481,7 +2530,7 @@ func draw_center(parent: Control) -> void:
 		last_label.set_meta("tile_code", last)
 		last_label.set_meta("stable_two_line_summary", true)
 		set_ui_full_text(last_label, last_label_text, str(last_discard_model.get("accessible_text", last_label_text)))
-		fit_label_font_size(last_label, maxf(72.0, center_content_size.x * 0.105), 12, 9)
+		fit_label_font_size(last_label, maxf(72.0, center_content_size.x * 0.105), last_label_font, 9)
 		mark_ui_optimization(last_label, "F-041")
 		apply_rect(last_label, rect_full(0.25, 0.600, 0.75, 0.730) if compact_center else CENTER_LAST_LABEL_RECT)
 		last_label.anchor_top = wall_text.anchor_bottom
@@ -2553,7 +2602,7 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("wind_label_content_size_snapshot", center_content_size)
 	center.set_meta("wind_label_content_size_snapshot_policy", "one_content_size_snapshot_per_wind_label_pass")
 	var center_current_seat := get_current_seat()
-	var wind_font_size := 15 if compact_center else 17
+	var wind_font_size := 20 if wide_center else (15 if compact_center else 17)
 	var center_resolved_table_px := game_table_pixel_size()
 	var center_resolved_height_px := maxf(center.size.y, center_resolved_table_px.y * (CENTER_PANEL_RECT.size.y - CENTER_PANEL_RECT.position.y))
 	for i in range(4):
@@ -9618,14 +9667,15 @@ func draw_center_dice_plate(parent: Control) -> Control:
 	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(plate)
-	var simple_seal = make_layout_host(rect_full(0.580, 0.040, 0.920, 0.185))
+	var simple_seal = make_layout_host(rect_full(0.625, 0.030, 0.955, 0.175))
 	simple_seal.name = "CenterDiceSimpleSeal"
 	plate.add_child(simple_seal)
-	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.085), 10, 18)
+	var simple_glyph_font_size := clampi(roundi(parent.size.y * 0.085), 11, 18)
 	var dealer_label := seat_wind_label(dealer_seat) if dealer_seat >= 0 else "未定"
-	var simple_glyph = make_label(simple_seal, "庄·%s" % dealer_label, simple_glyph_font_size, Color(1.0, 0.98, 0.88, 1.0), true)
+	var simple_glyph = make_label(simple_seal, "庄·%s" % dealer_label, simple_glyph_font_size, Color(1.0, 0.96, 0.84, 1.0), true)
 	simple_glyph.name = "CenterDiceSimpleGlyph"
 	simple_glyph.add_theme_font_override("font", ui_heading_font())
+	simple_glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	simple_glyph.set_meta("not_a_wind_position", true)
 	simple_glyph.set_meta("layout_role", "center_dice_dealer_fact")
 	simple_glyph.tooltip_text = "本局庄家：%s家" % dealer_label

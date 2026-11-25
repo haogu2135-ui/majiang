@@ -257,8 +257,25 @@ func _show_achievements_screen_impl() -> void:
 
 	var rows: Array[Node] = []
 	var index = 0
+	var done_seal_tex: Texture2D = guofeng_cinnabar_seal_texture("done")
 	for key in achievements.keys():
-		var row = make_achievement_row(str(key), index, achievement_viewport_size)
+		var key_text := str(key)
+		var row = make_achievement_row(key_text, index, achievement_viewport_size)
+		if bool(achievements.get(key, false)):
+			var seal_stamp := row.find_child("AchievementRowUnlockedSeal_%s" % key_text, true, false) as TextureRect
+			var seal_glyph := row.find_child("AchievementRowUnlockedGlyph_%s" % key_text, true, false) as Label
+			if seal_stamp != null and done_seal_tex != null:
+				seal_stamp.texture = done_seal_tex
+				seal_stamp.self_modulate = Color.WHITE
+				seal_stamp.modulate = Color.WHITE
+				if seal_glyph != null:
+					seal_glyph.visible = false
+			elif seal_glyph != null:
+				seal_glyph.set_meta("preserve_semantic_color", true)
+				seal_glyph.add_theme_color_override("font_color", Color(0.99, 0.97, 0.88, 1.0))
+				seal_glyph.add_theme_constant_override("outline_size", 0)
+				seal_glyph.add_theme_constant_override("shadow_offset_x", 0)
+				seal_glyph.add_theme_constant_override("shadow_offset_y", 0)
 		grid.add_child(row)
 		rows.append(row)
 		index += 1
@@ -1110,7 +1127,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	caption.text = "服务器" if use_inline_caption and label_text == "服务器 IP/域名" else label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.add_theme_font_override("font", ui_cjk_font())
-	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
+	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 3))
 	caption.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	apply_rect(caption, rect_full(0.0, 0.0, 1.0, 0.240))
@@ -1120,8 +1137,9 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	edit.max_length = max_length
 	edit.add_theme_font_override("font", ui_cjk_font())
 	edit.virtual_keyboard_type = keyboard_type
-	edit.custom_minimum_size = Vector2(160 if use_inline_caption else 240, UI_MIN_TOUCH_TARGET)
-	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 2))
+	var lobby_field_min_h: float = 52.0 if effective_viewport_size().x >= 1600.0 else float(UI_MIN_TOUCH_TARGET)
+	edit.custom_minimum_size = Vector2(160 if use_inline_caption else 240, lobby_field_min_h)
+	edit.add_theme_font_size_override("font_size", commercial_ui_font_size(18, 3))
 	var input_styles = input_style_set()
 	edit.add_theme_stylebox_override("normal", input_styles["normal"])
 	edit.add_theme_stylebox_override("focus", input_styles["focus"])
@@ -1327,8 +1345,8 @@ func refresh_online_lobby_action_states() -> void:
 		form_feedback.set_meta("disabled_action_reason_visible", true)
 		form_feedback.set_meta("action_reason_owner", "OnlineLobbyConnectButton_OnlineLobbyCreateButton_OnlineLobbyJoinButton")
 		form_feedback.tooltip_text = "联机大厅操作条件：" + feedback_text
-		var feedback_font_size := accessibility_font_size(12)
-		fit_label_font_size(form_feedback, maxf(180.0, effective_viewport_size().x * 0.28), feedback_font_size, feedback_font_size)
+		var feedback_font_size := accessibility_font_size(commercial_ui_font_size(12, 3))
+		fit_label_font_size(form_feedback, maxf(180.0, effective_viewport_size().x * 0.28), feedback_font_size, accessibility_font_size(12))
 		mark_ui_optimization(form_feedback, "F-903")
 		mark_ui_optimization(form_feedback, "F-784")
 	var current_status = find_control.call("OnlineLobbyStatusLabel") as Label
@@ -1507,18 +1525,21 @@ func _show_online_lobby_impl() -> void:
 	var room_snapshot_visible := tcp.get_status() == StreamPeerTCP.STATUS_CONNECTED or online_waiting_for_server
 
 	var panel := make_guofeng_secondary_page("OnlineLobbyLowFrequencyPagePlate", "Lobby", online_lobby_viewport_size)
+	var wide_lobby_layout := online_lobby_viewport_size.x >= 1600.0
+	var lobby_title_left := 0.052 if wide_lobby_layout else 0.04
 
 	# 标题区域
 	var title = make_heading(panel, "好友房", commercial_ui_font_size(32, 6), Color(0.10, 0.22, 0.16), true)
 	title.name = "OnlineLobbyTitle"
-	apply_rect(title, rect_full(0.04, 0.0, 0.58, 0.0))
-	title.offset_bottom = title.get_combined_minimum_size().y
+	apply_rect(title, rect_full(lobby_title_left, 0.0, 0.58, 0.0))
+	title.offset_top = 12.0 if wide_lobby_layout else 4.0
+	title.offset_bottom = title.offset_top + title.get_combined_minimum_size().y
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
-	var subtitle = make_label(panel, "本机 / 局域网 · 自建服务器", commercial_ui_font_size(15, 2), Color(0.11, 0.23, 0.18), false)
+	var subtitle = make_label(panel, "本机 / 局域网 · 自建服务器", commercial_ui_font_size(15, 3), Color(0.11, 0.23, 0.18), false)
 	style_guofeng_label(subtitle)
 	subtitle.name = "OnlineLobbySubtitle"
-	apply_rect(subtitle, rect_full(0.04, 0.0, 0.58, 0.0))
+	apply_rect(subtitle, rect_full(lobby_title_left, 0.0, 0.58, 0.0))
 	subtitle.offset_top = title.offset_bottom + 4.0
 	subtitle.offset_bottom = subtitle.offset_top + subtitle.get_combined_minimum_size().y
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1528,16 +1549,16 @@ func _show_online_lobby_impl() -> void:
 
 	# 服务器和状态徽章
 	var endpoint_text := online_connection_endpoint_text()
-	var server_caption := make_label(panel, "服务器", commercial_ui_font_size(11, 1), Color(0.24, 0.36, 0.30), true)
+	var server_caption := make_label(panel, "服务器", commercial_ui_font_size(11, 3), Color(0.24, 0.36, 0.30), true)
 	server_caption.name = "OnlineLobbyServerCaption"
 	style_guofeng_label(server_caption)
 	server_caption.add_theme_color_override("font_color", Color(0.24, 0.36, 0.30))
-	apply_rect(server_caption, rect_full(0.605, 0.022, 0.705, 0.048))
+	apply_rect(server_caption, rect_full(0.605, 0.018, 0.705, 0.044))
 	server_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.605, 0.046, 0.772, 0.106), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 2), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(0.605, 0.042, 0.772, 0.102), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 3), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var server_badge_label = server_badge.get_child(server_badge.get_child_count() - 1) as Label if server_badge.get_child_count() > 0 else null
@@ -1554,7 +1575,7 @@ func _show_online_lobby_impl() -> void:
 	var endpoint_copy_button := make_small_button("复制", Color(0.92, 0.82, 0.52), Callable(self, "show_online_endpoint_detail"))
 	endpoint_copy_button.name = "OnlineLobbyEndpointCopyButton"
 	endpoint_copy_button.add_theme_font_override("font", ui_heading_font())
-	endpoint_copy_button.add_theme_font_size_override("font_size", 12)
+	endpoint_copy_button.add_theme_font_size_override("font_size", commercial_ui_font_size(12, 3))
 	endpoint_copy_button.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	endpoint_copy_button.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
 	endpoint_copy_button.set_meta("native_target_contract", "44px_endpoint_copy_button")
@@ -1564,13 +1585,13 @@ func _show_online_lobby_impl() -> void:
 	endpoint_copy_button.set_meta("summary_route", "endpoint_copy")
 	set_ui_full_text(endpoint_copy_button, endpoint_copy_button.tooltip_text, "复制服务器地址")
 	style_guofeng_secondary_action(endpoint_copy_button, false)
-	apply_rect(endpoint_copy_button, rect_full(0.775, 0.044, 0.832, 0.104))
+	apply_rect(endpoint_copy_button, rect_full(0.775, 0.040, 0.832, 0.100))
 	panel.add_child(endpoint_copy_button)
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
 	var is_connection_error: bool = connection_state == "异常" or online_feedback_requires_recovery()
 	var connection_state_tint: Color = Color(0.62, 0.12, 0.10, 0.98) if is_connection_error else online_connection_state_tint(connection_state)
-	var state_badge = make_guofeng_secondary_badge(panel, rect_full(0.835, 0.032, 0.960, 0.098), connection_state, commercial_ui_font_size(12, 2), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
+	var state_badge = make_guofeng_secondary_badge(panel, rect_full(0.835, 0.022, 0.960, 0.088), connection_state, commercial_ui_font_size(12, 3), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
@@ -1592,6 +1613,7 @@ func _show_online_lobby_impl() -> void:
 		state_badge.move_child(state_badge_icon, 0)
 	var retry_connection_button := make_small_button("重试连接" if connection_state != "连接中" else "连接中", Color(0.24, 0.48, 0.48), Callable(self, "connect_online"))
 	retry_connection_button.name = "OnlineLobbyConnectionRetryButton"
+	retry_connection_button.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 2))
 	style_guofeng_secondary_action(retry_connection_button, false)
 	retry_connection_button.custom_minimum_size = Vector2(96, UI_MIN_TOUCH_TARGET)
 	retry_connection_button.tooltip_text = "连接异常时在当前服务器位置重试"
@@ -1600,7 +1622,7 @@ func _show_online_lobby_impl() -> void:
 	retry_connection_button.set_meta("layout_role", "connection_state_retry_lane")
 	retry_connection_button.set_meta("minimum_clearance_px", 8.0)
 	set_ui_full_text(retry_connection_button, retry_connection_button.tooltip_text, "连接状态恢复操作")
-	apply_rect(retry_connection_button, rect_full(0.835, 0.108, 0.943, 0.174))
+	apply_rect(retry_connection_button, rect_full(0.835, 0.096, 0.960, 0.158 if wide_lobby_layout else 0.164))
 	panel.add_child(retry_connection_button)
 	retry_connection_button.visible = connection_state == "异常" or online_retry_available or online_feedback_requires_recovery()
 	retry_connection_button.disabled = connection_state == "连接中"
@@ -1608,12 +1630,11 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(retry_connection_button, "F-739")
 
 	# 表单面板 - 连接与房间设置
-	var wide_lobby_layout := online_lobby_viewport_size.x >= 1600.0
 	var room_first_layout := use_jiangnan_secondary_composition(online_lobby_viewport_size)
 	var compact_lobby_form := online_lobby_viewport_size.y <= 560.0
 	var compact_large_lobby_form := compact_lobby_form and large_text_enabled
-	var lobby_action_height := 44 if compact_lobby_form else 46
-	var lobby_start_height := 44 if compact_lobby_form else 50
+	var lobby_action_height := 44 if compact_lobby_form else (54 if wide_lobby_layout else 46)
+	var lobby_start_height := 44 if compact_lobby_form else (58 if wide_lobby_layout else 50)
 	var lobby_form_left := 0.115 if wide_lobby_layout else 0.035
 	var lobby_form_right := 0.475 if wide_lobby_layout else 0.475
 	var lobby_log_left := 0.525 if wide_lobby_layout else 0.505
@@ -1674,7 +1695,7 @@ func _show_online_lobby_impl() -> void:
 	)
 
 	# A short, stable feedback lane keeps field validation out of the action row.
-	var form_feedback := make_label(form_panel, "先连接服务器，再创建或加入房间", 12, Color(0.86, 0.92, 0.80), false)
+	var form_feedback := make_label(form_panel, "先连接服务器，再创建或加入房间", commercial_ui_font_size(12, 3), Color(0.86, 0.92, 0.80), false)
 	form_feedback.name = "OnlineLobbyFormFeedbackLabel"
 	apply_rect(form_feedback, rect_full(0.060, 0.630, 0.940, 0.665))
 	form_feedback.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1733,7 +1754,7 @@ func _show_online_lobby_impl() -> void:
 	var start_reason_backplate := make_layout_host(rect_full(0.505, 0.886, 0.975, 0.946))
 	start_reason_backplate.name = "OnlineLobbyStartReasonReadabilityBackplate"
 	panel.add_child(start_reason_backplate)
-	var start_reason := make_label(panel, start_reason_text, 12, Color(0.90, 0.86, 0.70), false)
+	var start_reason := make_label(panel, start_reason_text, commercial_ui_font_size(12, 3), Color(0.90, 0.86, 0.70), false)
 	start_reason.name = "OnlineLobbyStartGateReason"
 	apply_rect(start_reason, rect_full(0.520, 0.896, 0.965, 0.936))
 	start_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1815,15 +1836,26 @@ func _show_online_lobby_impl() -> void:
 	empty_plate.name = "OnlineLobbyEmptyStateGptPlate"
 	empty_plate.self_modulate = Color(0.98, 0.96, 0.91)
 	empty_plate.modulate = Color.WHITE
-	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(20, 2), Color(0.11, 0.23, 0.18), true)
+	var empty_parlor_tex: Texture2D = guofeng_empty_state_ink_texture("parlor")
+	if empty_parlor_tex != null:
+		var empty_vignette := TextureRect.new()
+		empty_vignette.name = "OnlineLobbyEmptyVignette"
+		empty_vignette.texture = empty_parlor_tex
+		empty_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		empty_vignette.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		empty_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_vignette.self_modulate = Color(1.0, 1.0, 1.0, 0.88)
+		apply_rect(empty_vignette, rect_full(0.16, 0.08, 0.84, 0.56))
+		empty_state_backplate.add_child(empty_vignette)
+	var empty_state_title = make_label(empty_state_backplate, "等待连接", commercial_ui_font_size(20, 4), Color(0.11, 0.23, 0.18), true)
 	empty_state_title.name = "OnlineLobbyRoomOfflineTitle"
-	apply_rect(empty_state_title, rect_full(0.10, 0.34, 0.90, 0.50))
+	apply_rect(empty_state_title, rect_full(0.10, 0.58 if empty_parlor_tex != null else 0.34, 0.90, 0.72 if empty_parlor_tex != null else 0.50))
 	empty_state_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(empty_state_title)
 	configure_clipped_label(empty_state_title)
-	var empty_state_hint = make_label(empty_state_backplate, "连接后显示房间、席位和日志", commercial_ui_font_size(13, 1), Color(0.15, 0.24, 0.19), false)
+	var empty_state_hint = make_label(empty_state_backplate, "连接后显示房间、席位和日志", commercial_ui_font_size(13, 3), Color(0.15, 0.24, 0.19), false)
 	empty_state_hint.name = "OnlineLobbyRoomOfflineHint"
-	apply_rect(empty_state_hint, rect_full(0.10, 0.52, 0.90, 0.68))
+	apply_rect(empty_state_hint, rect_full(0.10, 0.73 if empty_parlor_tex != null else 0.52, 0.90, 0.87 if empty_parlor_tex != null else 0.68))
 	empty_state_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(empty_state_hint)
 	empty_state_hint.add_theme_color_override("font_color", Color(0.15, 0.24, 0.19))
@@ -1839,7 +1871,7 @@ func _show_online_lobby_impl() -> void:
 	lobby_chat_button.name = "ChatLobbyButton"
 	lobby_chat_button.icon = null
 	lobby_chat_button.custom_minimum_size = Vector2(72, UI_MIN_TOUCH_TARGET)
-	lobby_chat_button.add_theme_font_size_override("font_size", 12)
+	lobby_chat_button.add_theme_font_size_override("font_size", commercial_ui_font_size(12, 3))
 	lobby_chat_button.tooltip_text = "打开或关闭房间聊天"
 	style_guofeng_secondary_action(lobby_chat_button, false)
 	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
@@ -1904,7 +1936,7 @@ func _show_online_lobby_impl() -> void:
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
 	mark_ui_optimization(log_scroll, "F-394")
-	apply_rect(log_scroll, rect_full(0.055, 0.470, 0.945, 0.985))
+	apply_rect(log_scroll, rect_full(0.055, 0.470, 0.945, 0.995))
 	log_scroll.anchor_top = 0.0
 	var log_scroll_base_top: float = log_header_top_px + (2.0 if compact_lobby_log else 3.0)
 	log_scroll.offset_top = log_scroll_base_top
@@ -1913,7 +1945,7 @@ func _show_online_lobby_impl() -> void:
 		log_scroll.anchor_bottom = 0.0
 		log_scroll.offset_bottom = maxf(log_scroll.offset_top + 34.0, log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0)
 	else:
-		log_scroll.offset_bottom = -2.0
+		log_scroll.offset_bottom = -1.0
 	log_scroll.set_meta("header_bottom", 0.445)
 	log_scroll.set_meta("content_lane", "房间日志列表")
 	log_scroll.set_meta("footer_clearance_px", 12.0)
@@ -1952,16 +1984,23 @@ func _show_online_lobby_impl() -> void:
 	var snap_online_log_viewport := func() -> void:
 		if compact_large_roster or not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
 			return
-		var avail_h: float = log_list_panel.size.y * 0.985 - 2.0 - log_scroll_base_top
+		var avail_h: float = log_list_panel.size.y * 0.995 - 1.0 - log_scroll_base_top
 		var line_count: int = logs_label.get_line_count()
 		var content_h: float = float(logs_label.get_content_height())
 		if avail_h < 18.0 or line_count <= 0 or content_h <= 1.0:
 			return
-		var line_h: float = content_h / float(line_count)
-		if line_h < 10.0:
-			return
-		var whole_lines: float = maxf(1.0, floorf(avail_h / line_h))
-		var snapped_h: float = minf(avail_h, ceilf(whole_lines * line_h))
+		var best_start: int = line_count - 1
+		var start_idx: int = line_count - 1
+		while start_idx >= 0:
+			var top_off: float = float(logs_label.get_line_offset(start_idx))
+			if content_h - top_off <= avail_h + 0.5:
+				best_start = start_idx
+				start_idx -= 1
+			else:
+				break
+		var tail_top_offset: float = float(logs_label.get_line_offset(best_start))
+		var exact_tail_h: float = ceilf(maxf(1.0, content_h - tail_top_offset))
+		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else avail_h
 		var pad_y: float = floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
 		var target_top: float = log_scroll_base_top + pad_y
 		var target_bottom: float = target_top + snapped_h
@@ -1971,7 +2010,7 @@ func _show_online_lobby_impl() -> void:
 			log_scroll.offset_bottom = target_bottom
 			if online_log_at_latest:
 				call_deferred("scroll_online_log_to_end")
-	for geometry_owner in [log_scroll, logs_label]:
+	for geometry_owner in [log_list_panel, log_scroll, logs_label]:
 		geometry_owner.resized.connect(func() -> void:
 			snap_online_log_viewport.call()
 			call_deferred("refresh_online_log_navigation")
@@ -2576,8 +2615,31 @@ func _show_rules_screen_impl() -> void:
 	title.name = "RulesTitle"
 	style_guofeng_label(title)
 
+	var wide_rules := rules_viewport_size.x >= 1600.0
 	var rules_guide = draw_rules_guide_art(panel, rules_viewport_size)
 	mark_ui_optimization(rules_guide, "F-534")
+	if wide_rules:
+		rules_guide.anchor_right = 0.785
+		var wide_tab_height: float = UI_MIN_TOUCH_TARGET
+		for tab_idx in range(RULES_SECTION_COUNT):
+			var tab_label := rules_guide.find_child("RulesGuideStepLabel_%d" % tab_idx, true, false) as Label
+			var tab_state := rules_guide.find_child("RulesGuideStepState_%d" % tab_idx, true, false) as Label
+			var tab_marker := rules_guide.find_child("RulesGuideStepFocusMarker_%d" % tab_idx, true, false) as Label
+			if tab_label != null:
+				tab_label.add_theme_font_size_override("font_size", accessibility_font_size(15))
+			if tab_state != null:
+				tab_state.add_theme_font_size_override("font_size", accessibility_font_size(13))
+			if tab_label != null and tab_state != null:
+				var line_h := maxf(tab_label.get_minimum_size().y, tab_state.get_minimum_size().y)
+				tab_label.offset_top = 3.0
+				tab_label.offset_bottom = 3.0 + line_h
+				tab_state.offset_top = 5.0 + line_h
+				tab_state.offset_bottom = 5.0 + line_h * 2.0
+				if tab_marker != null:
+					tab_marker.offset_top = tab_state.offset_top
+					tab_marker.offset_bottom = tab_state.offset_bottom
+				wide_tab_height = maxf(wide_tab_height, line_h * 2.0 + 10.0)
+		rules_guide.set_meta("chapter_min_height_px", wide_tab_height)
 	var rules_content_top := 0.168
 	var rules_panel_height := panel.size.y
 	var title_height := maxf(rules_panel_height * (title.anchor_bottom - title.anchor_top), title.get_minimum_size().y)
@@ -2601,7 +2663,8 @@ func _show_rules_screen_impl() -> void:
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
 	apply_rect(back, rect_full(0.845, 0.024, 0.945, 0.090))
-	var rules_status_plate = make_layout_host(rect_full(0.755, rules_content_top - 0.085, 0.945, rules_content_top - 0.025))
+	var rules_status_font_size := commercial_ui_font_size(12, 3)
+	var rules_status_plate = make_layout_host(rect_full(0.795 if wide_rules else 0.755, rules_content_top - 0.085, 0.945, rules_content_top - 0.025))
 	rules_status_plate.name = "RulesReadingStatusPlate"
 	# The native return button can be taller than its proportional slot. Keep
 	# the reading state below its complete rectangle at every viewport size.
@@ -2609,10 +2672,10 @@ func _show_rules_screen_impl() -> void:
 	rules_status_plate.anchor_top = 0.0
 	rules_status_plate.anchor_bottom = 0.0
 	rules_status_plate.offset_top = rules_status_top
-	rules_status_plate.offset_bottom = rules_status_top + ui_cjk_font().get_height(accessibility_font_size(12))
+	rules_status_plate.offset_bottom = rules_status_top + ui_cjk_font().get_height(accessibility_font_size(rules_status_font_size))
 	rules_content_top = maxf(rules_content_top, (rules_status_plate.offset_bottom + 4.0) / maxf(1.0, rules_panel_height))
 	panel.add_child(rules_status_plate)
-	var rules_status = make_label(rules_status_plate, "第1/6 · 和牌与响应", 12, Color(0.18, 0.27, 0.22), true)
+	var rules_status = make_label(rules_status_plate, "第1/6 · 和牌与响应", rules_status_font_size, Color(0.18, 0.27, 0.22), true)
 	rules_status.name = "RulesReadingStatus"
 	style_guofeng_label(rules_status)
 	apply_rect(rules_status, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -2660,7 +2723,7 @@ func _show_rules_screen_impl() -> void:
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * rules_viewport_size.x)
-	var rules_thumb_visual_width_px := 10.0
+	var rules_thumb_visual_width_px := 13.0 if wide_rules else 10.0
 	var thumb_span_frac := minf(rules_thumb_visual_width_px / gutter_span_px, 0.90)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
@@ -3028,6 +3091,8 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			mark_ui_optimization(label, "F-598")
 			mark_ui_optimization(label, "F-226")
 			style_guofeng_label(label, active)
+			label.set_meta("preserve_semantic_color", true)
+			label.add_theme_color_override("font_color", Color(0.99, 0.96, 0.86) if active else Color(0.10, 0.21, 0.16))
 		var state_label := step_ref.get("state", null) as Label
 		if state_label != null:
 			var state_text := "当前" if active else ("已读" if i < active_step else "%02d" % (i + 1))
@@ -3035,10 +3100,13 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			set_ui_full_text(state_label, state_text, "规则导航状态：" + state_text)
 			state_label.set_meta("rules_step_state", state_text)
 			style_guofeng_label(state_label, active)
+			state_label.set_meta("preserve_semantic_color", true)
+			state_label.add_theme_color_override("font_color", Color(0.97, 0.91, 0.68) if active else Color(0.18, 0.28, 0.22))
 			mark_ui_optimization(state_label, "F-226")
 		var focus_marker := step.find_child("RulesGuideStepFocusMarker_%d" % i, true, false) as Label
 		if focus_marker != null:
 			style_guofeng_label(focus_marker, active)
+			focus_marker.add_theme_color_override("font_color", Color(0.99, 0.96, 0.86) if active else Color(0.10, 0.21, 0.16))
 	if status != null:
 		status.set_meta("rules_current_section", current_section)
 		status.set_meta("rules_section_total", total_sections)
@@ -3411,6 +3479,7 @@ func _show_shop_screen_impl() -> void:
 	)
 	back.name = "ShopBackButton"
 	back.custom_minimum_size = Vector2(100, 44)
+	back.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 3))
 	set_ui_full_text(back, "返回主菜单 · Esc关闭宝阁", "返回主菜单")
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
@@ -3480,7 +3549,7 @@ func _show_shop_screen_impl() -> void:
 		if event is InputEventKey and (event as InputEventKey).pressed and handle_shop_scroll_key(event as InputEventKey, scroll, shop_scrollbar):
 			get_viewport().set_input_as_handled()
 	)
-	var shop_scroll_position := make_label(panel, "商品 1-%d/%d" % [ITEM_TYPES.size(), ITEM_TYPES.size()], 11, shop_ink, true)
+	var shop_scroll_position := make_label(panel, "商品 1-%d/%d" % [ITEM_TYPES.size(), ITEM_TYPES.size()], commercial_ui_font_size(11, 3), shop_ink, true)
 	shop_scroll_position.name = "ShopItemsScrollPosition"
 	apply_rect(shop_scroll_position, rect_full(0.750, scroll.anchor_bottom, 0.930, scroll.anchor_bottom))
 	shop_scroll_position.offset_top = 8.0
@@ -3599,7 +3668,7 @@ func _show_shop_screen_impl() -> void:
 		set_ui_full_text(name_label, name_label.text, "商品名称：" + name_label.text)
 		mark_ui_optimization(name_label, "F-553")
 		var identity_text := "〔%s〕" % shop_item_identity_text(item_id)
-		var identity_label = make_label(row, identity_text, 11, shop_ink, true)
+		var identity_label = make_label(row, identity_text, commercial_ui_font_size(12, 3), shop_ink, true)
 		identity_label.name = "ShopItemIdentity_%s" % item_id
 		apply_rect(identity_label, rect_full(0.365, 0.275, 0.625, 0.405) if shop_wide_layout else rect_full(0.492, 0.125, 0.588, 0.410))
 		identity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if shop_wide_layout else HORIZONTAL_ALIGNMENT_CENTER
