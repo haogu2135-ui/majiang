@@ -3746,7 +3746,12 @@ func _show_shop_screen_impl() -> void:
 					configure_guofeng_button_slice(buy_face, true, 32, 0.25)
 				else:
 					configure_guofeng_button_slice(buy_face, true, 96, 0.125)
-			buy_face.self_modulate = Color.WHITE if can_afford else Color(0.93, 0.90, 0.86, 0.88)
+			var buy_edges := buy_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if buy_edges != null and buy_edges.visible:
+				buy_face.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+				buy_edges.self_modulate = Color.WHITE if can_afford else Color(0.86, 0.83, 0.78, 0.76)
+			else:
+				buy_face.self_modulate = Color.WHITE if can_afford else Color(0.86, 0.83, 0.78, 0.76)
 		buy_btn.tooltip_text = "购买%s，花费%d玉符" % [str(item_info.get("name", item_id)), cost] if can_afford else "缺少%d玉符：需要%d玉符，当前%d玉符" % [maxi(0, cost - int(currency.get("gems", 0))), cost, int(currency.get("gems", 0))]
 		buy_btn.set_meta("disabled_reason", "" if can_afford else buy_btn.tooltip_text)
 		set_ui_full_text(buy_btn, buy_btn.tooltip_text, "商品%s：%s" % [str(item_info.get("name", item_id)), buy_btn.tooltip_text])
@@ -3912,7 +3917,36 @@ func _show_shop_screen_impl() -> void:
 	apply_rect(footer_title, rect_full(0.000, 0.040, 0.220, 0.350))
 	footer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(footer_title)
-	var exchange_coins_needed := maxi(0, SHOP_EXCHANGE_COINS - int(currency.get("coins", 0)))
+	var current_coins_amount := maxi(0, int(currency.get("coins", 0)))
+	var exchange_coins_needed := maxi(0, SHOP_EXCHANGE_COINS - current_coins_amount)
+	var exchange_ratio := clampf(float(current_coins_amount) / float(maxi(1, SHOP_EXCHANGE_COINS)), 0.0, 1.0)
+	var exchange_meter_host := make_layout_host(rect_full(0.225, 0.055, 0.595, 0.345))
+	exchange_meter_host.name = "ShopExchangeMeterHost"
+	exchange_meter_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shop_footer.add_child(exchange_meter_host)
+	var exchange_meter_caption := make_label(exchange_meter_host, "%d/%d 铜钱 → %d 玉符" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS], commercial_ui_font_size(11, 2), shop_ink, true)
+	exchange_meter_caption.name = "ShopExchangeMeterCaption"
+	apply_rect(exchange_meter_caption, rect_full(0.0, 0.0, 1.0, 0.54))
+	exchange_meter_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	exchange_meter_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(exchange_meter_caption)
+	var exchange_meter_track := add_optional_gpt_illustration_texture(exchange_meter_host, "battle_ink_plaque_20261112", rect_full(0.0, 0.62, 0.96, 0.96), 1.0, false)
+	if exchange_meter_track != null:
+		exchange_meter_track.name = "ShopExchangeMeterTrack"
+		exchange_meter_track.clip_contents = true
+		configure_guofeng_button_slice(exchange_meter_track, true, 32, 0.125)
+		var track_edges := exchange_meter_track.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if track_edges != null:
+			track_edges.self_modulate = Color(1.0, 1.0, 1.0, 0.32)
+		else:
+			exchange_meter_track.self_modulate = Color(1.0, 1.0, 1.0, 0.32)
+		if exchange_ratio > 0.001:
+			var bar_right := clampf(exchange_ratio, 0.04, 0.992)
+			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.008, 0.16, bar_right, 0.84), Color.WHITE, "menu_ink_primary", 0.35)
+			exchange_meter_bar.name = "ShopExchangeMeterBar"
+			exchange_meter_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			exchange_meter_bar.self_modulate = Color(0.14, 0.46, 0.32, 0.96) if exchange_coins_needed == 0 else Color(0.76, 0.56, 0.20, 0.94)
+			exchange_meter_track.add_child(exchange_meter_bar)
 	var exchange_rate := "%d铜钱可兑换%d玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var display_exchange_rate := "%d 铜钱可兑换 %d 玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var footer_body_text := display_exchange_rate + "。"
@@ -3937,7 +3971,7 @@ func _show_shop_screen_impl() -> void:
 	var state_text := "铜钱获取" if exchange_coins_needed > 0 else ("确认兑换" if Time.get_ticks_msec() < shop_exchange_confirm_until_msec else "兑换玉符")
 	var footer_state := make_small_button(state_text, Color(0.56, 0.38, 0.24), Callable(self, "request_shop_currency_exchange"))
 	footer_state.name = "ShopGetGemsButton"
-	style_guofeng_secondary_action(footer_state, exchange_coins_needed == 0)
+	style_guofeng_secondary_action(footer_state, true)
 	footer_state.modulate = Color.WHITE
 	shop_footer.add_child(footer_state)
 	footer_state.custom_minimum_size = Vector2(112, UI_MIN_TOUCH_TARGET)
@@ -4469,9 +4503,9 @@ func _show_stats_screen_impl() -> void:
 		add_stat_row(content, "总场次", "%d 局" % stats_games_played, stats_row_height)
 		add_stat_row(content, "胜场", "%d 局" % stats_games_won, stats_row_height)
 		add_stat_row(content, "胜率", "%.1f%%" % (stats_win_rate_display * 100.0), stats_row_height)
-		add_stat_row(content, "累计净分", "%s 分" % compact_score_text(int(stats_source.get("score", stats_source.get("total_score", 0)))), stats_row_height)
+		add_stat_row(content, "累计净分", "%d 分" % int(stats_source.get("score", stats_source.get("total_score", 0))), stats_row_height)
 		if stats_selected_rule == "":
-			add_stat_row(content, "单局最佳", "%s 分" % compact_score_text(int(stats_source.get("best_score", 0))), stats_row_height)
+			add_stat_row(content, "单局最佳", "%d 分" % int(stats_source.get("best_score", 0)), stats_row_height)
 			add_stat_row(content, "总手牌数", "%d 手" % int(stats_source.get("total_hands", 0)), stats_row_height)
 		else:
 			add_stat_row(content, "累计番数", "%d 番" % int(stats_source.get("fan_total", 0)), stats_row_height)
@@ -4556,12 +4590,12 @@ func show_telemetry_data_sheet() -> void:
 		settings_close.visible = false
 	var parent_settings_panel := overlay.find_child("SettingsPanel", true, false) as Control
 	if parent_settings_panel != null:
-		parent_settings_panel.modulate = Color(0.26, 0.28, 0.27, 0.85)
+		parent_settings_panel.modulate = Color(0.18, 0.20, 0.19, 0.90)
 	var telemetry_scrim := overlay.find_child("SettingsOverlayScrim", true, false) as Control
 	if telemetry_scrim != null:
 		telemetry_scrim.set_meta("telemetry_modal_dim_alpha", 0.82)
 		telemetry_scrim.set_meta("telemetry_modal_owner", "TelemetryDataSheet")
-		telemetry_scrim.modulate.a = minf(1.0, maxf(telemetry_scrim.modulate.a, 0.96))
+		telemetry_scrim.modulate.a = minf(1.0, maxf(telemetry_scrim.modulate.a, 0.98))
 	var content_size := safe_content_pixel_size()
 	var card_width := minf(content_size.x * 0.90, 700.0)
 	var card_height := minf(content_size.y * 0.94, 490.0 if large_text_enabled else 428.0)
@@ -4626,11 +4660,11 @@ func show_telemetry_data_sheet() -> void:
 	configure_clipped_label(permission_summary)
 	mark_ui_optimization(permission_summary, "F-404")
 	var export_copied_init: bool = telemetry_export_status.begins_with("已复制")
-	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 12, Color(0.11, 0.44, 0.24) if export_copied_init else Color(0.24, 0.32, 0.27), export_copied_init)
+	var export_status := make_label(card, "导出：%s" % telemetry_export_status, 12, Color(0.06, 0.30, 0.15) if export_copied_init else Color(0.24, 0.32, 0.27), export_copied_init)
 	export_status.name = "TelemetryExportStatus"
 	if export_copied_init:
 		export_status.set_meta("preserve_semantic_color", true)
-		export_status.add_theme_color_override("font_color", Color(0.11, 0.44, 0.24))
+		export_status.add_theme_color_override("font_color", Color(0.06, 0.30, 0.15))
 	apply_rect(export_status, rect_full(0.075, 0.785, 0.445, 0.848))
 	export_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(export_status)
@@ -4652,7 +4686,7 @@ func show_telemetry_data_sheet() -> void:
 	consent.disabled = telemetry_mutation_in_flight
 	consent.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	consent.custom_minimum_size = Vector2(120, 44)
-	apply_rect(consent, rect_full(0.075, 0.592, 0.320, 0.706))
+	apply_rect(consent, rect_full(0.075, 0.592, 0.335, 0.706))
 	consent.set_meta("telemetry_action", "consent")
 	consent.set_meta("telemetry_action_priority", "primary_state_action")
 	card.add_child(consent)
@@ -4664,7 +4698,7 @@ func show_telemetry_data_sheet() -> void:
 	set_ui_full_text(export, export.tooltip_text, "导出隐私诊断数据")
 	export.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	export.custom_minimum_size = Vector2(100, 44)
-	apply_rect(export, rect_full(0.350, 0.592, 0.610, 0.706))
+	apply_rect(export, rect_full(0.370, 0.592, 0.630, 0.706))
 	export.set_meta("telemetry_action", "export")
 	export.set_meta("telemetry_action_priority", "secondary_export")
 	card.add_child(export)
@@ -4677,7 +4711,7 @@ func show_telemetry_data_sheet() -> void:
 	clear.disabled = telemetry_mutation_in_flight or (telemetry_outbox.is_empty() and not telemetry_clear_confirming)
 	clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 	clear.custom_minimum_size = Vector2(100, 44)
-	apply_rect(clear, rect_full(0.640, 0.592, 0.925, 0.706))
+	apply_rect(clear, rect_full(0.665, 0.592, 0.925, 0.706))
 	clear.set_meta("telemetry_action", "clear")
 	clear.set_meta("telemetry_action_priority", "destructive_with_confirmation")
 	clear.set_meta("confirm_hint_target", "TelemetryClearConfirmHint")
@@ -4711,7 +4745,12 @@ func show_telemetry_data_sheet() -> void:
 		consent.set_meta("ui_danger_action", false)
 		style_guofeng_secondary_action(consent, true)
 	style_guofeng_secondary_action(export, false)
-	mark_guofeng_danger_button(clear, telemetry_clear_confirming)
+	if clear.disabled:
+		clear.set_meta("ui_danger_action", false)
+		style_guofeng_secondary_action(clear, false)
+		sync_guofeng_button_face_state(clear)
+	else:
+		mark_guofeng_danger_button(clear, telemetry_clear_confirming)
 	style_guofeng_secondary_action(close, false)
 	configure_ordered_focus_navigation(sheet, [body_scroll, consent, export, clear, close], "TelemetryConsentButton")
 	root_layer.remove_meta("ui_contract_control_list")
@@ -4795,7 +4834,12 @@ func refresh_telemetry_data_sheet() -> void:
 		clear.set_meta("first_click_is_non_destructive", true)
 		clear.set_meta("confirm_remaining_seconds", remaining_seconds)
 		clear.set_meta("telemetry_state_revision", telemetry_mutation_revision)
-		mark_guofeng_danger_button(clear, telemetry_clear_confirming)
+		if clear.disabled:
+			clear.set_meta("ui_danger_action", false)
+			style_guofeng_secondary_action(clear, false)
+			sync_guofeng_button_face_state(clear)
+		else:
+			mark_guofeng_danger_button(clear, telemetry_clear_confirming)
 		mark_ui_optimization(clear, "F-406")
 	var clear_hint := sheet.find_child("TelemetryClearConfirmHint", true, false) as Label
 	if clear_hint != null and (clear_changed or queue_changed):
@@ -4812,7 +4856,7 @@ func refresh_telemetry_data_sheet() -> void:
 		set_dynamic_label_text(export_status, "导出：%s" % telemetry_export_status)
 		var export_copied: bool = telemetry_export_status.begins_with("已复制")
 		export_status.set_meta("preserve_semantic_color", export_copied)
-		export_status.add_theme_color_override("font_color", Color(0.11, 0.44, 0.24) if export_copied else Color(0.24, 0.32, 0.27))
+		export_status.add_theme_color_override("font_color", Color(0.06, 0.30, 0.15) if export_copied else Color(0.24, 0.32, 0.27))
 		export_status.set_meta("telemetry_state_revision", telemetry_mutation_revision)
 		set_ui_full_text(export_status, export_status.text, "隐私诊断导出状态")
 		export_status.set_meta("modal_safe_route", "inside_sheet_footer")
@@ -5107,6 +5151,18 @@ func refresh_update_dialog_stage_map() -> void:
 			var full_label := str(label.get_meta("update_stage_full_label", ""))
 			label.text = ("▸ " if i == active_index else "") + full_label
 			label.set_meta("update_stage_active", i == active_index)
+			var is_completed: bool = i < active_index or update_state == "current"
+			label.set_meta("update_stage_completed", is_completed)
+			label.set_meta("preserve_semantic_color", true)
+			if i == active_index:
+				label.add_theme_color_override("font_color", Color(0.06, 0.14, 0.10))
+				label.modulate = Color.WHITE
+			elif is_completed:
+				label.add_theme_color_override("font_color", Color(0.09, 0.36, 0.20))
+				label.modulate = Color.WHITE
+			else:
+				label.add_theme_color_override("font_color", Color(0.14, 0.22, 0.18))
+				label.modulate = Color(1.0, 1.0, 1.0, 0.62)
 
 func show_achievements_screen(instant: bool = false) -> void:
 	if transition_active and not instant:
@@ -5345,7 +5401,7 @@ func show_chat_panel() -> void:
 	input_shield.name = "ChatPanelInputShield"
 	input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
 	input_shield.mouse_filter = Control.MOUSE_FILTER_STOP
-	input_shield.z_index = 68
+	input_shield.z_index = 84
 	input_shield.set_meta("modal_input_shield", true)
 	input_shield.set_meta("layout_role", "chat_modal_background")
 	var chat_scrim := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.10, 0.14, 0.12, 0.55), "ui_dark_scrim", 0.13)
@@ -5368,7 +5424,7 @@ func show_chat_panel() -> void:
 	var chat_panel = make_gpt_center_crop_plate_rect(panel_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	chat_panel.name = "ChatPanel"
 	chat_panel.self_modulate = Color.WHITE
-	chat_panel.z_index = 69
+	chat_panel.z_index = 85
 	chat_panel.set_meta("layout_role", chat_panel_route_name())
 	chat_panel.set_meta("compact_chat", compact_chat)
 	chat_panel.set_meta("modal_input_shield", true)
@@ -5808,12 +5864,15 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 				configure_guofeng_button_slice(indicator as TextureRect, true, 32, 0.25)
 		elif is_milestone and not is_claimed:
 			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, day_frame_key)
-			indicator.self_modulate = Color(1.0, 0.96, 0.84)
+			indicator.self_modulate = Color(1.0, 0.96, 0.85)
 			configure_guofeng_button_slice(indicator as TextureRect, true, 104 if day_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if day_frame_key == "guofeng_card_frame_gpt" else 0.125)
 		else:
 			indicator = make_gpt_plate_rect(indicator_rect, Color.WHITE, day_frame_key)
-			indicator.self_modulate = Color(0.98, 0.96, 0.91) if is_claimed else Color(0.92, 0.89, 0.82)
+			indicator.self_modulate = Color(0.86, 0.83, 0.76) if is_claimed else Color(0.99, 0.97, 0.93)
 			configure_guofeng_button_slice(indicator as TextureRect, true, 104 if day_frame_key == "guofeng_card_frame_gpt" else 96, 0.22 if day_frame_key == "guofeng_card_frame_gpt" else 0.125)
+			var day_card_edges := indicator.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if day_card_edges != null:
+				day_card_edges.self_modulate = Color(0.86, 0.83, 0.76) if is_claimed else Color(0.99, 0.97, 0.93)
 		indicator.name = "DailyLoginDayNode_%d" % day_num
 		var day_reward_text := "双倍" if is_milestone else "+100"
 		var day_state_text := "第%d天 · %s · %s" % [day_num, ("已领取" if is_claimed else ("今日可领" if is_current else "待签到")), day_reward_text]
@@ -5833,6 +5892,12 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		apply_rect(day_label, rect_full(0.070, 0.040, 0.930, 0.310))
 		set_ui_full_text(day_label, day_state_text, "签到第%d天" % day_num)
 		style_guofeng_label(day_label, is_current)
+		if is_current:
+			day_label.add_theme_color_override("font_color", Color(0.99, 0.96, 0.86))
+			day_label.set_meta("preserve_semantic_color", true)
+		elif is_claimed:
+			day_label.add_theme_color_override("font_color", Color(0.20, 0.24, 0.20))
+			day_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(day_label)
 		var day_state_label := make_label(indicator, "已领取" if is_claimed else ("今日可领" if is_current else "待签到"), 14, Color(0.13, 0.27, 0.20) if is_claimed else text_color, true)
 		day_state_label.name = "DailyLoginDayStateLabel_%d" % day_num
@@ -5840,44 +5905,66 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		day_state_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(day_state_label, day_state_label.text, day_state_text)
 		style_guofeng_label(day_state_label, is_current)
-		if is_claimed:
-			day_state_label.add_theme_color_override("font_color", Color(0.13, 0.27, 0.20))
+		if is_current:
+			day_state_label.add_theme_color_override("font_color", Color(0.98, 0.92, 0.66))
 			day_state_label.set_meta("preserve_semantic_color", true)
-		elif not is_current:
-			day_state_label.add_theme_color_override("font_color", Color(0.18, 0.24, 0.21))
+		elif is_claimed:
+			day_state_label.add_theme_color_override("font_color", Color(0.18, 0.28, 0.22))
+			day_state_label.set_meta("preserve_semantic_color", true)
+		else:
+			day_state_label.add_theme_color_override("font_color", Color(0.14, 0.24, 0.19))
 			day_state_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(day_state_label)
 
 		var reward_icon = "双倍" if is_milestone else "+100"
+		var reward_glyph_key := "icon_jade_token_gpt" if is_milestone else "icon_coin_bronze_gpt"
+		var has_reward_glyph := optional_gpt_illustration_texture(reward_glyph_key) != null
+		if has_reward_glyph:
+			var reward_glyph := add_optional_gpt_illustration_texture(indicator, reward_glyph_key, rect_full(0.120, 0.705, 0.340, 0.925), 0.72 if is_claimed else 1.0, true)
+			if reward_glyph != null:
+				reward_glyph.name = "DailyLoginRewardGlyph_%d" % day_num
 		var reward_color = text_color.darkened(0.18) if is_current else text_color.lightened(0.06)
 		var icon_label = make_label(indicator, reward_icon, 14, reward_color, true)
 		icon_label.name = "DailyLoginRewardLabel_%d" % day_num
-		apply_rect(icon_label, rect_full(0.070, 0.680, 0.930, 0.950))
+		apply_rect(icon_label, rect_full(0.360 if has_reward_glyph else 0.070, 0.680, 0.930, 0.950))
+		icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if has_reward_glyph else HORIZONTAL_ALIGNMENT_CENTER
 		set_ui_full_text(icon_label, day_state_text, "第%d天奖励" % day_num)
 		style_guofeng_label(icon_label, is_current)
-		if is_milestone and not is_current:
+		if is_current:
+			icon_label.add_theme_color_override("font_color", Color(0.99, 0.93, 0.68))
+			icon_label.set_meta("preserve_semantic_color", true)
+		elif is_milestone:
 			icon_label.add_theme_color_override("font_color", Color(0.58, 0.14, 0.11))
+			icon_label.set_meta("preserve_semantic_color", true)
+		elif is_claimed:
+			icon_label.add_theme_color_override("font_color", Color(0.22, 0.25, 0.21))
 			icon_label.set_meta("preserve_semantic_color", true)
 		configure_clipped_label(icon_label)
 
-		# 已签到的天数添加对勾；第7天未领时在右上角展示双倍铜钱符小徽章（避开L角标）
+		# 已签到的天数盖上朱砂“已签”印（缺图时回退朱砂对勾）
 		if is_claimed:
-			var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.730, 0.115, 0.895, 0.285), Color(0.16, 0.42, 0.28, 0.90))
-			if claimed_check != null:
-				claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
-		elif is_milestone:
-			var milestone_charm := add_optional_gpt_illustration_texture(indicator, "shop_charm_bei", rect_full(0.700, 0.110, 0.890, 0.315), 0.92, false)
-			if milestone_charm != null:
-				milestone_charm.name = "DailyLoginMilestoneCharm_%d" % day_num
-				milestone_charm.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-				milestone_charm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var claimed_seal_tex: Texture2D = guofeng_cinnabar_seal_texture("claimed")
+			if claimed_seal_tex != null:
+				var claimed_stamp := TextureRect.new()
+				claimed_stamp.name = "DailyLoginClaimedStamp_%d" % day_num
+				claimed_stamp.texture = claimed_seal_tex
+				claimed_stamp.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				claimed_stamp.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				claimed_stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				claimed_stamp.self_modulate = Color(1.0, 1.0, 1.0, 0.92)
+				apply_rect(claimed_stamp, rect_full(0.680, 0.055, 0.945, 0.340))
+				indicator.add_child(claimed_stamp)
+			else:
+				var claimed_check = add_lucide_icon(indicator, "check", rect_full(0.730, 0.115, 0.895, 0.285), Color(0.58, 0.15, 0.12, 0.92))
+				if claimed_check != null:
+					claimed_check.name = "DailyLoginClaimCheck_%d" % day_num
 
 		if is_current:
 			indicator.modulate = Color.WHITE
 		var day_focus_rail := make_gpt_center_crop_plate_rect(rect_full(0.220, 0.905, 0.780, 0.940), Color.WHITE, "quiet_gold_accent", 0.50)
 		day_focus_rail.name = "DailyLoginDayFocusRail_%d" % day_num
 		day_focus_rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		day_focus_rail.modulate.a = 0.46 if is_current else 0.0
+		day_focus_rail.modulate.a = 0.0
 		day_focus_rail.set_meta("persistent_current_day_state", is_current)
 		day_focus_rail.set_meta("persistent_state_alpha", 0.46 if is_current else 0.0)
 		indicator.add_child(day_focus_rail)
@@ -5904,7 +5991,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			day_focus_rail.modulate = Color(1.0, 1.0, 1.0, 0.86)
 		)
 		detail_proxy.focus_exited.connect(func() -> void:
-			day_focus_rail.modulate.a = 0.46 if is_current else 0.0
+			day_focus_rail.modulate.a = 0.0
 		)
 		indicator.add_child(detail_proxy)
 		# The day card owns detail only. The reward line remains passive, while
@@ -6849,6 +6936,19 @@ func show_exit_confirm() -> void:
 	# 遮罩层 — r415: thinner scrim so GPT dialog plate can read warm, not void.
 	var mask = make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.60), "ui_dark_scrim")
 	mask.mouse_filter = Control.MOUSE_FILTER_STOP
+	mask.gui_input.connect(func(event: InputEvent) -> void:
+		if exit_confirm_decision_locked:
+			return
+		var dismiss := false
+		if event is InputEventScreenTouch:
+			dismiss = (event as InputEventScreenTouch).pressed
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+		if dismiss:
+			mask.accept_event()
+			hide_exit_confirm()
+	)
 	overlay.add_child(mask)
 
 	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
@@ -6956,8 +7056,12 @@ func show_exit_confirm() -> void:
 	exit_btn.name = "ExitConfirmLeaveButton"
 	exit_btn.focus_mode = Control.FOCUS_ALL
 	exit_btn.custom_minimum_size = Vector2(144, 52)
-	mark_guofeng_danger_button(exit_btn, false)
+	exit_btn.set_meta("ui_danger_action", false)
 	style_guofeng_secondary_action(exit_btn, false)
+	exit_btn.add_theme_color_override("font_color", Color(0.46, 0.17, 0.13))
+	exit_btn.add_theme_color_override("font_hover_color", Color(0.54, 0.14, 0.10))
+	exit_btn.add_theme_color_override("font_focus_color", Color(0.46, 0.17, 0.13))
+	exit_btn.add_theme_color_override("font_pressed_color", Color(0.40, 0.13, 0.10))
 	button_row.add_child(exit_btn)
 	continue_btn.focus_neighbor_left = exit_btn.get_path()
 	continue_btn.focus_neighbor_right = exit_btn.get_path()
@@ -7035,14 +7139,25 @@ func show_loading_screen(view_state: Dictionary = {}) -> void:
 	root_layer.add_child(bg)
 	add_guofeng_page_garden("Loading")
 	var content_size := safe_content_pixel_size()
-	var paper_width := minf(content_size.x * 0.90, 680.0)
-	var paper_height := minf(content_size.y * 0.94, 480.0 if large_text_enabled else 440.0)
+	var paper_width := minf(content_size.x * 0.86, 590.0)
+	var paper_height := minf(content_size.y * 0.90, 460.0 if large_text_enabled else 412.0)
 	var paper_rect := rect_full(0.5 - paper_width / content_size.x * 0.5, 0.5 - paper_height / content_size.y * 0.5, 0.5 + paper_width / content_size.x * 0.5, 0.5 + paper_height / content_size.y * 0.5)
 	var center_panel := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	center_panel.name = "LoadingCenterPanel"
-	center_panel.self_modulate = Color.WHITE
+	center_panel.self_modulate = Color(0.95, 0.92, 0.86)
 	center_panel.set_meta("guofeng_surface_key", "settings_readable_gpt")
 	bg.add_child(center_panel)
+	var loading_inner_frame := add_optional_gpt_illustration_texture(center_panel, "guofeng_card_frame_gpt", rect_full(0.024, 0.028, 0.976, 0.972), 1.0, false)
+	if loading_inner_frame != null:
+		loading_inner_frame.name = "LoadingCardInnerBorder"
+		loading_inner_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		configure_guofeng_button_slice(loading_inner_frame, true, 104, 0.22)
+		var loading_frame_edges := loading_inner_frame.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if loading_frame_edges != null:
+			loading_inner_frame.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+			loading_frame_edges.self_modulate = Color(0.96, 0.93, 0.86, 0.52)
+		else:
+			loading_inner_frame.self_modulate = Color(0.96, 0.93, 0.86, 0.42)
 
 	# 游戏标题
 	var title = make_heading(center_panel, "云桌麻将", 40, Color(0.08, 0.16, 0.12), true)
@@ -7285,17 +7400,19 @@ func _show_replay_import_screen_impl() -> void:
 	if not preserve_replay_state:
 		replay_import_payload = {}
 		replay_import_code_draft = ""
-	var panel := make_guofeng_secondary_page("ReplayImportPanel", "Replay", effective_viewport_size())
+	var replay_viewport := effective_viewport_size()
+	var wide_replay := replay_viewport.x >= 1600.0
+	var panel := make_guofeng_secondary_page("ReplayImportPanel", "Replay", replay_viewport)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var compact_replay_large := effective_viewport_size().y <= 560.0 and large_text_enabled
-	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else 30, Color(0.10, 0.22, 0.16), true)
+	var compact_replay_large := replay_viewport.y <= 560.0 and large_text_enabled
+	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else commercial_ui_font_size(30, 4), Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
 	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
 	mark_ui_optimization(title, "F-503")
-	var digest_hint := make_label(panel, "回放防篡改校验", 12, Color(0.20, 0.30, 0.25), false)
+	var digest_hint := make_label(panel, "回放防篡改校验", commercial_ui_font_size(12, 3), Color(0.20, 0.30, 0.25), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	style_guofeng_label(digest_hint)
 	digest_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
@@ -7315,14 +7432,16 @@ func _show_replay_import_screen_impl() -> void:
 	set_ui_full_text(back, back.tooltip_text, "返回主菜单")
 	mark_ui_optimization(back, "F-505")
 	style_guofeng_secondary_action(back)
-	apply_rect(back, rect_full(0.845, 0.026, 0.945, 0.092))
+	apply_rect(back, rect_full(0.845, 0.026, 0.945, 0.084 if wide_replay else 0.092))
 	panel.add_child(back)
-	var input_label := make_label(panel, "回放码", 13, Color(0.11, 0.23, 0.18), true)
+	var input_label := make_label(panel, "回放码", commercial_ui_font_size(13, 3), Color(0.11, 0.23, 0.18), true)
 	input_label.name = "ReplayImportInputLabel"
 	input_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(input_label, rect_full(0.055, 0.116 if compact_replay_large else 0.124, 0.260, 0.162))
+	apply_rect(input_label, rect_full(0.055, 0.110 if wide_replay else (0.116 if compact_replay_large else 0.124), 0.260, 0.144 if wide_replay else 0.162))
 	set_ui_full_text(input_label, "回放码", "回放码输入字段")
 	mark_ui_optimization(input_label, "F-506")
+	var input_row_top := 0.150 if wide_replay else 0.172
+	var input_row_bottom := 0.208 if wide_replay else 0.262
 	var input := LineEdit.new()
 	input.name = "ReplayImportCodeInput"
 	input.placeholder_text = "粘贴回放码"
@@ -7334,7 +7453,7 @@ func _show_replay_import_screen_impl() -> void:
 	input.set_meta("validation_contract", "length_shape_error_position_and_full_copy")
 	input.custom_minimum_size = Vector2(0, 48)
 	input.add_theme_font_override("font", ui_cjk_font())
-	input.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 1))
+	input.add_theme_font_size_override("font_size", commercial_ui_font_size(15, 2))
 	var input_styles := input_style_set()
 	for style_name in ["normal", "focus", "read_only"]:
 		var field_style := input_styles[style_name].duplicate() as StyleBox
@@ -7368,7 +7487,7 @@ func _show_replay_import_screen_impl() -> void:
 	set_ui_full_text(input, "请输入或粘贴完整回放码", "回放码输入框")
 	mark_ui_optimization(input, "F-507")
 	mark_ui_optimization(input, "F-051")
-	apply_rect(input, rect_full(0.055, 0.172, 0.540, 0.262))
+	apply_rect(input, rect_full(0.055, input_row_top, 0.540, input_row_bottom))
 	panel.add_child(input)
 	replay_import_input = input
 	input.text_changed.connect(func(_value: String) -> void:
@@ -7389,7 +7508,7 @@ func _show_replay_import_screen_impl() -> void:
 	paste_button.custom_minimum_size = Vector2(72, 48)
 	paste_button.tooltip_text = "从剪贴板粘贴回放码"
 	set_ui_full_text(paste_button, paste_button.tooltip_text, "粘贴回放码")
-	apply_rect(paste_button, rect_full(0.552, 0.172, 0.642, 0.262))
+	apply_rect(paste_button, rect_full(0.552, input_row_top, 0.642, input_row_bottom))
 	panel.add_child(paste_button)
 	var clear_button := make_small_button("清空", Color(0.42, 0.34, 0.30), func() -> void:
 		set_replay_import_input_text("")
@@ -7400,7 +7519,7 @@ func _show_replay_import_screen_impl() -> void:
 	clear_button.custom_minimum_size = Vector2(72, 48)
 	clear_button.tooltip_text = "清空当前回放码"
 	set_ui_full_text(clear_button, clear_button.tooltip_text, "清空回放码")
-	apply_rect(clear_button, rect_full(0.652, 0.172, 0.742, 0.262))
+	apply_rect(clear_button, rect_full(0.652, input_row_top, 0.742, input_row_bottom))
 	panel.add_child(clear_button)
 	var import_button := make_small_button("导入", Color(0.42, 0.66, 0.50), Callable(self, "import_replay_from_input"))
 	import_button.name = "ReplayImportButton"
@@ -7408,24 +7527,24 @@ func _show_replay_import_screen_impl() -> void:
 	import_button.tooltip_text = "校验并打开回放时间线"
 	set_ui_full_text(import_button, import_button.tooltip_text, "导入并校验回放")
 	mark_ui_optimization(import_button, "F-508")
-	apply_rect(import_button, rect_full(0.755, 0.172, 0.945, 0.262))
+	apply_rect(import_button, rect_full(0.755, input_row_top, 0.945, input_row_bottom))
 	panel.add_child(import_button)
-	var status := make_label(panel, "等待粘贴回放码", 14, Color(0.24, 0.34, 0.28), false)
+	var status := make_label(panel, "等待粘贴回放码", commercial_ui_font_size(14, 2), Color(0.24, 0.34, 0.28), false)
 	status.name = "ReplayImportStatus"
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status.set_meta("preserve_semantic_color", true)
 	status.add_theme_constant_override("outline_size", 0)
 	status.add_theme_constant_override("shadow_offset_x", 0)
 	status.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(status, rect_full(0.055, 0.278, 0.735, 0.330))
+	apply_rect(status, rect_full(0.055, 0.220 if wide_replay else 0.278, 0.735, 0.258 if wide_replay else 0.330))
 	configure_clipped_label(status)
 	set_ui_full_text(status, "等待粘贴回放码", "回放导入状态：粘贴回放码后点击导入并校验")
 	status.set_meta("replay_validation_state", "empty")
 	mark_ui_optimization(status, "F-509")
-	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), 12, Color(0.26, 0.35, 0.30), false)
+	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), commercial_ui_font_size(12, 3), Color(0.26, 0.35, 0.30), false)
 	code_summary.name = "ReplayImportCodeSummary"
 	code_summary.set_meta("preserve_semantic_color", true)
-	apply_rect(code_summary, rect_full(0.055, 0.340, 0.735, 0.392))
+	apply_rect(code_summary, rect_full(0.055, 0.264 if wide_replay else 0.340, 0.735, 0.302 if wide_replay else 0.392))
 	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(code_summary)
 	set_ui_full_text(code_summary, "回放码长度与当前输入摘要", "回放码输入进度")
@@ -7444,17 +7563,20 @@ func _show_replay_import_screen_impl() -> void:
 	copy_code_button.set_meta("layout_role", "replay_copy_summary_lane")
 	copy_code_button.set_meta("pane_clearance_px", 8.0)
 	set_ui_full_text(copy_code_button, copy_code_button.tooltip_text, "复制完整回放码")
-	copy_code_button.disabled = input.text.strip_edges() == ""
-	apply_rect(copy_code_button, rect_full(0.755, 0.285, 0.945, 0.382))
+	var has_initial_code := input.text.strip_edges() != ""
+	copy_code_button.disabled = not has_initial_code
+	copy_code_button.visible = has_initial_code
+	apply_rect(copy_code_button, rect_full(0.755, 0.226 if wide_replay else 0.285, 0.945, 0.284 if wide_replay else 0.382))
 	panel.add_child(copy_code_button)
 	update_replay_import_input_feedback(input)
 	var compact_replay_layout := ui_is_compact()
+	var panes_top := 0.320 if wide_replay else 0.415
 	var archive_pane_left := 0.055
 	var archive_pane_right := 0.440 if compact_replay_layout else 0.485
 	var timeline_pane_left := 0.460 if compact_replay_layout else 0.505
 	var timeline_pane_right := 0.945
 	var pane_frame_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
-	var archive_pane := make_layout_host(rect_full(archive_pane_left, 0.415, archive_pane_right, 0.955))
+	var archive_pane := make_layout_host(rect_full(archive_pane_left, panes_top, archive_pane_right, 0.955))
 	archive_pane.name = "ReplayArchivePane"
 	archive_pane.set_meta("copy_action_clearance_px", 8.0)
 	archive_pane.set_meta("compact_width_policy", "timeline_priority_after_input_and_copy_lanes" if compact_replay_layout else "balanced_archive_timeline_columns")
@@ -7468,16 +7590,16 @@ func _show_replay_import_screen_impl() -> void:
 		archive_pane_plate.name = "ReplaySavedListFrame"
 		archive_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
 		configure_guofeng_button_slice(archive_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
-	var archive_title := make_label(archive_pane, "本地归档", 14, Color(0.11, 0.23, 0.18), true)
+	var archive_title := make_label(archive_pane, "本地归档", commercial_ui_font_size(14, 3), Color(0.11, 0.23, 0.18), true)
 	archive_title.name = "ReplayArchiveTitle"
 	archive_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(archive_title, rect_full(0.045, 0.025, 0.450, 0.115))
+	apply_rect(archive_title, rect_full(0.045, 0.025, 0.450, 0.095 if wide_replay else 0.115))
 	set_ui_full_text(archive_title, "本地归档", "本地回放归档")
 	mark_ui_optimization(archive_title, "F-511")
-	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), 12, Color(0.24, 0.34, 0.28), false)
+	var archive_count := make_label(archive_pane, "%d 条" % replay_archive_entries(replay_search_query).size(), commercial_ui_font_size(12, 3), Color(0.24, 0.34, 0.28), false)
 	archive_count.name = "ReplayArchiveCount"
 	archive_count.set_meta("preserve_semantic_color", true)
-	apply_rect(archive_count, rect_full(0.460, 0.028, 0.955, 0.115))
+	apply_rect(archive_count, rect_full(0.460, 0.028, 0.955, 0.095 if wide_replay else 0.115))
 	archive_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	set_ui_full_text(archive_count, "本地归档数量", "本地回放归档数量")
 	mark_ui_optimization(archive_count, "F-512")
@@ -7489,7 +7611,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("native_clear_proxy", true)
 	search.custom_minimum_size = Vector2(0, UI_MIN_TOUCH_TARGET)
 	search.add_theme_font_override("font", ui_cjk_font())
-	search.add_theme_font_size_override("font_size", accessibility_font_size(14))
+	search.add_theme_font_size_override("font_size", accessibility_font_size(commercial_ui_font_size(14, 2)))
 	var search_styles := input_style_set()
 	for style_name in ["normal", "focus", "read_only"]:
 		var search_style := search_styles[style_name].duplicate() as StyleBox
@@ -7520,7 +7642,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.045, 0.130, 0.844 if not compact_replay_layout else 0.955, 0.275))
+	apply_rect(search, rect_full(0.045, 0.112 if wide_replay else 0.130, 0.955, 0.204 if wide_replay else 0.275))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -7537,7 +7659,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.305, 0.955, 0.929 if not compact_replay_layout else 0.935))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.955, 0.955 if not compact_replay_layout else 0.935))
 	archive_pane.add_child(archive_scroll)
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -7567,7 +7689,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_pane.resized.connect(func() -> void: fit_compact_replay_archive_viewport(archive_scroll, archive_list))
 	call_deferred("fit_replay_scroll_content", archive_scroll, archive_list)
 	call_deferred("fit_compact_replay_archive_viewport", archive_scroll, archive_list)
-	var timeline := make_layout_host(rect_full(timeline_pane_left, 0.415, timeline_pane_right, 0.955))
+	var timeline := make_layout_host(rect_full(timeline_pane_left, panes_top, timeline_pane_right, 0.955))
 	timeline.name = "ReplayImportTimeline"
 	timeline.set_meta("copy_action_clearance_px", 8.0)
 	timeline.set_meta("compact_width_policy", "minimum_event_text_lane_before_archive_width" if compact_replay_layout else "balanced_archive_timeline_columns")
@@ -7577,16 +7699,16 @@ func _show_replay_import_screen_impl() -> void:
 		timeline_pane_plate.name = "ReplayImportTimelineFrame"
 		timeline_pane_plate.self_modulate = Color(0.98, 0.96, 0.91)
 		configure_guofeng_button_slice(timeline_pane_plate, true, 96 if pane_frame_key == "button_face_jiangnan_gpt" else 104, 0.125 if pane_frame_key == "button_face_jiangnan_gpt" else 0.22)
-	var timeline_title := make_label(timeline, "事件时间线", 14, Color(0.11, 0.23, 0.18), true)
+	var timeline_title := make_label(timeline, "事件时间线", commercial_ui_font_size(14, 3), Color(0.11, 0.23, 0.18), true)
 	timeline_title.name = "ReplayImportTimelineTitle"
 	timeline_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	apply_rect(timeline_title, rect_full(0.035, 0.025, 0.285, 0.115))
+	apply_rect(timeline_title, rect_full(0.035, 0.025, 0.285, 0.095 if wide_replay else 0.115))
 	set_ui_full_text(timeline_title, "事件时间线", "已验证回放事件时间线")
 	mark_ui_optimization(timeline_title, "F-514")
-	var timeline_position := make_label(timeline, "0 / 0 条事件", 12, Color(0.24, 0.34, 0.28), false)
+	var timeline_position := make_label(timeline, "0 / 0 条事件", commercial_ui_font_size(12, 3), Color(0.24, 0.34, 0.28), false)
 	timeline_position.name = "ReplayImportTimelinePosition"
 	timeline_position.set_meta("preserve_semantic_color", true)
-	apply_rect(timeline_position, rect_full(0.295, 0.028, 0.965, 0.115))
+	apply_rect(timeline_position, rect_full(0.295, 0.028, 0.965, 0.095 if wide_replay else 0.115))
 	timeline_position.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	configure_clipped_label(timeline_position)
 	set_ui_full_text(timeline_position, "当前事件与可见范围", "回放时间线位置")
@@ -7594,10 +7716,21 @@ func _show_replay_import_screen_impl() -> void:
 	timeline_position.set_meta("timeline_state", "empty")
 	mark_ui_optimization(timeline_position, "F-515")
 	mark_ui_optimization(timeline_position, "F-118")
-	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", 12, Color(0.28, 0.36, 0.31), false)
+	var empty_scroll_tex: Texture2D = guofeng_empty_state_ink_texture("scroll")
+	if empty_scroll_tex != null:
+		var empty_scroll_vignette := TextureRect.new()
+		empty_scroll_vignette.name = "ReplayTimelineEmptyVignette"
+		empty_scroll_vignette.texture = empty_scroll_tex
+		empty_scroll_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		empty_scroll_vignette.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		empty_scroll_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_scroll_vignette.self_modulate = Color(1.0, 1.0, 1.0, 0.86)
+		apply_rect(empty_scroll_vignette, rect_full(0.18, 0.16, 0.82, 0.58))
+		timeline.add_child(empty_scroll_vignette)
+	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", commercial_ui_font_size(12, 3), Color(0.28, 0.36, 0.31), false)
 	empty.name = "ReplayImportTimelineEmpty"
 	empty.set_meta("preserve_semantic_color", true)
-	apply_rect(empty, rect_full(0.050, 0.320, 0.950, 0.560))
+	apply_rect(empty, rect_full(0.050, 0.600 if empty_scroll_tex != null else 0.320, 0.950, 0.780 if empty_scroll_tex != null else 0.560))
 	configure_clipped_label(empty)
 	set_ui_full_text(empty, "粘贴回放码并点击导入后显示已验证事件", "回放时间线空状态：粘贴回放码并点击导入并校验")
 	empty.set_meta("timeline_empty_contract", "import_result_validation_event_count_and_range")
@@ -7615,7 +7748,7 @@ func _show_replay_import_screen_impl() -> void:
 	event_scroll.set_meta("timeline_measurement_pending", false)
 	event_scroll.set_meta("timeline_range_update_count", 0)
 	event_scroll.set_meta("timeline_scroll_lock_policy", "lock_input_until_one_measurement_pass")
-	apply_rect(event_scroll, rect_full(0.035, 0.135, 0.965, 0.841 if not compact_replay_layout else 0.829))
+	apply_rect(event_scroll, rect_full(0.035, 0.112 if wide_replay else 0.135, 0.965, 0.955 if not compact_replay_layout else 0.829))
 	timeline.add_child(event_scroll)
 	var event_scrollbar := event_scroll.get_v_scroll_bar()
 	if event_scrollbar != null:
@@ -7778,8 +7911,10 @@ func update_replay_import_input_feedback(input: LineEdit) -> void:
 		sync_guofeng_button_face_state(clear_code_button)
 	var copy_code_button := root_layer.find_child("ReplayImportCopyCodeButton", true, false) as Button if root_layer != null and is_instance_valid(root_layer) else null
 	if copy_code_button != null:
-		copy_code_button.disabled = code == ""
-		copy_code_button.tooltip_text = "复制输入框中的完整回放码，不使用首尾摘要" if code != "" else "输入回放码后可复制完整值"
+		var has_copyable_code := code != ""
+		copy_code_button.disabled = not has_copyable_code
+		copy_code_button.visible = has_copyable_code
+		copy_code_button.tooltip_text = "复制输入框中的完整回放码，不使用首尾摘要" if has_copyable_code else "输入回放码后可复制完整值"
 		sync_guofeng_button_face_state(copy_code_button)
 
 
@@ -8233,7 +8368,15 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	for action in [favorite, open, copy]:
 		style_guofeng_secondary_action(action, action == open)
 		action.add_theme_font_size_override("font_size", accessibility_font_size(13))
-	mark_guofeng_danger_button(delete, delete_confirming)
+	if delete_confirming:
+		mark_guofeng_danger_button(delete, true)
+	else:
+		delete.set_meta("ui_danger_action", false)
+		style_guofeng_secondary_action(delete, false)
+		delete.add_theme_color_override("font_color", Color(0.54, 0.16, 0.12))
+		delete.add_theme_color_override("font_hover_color", Color(0.62, 0.13, 0.10))
+		delete.add_theme_color_override("font_focus_color", Color(0.54, 0.16, 0.12))
+		delete.add_theme_color_override("font_pressed_color", Color(0.46, 0.12, 0.09))
 	delete.add_theme_font_size_override("font_size", accessibility_font_size(13))
 	return row
 
@@ -8399,7 +8542,10 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 	event_list.set_meta("timeline_filtered_event_count", visible_events.size())
 	event_list.set_meta("ui_page_generation", ui_page_generation)
 	var empty := root_layer.find_child("ReplayImportTimelineEmpty", true, false) as Label
+	var empty_vignette := root_layer.find_child("ReplayTimelineEmptyVignette", true, false) as Control
 	var empty_text := "导入后显示已验证事件" if events.is_empty() else "暂无可显示的已验证事件 · 已过滤 %d 条不支持事件" % maxi(0, events.size() - visible_events.size())
+	if empty_vignette != null:
+		empty_vignette.visible = visible_events.is_empty()
 	if empty != null:
 		empty.visible = visible_events.is_empty()
 		set_dynamic_label_text(empty, empty_text, empty_text)
@@ -8409,6 +8555,7 @@ func render_replay_timeline_events(payload: Dictionary, focus_first: bool = fals
 		mark_ui_optimization(empty, "F-118")
 	if visible_events.is_empty():
 		if event_scroll != null:
+			event_scroll.offset_bottom = 0.0
 			event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 			event_scroll.focus_mode = Control.FOCUS_ALL
 			event_scroll.modulate.a = 1.0
@@ -8550,6 +8697,23 @@ func normalize_replay_timeline_rows(event_list: VBoxContainer, expected_generati
 	event_list.set_meta("timeline_row_starts", row_starts)
 	event_list.set_meta("timeline_row_ends", row_ends)
 	event_list.set_meta("timeline_height_index_signature", "|".join(height_signature_parts))
+	var timeline_pane := event_scroll.get_parent() as Control
+	if timeline_pane != null and timeline_pane.size.y > 1.0 and not ui_is_compact() and not large_text_enabled and not row_ends.is_empty():
+		var available_timeline_h: float = timeline_pane.size.y * (event_scroll.anchor_bottom - event_scroll.anchor_top)
+		var whole_timeline_h: float = 0.0
+		for end_y in row_ends:
+			if end_y <= available_timeline_h + 0.5:
+				whole_timeline_h = end_y
+			else:
+				break
+		if whole_timeline_h > 44.0 and total_height > available_timeline_h + 0.5:
+			var snapped_bottom_offset: float = floorf(whole_timeline_h) - available_timeline_h
+			if not is_equal_approx(event_scroll.offset_bottom, snapped_bottom_offset):
+				event_scroll.offset_bottom = snapped_bottom_offset
+		elif not is_zero_approx(event_scroll.offset_bottom):
+			event_scroll.offset_bottom = 0.0
+	elif not is_zero_approx(event_scroll.offset_bottom):
+		event_scroll.offset_bottom = 0.0
 	event_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	event_scroll.focus_mode = Control.FOCUS_ALL
 	event_scroll.modulate.a = 1.0
@@ -9290,6 +9454,9 @@ func sync_shop_feedback_body_visibility() -> void:
 	var title := root_layer.find_child("ShopCabinetFooterTitle", true, false) as Control
 	if title != null:
 		title.visible = body == null or body.visible
+	var meter := root_layer.find_child("ShopExchangeMeterHost", true, false) as Control
+	if meter != null:
+		meter.visible = body == null or body.visible
 
 
 func refresh_toast_queue_indicator() -> void:
