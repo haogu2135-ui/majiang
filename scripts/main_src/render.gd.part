@@ -511,7 +511,7 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var group := str(button.get_meta("normal_action_group", ""))
 	var role := str(button.get_meta("action_role", ""))
-	var is_utility := bool(button.get_meta("pending_utility_button", false))
+	var is_utility := button.has_meta("pending_utility_button") and bool(button.get_meta("pending_utility_button"))
 	var is_danger := role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false))
 	var face_key_meta := str(button.get_meta("guofeng_button_face_key", ""))
 	var has_cinnabar_face := face_key_meta == "button_face_danger_cinnabar_gpt" and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
@@ -2478,7 +2478,7 @@ func draw_center(parent: Control) -> void:
 	center.set_meta("center_density_mode", "compact" if compact_center else "standard")
 	center.set_meta("center_density_policy", "compact_only_below_960_or_720_height")
 	var wall_label_text := str(center_wall_model.get("label_text", "余牌"))
-	var wall_label_font := 13 if wide_center else (9 if compact_center else (10 if not bool(center_wall_model.get("critical", false)) else 9))
+	var wall_label_font: int = 13 if wide_center else (9 if compact_center else (10 if not bool(center_wall_model.get("critical", false)) else 9))
 	var wall_label = make_label(center, wall_label_text, wall_label_font, Color(0.96, 0.92, 0.80, 1.0), false)
 	style_guofeng_label(wall_label, true)
 	wall_label.add_theme_font_override("font", ui_heading_font())
@@ -13825,7 +13825,7 @@ func draw_melds(parent: Control, render_context: Dictionary = {}) -> void:
 		area.set_meta("face_rotation", seat_meld_face_rotation(seat))
 		area.set_meta("layout_role", "meld_lane")
 		if area is BoxContainer:
-			var center_wide_self_melds := seat == 0 and not vertical and not has_pager and meld_viewport_size.x >= 1600.0 and meld_viewport_size.y >= 900.0
+			var center_wide_self_melds: bool = seat == 0 and not vertical and not has_pager and meld_viewport_snapshot.x >= 1600.0 and meld_viewport_snapshot.y >= 900.0
 			(area as BoxContainer).alignment = BoxContainer.ALIGNMENT_CENTER if center_wide_self_melds else BoxContainer.ALIGNMENT_BEGIN
 		# Keep MeldArea's public lane rect canonical. The pager reserve is consumed
 		# by group sizing below so the parent remains the stable seat-facing owner.
@@ -17500,9 +17500,18 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(audio_grid, "语音报牌", "当前：%s" % ("开启" if tts_enabled else "关闭"), make_setting_button("报牌", tts_enabled, func() -> void:
 		toggle_tts_setting()
 	))
-	make_setting_row(audio_grid, "播放测试", "试听当前音量", make_audio_test_button(func() -> void:
+	var all_audio_muted := not music_enabled and not sfx_enabled and not tts_enabled
+	var audio_test_btn := make_audio_test_button(func() -> void:
 		test_audio_setting()
-	))
+	)
+	if all_audio_muted:
+		audio_test_btn.disabled = true
+		audio_test_btn.tooltip_text = "全部声音已关闭，开启任一音频后可试音"
+		var test_face := audio_test_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
+		if test_face != null:
+			test_face.self_modulate = Color(0.84, 0.85, 0.82)
+		audio_test_btn.add_theme_color_override("font_disabled_color", Color(0.28, 0.32, 0.30, 0.88))
+	make_setting_row(audio_grid, "播放测试", "当前静音 · 请先开启音频" if all_audio_muted else "试听当前音量", audio_test_btn)
 
 	# 体验设置
 	var play_grid = make_settings_section(settings_content_parent, play_section_rect, "体验", settings_grid_compact)
@@ -17828,9 +17837,18 @@ func draw_shop_item_row_art(row: Control, _item_color: Color, count: int, item_i
 			paper.self_modulate = Color.WHITE
 		row.move_child(paper, 0)
 	var charm_key := shop_charm_gpt_key(item_id)
-	var display_card := bool(row.get_meta("shop_display_card", false))
-	var charm_rect := rect_full(0.025, 0.090, 0.325, 0.910) if display_card else rect_full(0.018, 0.080, 0.136, 0.920)
-	var charm := add_optional_gpt_illustration_texture(row, charm_key, charm_rect, 1.0, true)
+	var display_card := row.has_meta("shop_display_card") and bool(row.get_meta("shop_display_card"))
+	var wide_shop_row := effective_viewport_size().x >= 1600.0 and effective_viewport_size().y >= 900.0
+	var charm_rect := rect_full(0.032, 0.105, 0.318, 0.895) if display_card else (rect_full(0.020, 0.085, 0.145, 0.915) if wide_shop_row else rect_full(0.018, 0.080, 0.136, 0.920))
+	var pedestal_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if pedestal_tex != null and (display_card or wide_shop_row):
+		var pedestal := add_optional_gpt_illustration_texture(row, "guofeng_card_frame_gpt", charm_rect, 0.92, false)
+		if pedestal != null:
+			pedestal.name = "ShopItemCharmBox_%s" % item_id
+			pedestal.self_modulate = Color(0.95, 0.91, 0.82)
+			configure_guofeng_button_slice(pedestal, true, 104, 0.14, pedestal_tex, false)
+	var charm_inset := rect_full(charm_rect.position.x + 0.012, charm_rect.position.y + 0.045, charm_rect.size.x - 0.012, charm_rect.size.y - 0.045) if (display_card or wide_shop_row) else charm_rect
+	var charm := add_optional_gpt_illustration_texture(row, charm_key, charm_inset, 1.0, true)
 	if charm != null:
 		charm.name = "ShopItemCharmTexture_%s" % item_id
 		charm.set_meta("artwork_key", charm_key)

@@ -3920,17 +3920,11 @@ func _show_shop_screen_impl() -> void:
 	var current_coins_amount := maxi(0, int(currency.get("coins", 0)))
 	var exchange_coins_needed := maxi(0, SHOP_EXCHANGE_COINS - current_coins_amount)
 	var exchange_ratio := clampf(float(current_coins_amount) / float(maxi(1, SHOP_EXCHANGE_COINS)), 0.0, 1.0)
-	var exchange_meter_host := make_layout_host(rect_full(0.225, 0.055, 0.595, 0.345))
+	var exchange_meter_host := make_layout_host(rect_full(0.205, 0.040, 0.598, 0.360))
 	exchange_meter_host.name = "ShopExchangeMeterHost"
 	exchange_meter_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	shop_footer.add_child(exchange_meter_host)
-	var exchange_meter_caption := make_label(exchange_meter_host, "%d/%d 铜钱 → %d 玉符" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS], commercial_ui_font_size(11, 2), shop_ink, true)
-	exchange_meter_caption.name = "ShopExchangeMeterCaption"
-	apply_rect(exchange_meter_caption, rect_full(0.0, 0.0, 1.0, 0.54))
-	exchange_meter_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	exchange_meter_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	configure_clipped_label(exchange_meter_caption)
-	var exchange_meter_track := add_optional_gpt_illustration_texture(exchange_meter_host, "battle_ink_plaque_20261112", rect_full(0.0, 0.62, 0.96, 0.96), 1.0, false)
+	var exchange_meter_track := add_optional_gpt_illustration_texture(exchange_meter_host, "battle_ink_plaque_20261112", rect_full(0.0, 0.24, 0.44, 0.76), 1.0, false)
 	if exchange_meter_track != null:
 		exchange_meter_track.name = "ShopExchangeMeterTrack"
 		exchange_meter_track.clip_contents = true
@@ -3941,12 +3935,19 @@ func _show_shop_screen_impl() -> void:
 		else:
 			exchange_meter_track.self_modulate = Color(1.0, 1.0, 1.0, 0.32)
 		if exchange_ratio > 0.001:
-			var bar_right := clampf(exchange_ratio, 0.04, 0.992)
+			var bar_right := clampf(exchange_ratio, 0.05, 0.992)
 			var exchange_meter_bar := make_gpt_center_crop_plate_rect(rect_full(0.008, 0.16, bar_right, 0.84), Color.WHITE, "menu_ink_primary", 0.35)
 			exchange_meter_bar.name = "ShopExchangeMeterBar"
 			exchange_meter_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			exchange_meter_bar.self_modulate = Color(0.14, 0.46, 0.32, 0.96) if exchange_coins_needed == 0 else Color(0.76, 0.56, 0.20, 0.94)
 			exchange_meter_track.add_child(exchange_meter_bar)
+	var exchange_meter_copy := "%d/%d 铜钱 → %d 玉符" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS] if shop_wide_layout else "%d/%d → %d玉" % [mini(current_coins_amount, SHOP_EXCHANGE_COINS), SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
+	var exchange_meter_caption := make_label(exchange_meter_host, exchange_meter_copy, commercial_ui_font_size(11, 2), shop_ink, true)
+	exchange_meter_caption.name = "ShopExchangeMeterCaption"
+	apply_rect(exchange_meter_caption, rect_full(0.47, 0.0, 1.0, 1.0))
+	exchange_meter_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	exchange_meter_caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	configure_clipped_label(exchange_meter_caption)
 	var exchange_rate := "%d铜钱可兑换%d玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var display_exchange_rate := "%d 铜钱可兑换 %d 玉符" % [SHOP_EXCHANGE_COINS, SHOP_EXCHANGE_GEMS]
 	var footer_body_text := display_exchange_rate + "。"
@@ -6936,19 +6937,6 @@ func show_exit_confirm() -> void:
 	# 遮罩层 — r415: thinner scrim so GPT dialog plate can read warm, not void.
 	var mask = make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.60), "ui_dark_scrim")
 	mask.mouse_filter = Control.MOUSE_FILTER_STOP
-	mask.gui_input.connect(func(event: InputEvent) -> void:
-		if exit_confirm_decision_locked:
-			return
-		var dismiss := false
-		if event is InputEventScreenTouch:
-			dismiss = (event as InputEventScreenTouch).pressed
-		elif event is InputEventMouseButton:
-			var mouse_event := event as InputEventMouseButton
-			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
-		if dismiss:
-			mask.accept_event()
-			hide_exit_confirm()
-	)
 	overlay.add_child(mask)
 
 	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
