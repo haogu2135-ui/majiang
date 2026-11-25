@@ -2809,7 +2809,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	var tenpai_bonus = 220.0 if shanten <= 0 else 0.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context, eval_context, kabe_strength)
 	# 静默模式下 2/3 向听未做 34 张进张扫描时，用搭子质量估算厚度，避免误判所有中盘手牌为 0 进张极薄牌。
-	var midgame_ukeire_arg := ukeire
+	var midgame_ukeire_arg: int = ukeire
 	if not effective_metrics_ready and shanten >= 2:
 		midgame_ukeire_arg = int(shape_report.get("sequences", 0)) * 2 + int(shape_report.get("ryanmen", 0)) * 4 + int(shape_report.get("kanchan", 0)) * 2 + int(shape_report.get("penchan", 0)) + int(shape_report.get("pairs", 0)) * 2 + int(shape_report.get("triplets", 0)) * 2
 	var midgame_push = midgame_danger_adjustment(seat, shanten, midgame_ukeire_arg, safety, risk, feed_risk, pressure_context, eval_context, kabe_strength)
@@ -3019,7 +3019,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 		points_by_tile[tile] = points
 		fan_by_tile[tile] = fan
 		var wait_weight = 0.62 if discard_furiten else 1.0
-		var effective_points := points
+		var effective_points: int = points
 		# 地方规则起胡番门槛（如广东3番起胡）：未达起胡番的待牌不可荣和，连自摸(+1)也不足则近似死听。
 		if min_fan > 1 and fan < min_fan:
 			if fan + 1 < min_fan:
@@ -3051,7 +3051,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 	result["quality_penalty"] = quality_penalty
 	result["quality_text"] = wait_quality_text_from_values(total_remaining, self_discarded_waits, discard_furiten)
 	# 牌墙深浅权衡：前中盘偏向高番期望，残局偏向宽听面/多剩张速和。
-	var wall_progress := clamp(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
+	var wall_progress := clampf(1.0 - float(get_wall_count()) / float(maxi(1, display_wall_total())), 0.0, 1.0)
 	var width_scale := 0.94 if wall_progress < 0.45 else (1.20 if wall_progress >= 0.65 else 1.0)
 	var value_scale := 1.14 if wall_progress < 0.45 else (0.88 if wall_progress >= 0.65 else 1.0)
 	var wait_score = (
@@ -5256,14 +5256,17 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 	if index >= 27 and index < TILE_CODES.size() and visible >= 4:
 		return 0.0
 	var threat = 0.0
+	var opponent_state = ai_context_opponent_state(eval_context, opponent)
+	var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
+	var total_melds = ai_opponent_state_count(opponent_state, opponent, "melds")
+	var honor_melds = opponent_honor_meld_count(opponent, eval_context)
 	if index < 27:
 		var suit := int(index / 9)
 		var meld_count = opponent_meld_count_for_suit(opponent, suit, eval_context)
+		var suit_discards = opponent_discard_count_for_suit(opponent, suit, eval_context)
+		var tile_rank := index % 9
 		if meld_count > 0:
 			var meld_tiles = opponent_meld_tile_count_for_suit(opponent, suit, eval_context)
-			var suit_discards = opponent_discard_count_for_suit(opponent, suit, eval_context)
-			var opponent_state = ai_context_opponent_state(eval_context, opponent)
-			var discard_count = ai_opponent_state_count(opponent_state, opponent, "discards")
 			var off_suit_discards = max(0, discard_count - suit_discards)
 			threat += float(meld_count) * 3.2 + float(meld_tiles) * 0.65
 			if meld_count >= 2:
@@ -5275,21 +5278,70 @@ func opponent_pattern_threat_score(opponent: int, tile: String, visible: int, ev
 			elif suit_discards <= 2:
 				threat += 2.0
 			threat += min(5.0, float(off_suit_discards) * 0.45)
-			var tile_rank := index % 9
 			if tile_rank >= 2 and tile_rank <= 6:
 				threat += 2.4
 			elif tile_rank == 0 or tile_rank == 8:
 				threat += 0.6
+		elif discard_count >= 7 and suit_discards == 0:
+			# 暗染手/字牌副露混一色推断（纯公开河牌与明副露）：零弃目标花色且另外两门均有明显舍牌。
+			var other_suits_with_discards := 0
+			var other_suit_discards := 0
+			for s in range(3):
+				if s == suit:
+					continue
+				var sc := opponent_discard_count_for_suit(opponent, s, eval_context)
+				if sc >= 2:
+					other_suits_with_discards += 1
+				other_suit_discards += sc
+			var min_other_discards := 5 if honor_melds > 0 else 6
+			if other_suits_with_discards >= 2 and other_suit_discards >= min_other_discards:
+				var closed_flush_threat := 2.8 + minf(3.6, float(other_suit_discards - min_other_discards) * 0.55)
+				if honor_melds > 0:
+					closed_flush_threat += float(honor_melds) * 1.4
+				if tile_rank >= 2 and tile_rank <= 6:
+					closed_flush_threat += 1.4
+				if visible <= 1:
+					closed_flush_threat += 0.8
+				threat += closed_flush_threat
 	else:
-		var honor_melds = opponent_honor_meld_count(opponent, eval_context)
 		if honor_melds > 0:
-			var opponent_state = ai_context_opponent_state(eval_context, opponent)
-			var meld_count = ai_opponent_state_count(opponent_state, opponent, "melds")
-			threat += float(honor_melds) * 4.4 + float(meld_count) * 0.9
+			threat += float(honor_melds) * 4.4 + float(total_melds) * 0.9
 			if visible == 0:
 				threat += 3.6
 			elif visible >= 2:
 				threat -= 1.2
+	# 明碰碰胡路线推断（纯公开副露）：对手2副露及以上且全为刻/杠、无顺子副露时，生张易成双碰/单骑荣和。
+	if total_melds >= 2 and visible <= 1:
+		var triplet_melds := -1
+		var toitoi_cache: Dictionary = {}
+		if not eval_context.is_empty():
+			var existing_toitoi = eval_context.get("opponent_toitoi_triplets", null)
+			if typeof(existing_toitoi) == TYPE_DICTIONARY:
+				toitoi_cache = existing_toitoi as Dictionary
+				if toitoi_cache.has(opponent):
+					triplet_melds = int(toitoi_cache.get(opponent, 0))
+			else:
+				eval_context["opponent_toitoi_triplets"] = toitoi_cache
+		if triplet_melds < 0:
+			var opp_melds: Array = players[opponent].get("melds", [])
+			var counted_triplets := 0
+			var counted_sequences := 0
+			for meld_item in opp_melds:
+				if typeof(meld_item) != TYPE_ARRAY or (meld_item as Array).size() < 3:
+					continue
+				var first_tile := str((meld_item as Array)[0])
+				if is_triplet_meld(meld_item, first_tile) or ((meld_item as Array).size() == 4 and str((meld_item as Array)[1]) == first_tile):
+					counted_triplets += 1
+				else:
+					counted_sequences += 1
+			triplet_melds = counted_triplets if (counted_triplets >= 2 and counted_sequences == 0) else 0
+			if not eval_context.is_empty():
+				toitoi_cache[opponent] = triplet_melds
+		if triplet_melds >= 2:
+			var toitoi_threat := (3.2 if visible == 0 else 1.6) + float(triplet_melds - 2) * 2.0
+			if index >= 27 or (index < 27 and (index % 9 == 0 or index % 9 == 8)):
+				toitoi_threat += 1.2
+			threat += toitoi_threat
 	var result = max(0.0, threat)
 	if not eval_context.is_empty():
 		cache[cache_key] = result
@@ -5797,11 +5849,14 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 	var rob_threat = added_gang_rob_threat_report(seat, tile) if gang_kind == "added" else {}
 	var rob_risk_score = float(rob_threat.get("risk_score", 0.0))
 	var rob_risk_threshold = float(rob_threat.get("risk_threshold", 999.0))
-	# 已听的补杠可容忍略高风险；离听较远时则更谨慎。
+	# 已听的补杠可容忍略高风险；离听较远或末局守成领先时更谨慎。
 	if after_shanten <= 0:
 		rob_risk_threshold += 6.0
 	elif after_shanten >= 2:
 		rob_risk_threshold -= 2.0
+	var gang_score_ctx := score_context_report_cached(seat)
+	if str(gang_score_ctx.get("strategy", "均衡")) == "守成" and float(gang_score_ctx.get("late", 0.0)) > 0.0 and difficulty != AI_DIFFICULTY_EASY:
+		rob_risk_threshold -= 3.0 * float(gang_score_ctx.get("late", 0.0))
 	var rob_risk = gang_kind == "added" and (
 		float(rob_threat.get("max_risk", 0.0)) >= rob_risk_threshold
 		or rob_risk_score >= rob_risk_threshold + 6.0
