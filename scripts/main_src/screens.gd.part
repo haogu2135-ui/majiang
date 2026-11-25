@@ -172,8 +172,8 @@ func _show_achievements_screen_impl() -> void:
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	var daily_back_left := 0.825 if daily_login_viewport_size.x <= 1050.0 else 0.845
-	apply_rect(back, rect_full(daily_back_left, 0.028, 0.945, 0.092))
+	var ach_back_left := 0.825 if achievement_viewport_size.x <= 1050.0 else 0.845
+	apply_rect(back, rect_full(ach_back_left, 0.028, 0.945, 0.092))
 
 	draw_achievements_dashboard_art(panel)
 
@@ -1379,11 +1379,12 @@ func refresh_online_lobby_action_states() -> void:
 		start_button.modulate = Color.WHITE
 		sync_guofeng_button_face_state(start_button)
 	if not high_contrast_enabled:
-		for lobby_btn in [connect_button, create_button, join_button, chat_button, start_button]:
+		for lobby_btn_variant in [connect_button, create_button, join_button, chat_button, start_button]:
+			var lobby_btn := lobby_btn_variant as Button
 			if lobby_btn == null or not is_instance_valid(lobby_btn):
 				continue
 			var btn_face := lobby_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
-			var btn_edges := btn_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if btn_face != null else null
+			var btn_edges: NinePatchRect = btn_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if btn_face != null else null
 			if lobby_btn.disabled:
 				if btn_edges != null and btn_edges.visible:
 					btn_edges.self_modulate = Color(0.88, 0.85, 0.80, 0.62)
@@ -4695,7 +4696,7 @@ func _polish_stats_detail_rows_wave5(content: Control, stats_source: Dictionary,
 			continue
 		var metric_id := str(row.get_meta("metric_identity", ""))
 		var rail := row.get_node_or_null("StatsRowMetricRail_%s" % metric_id) as Control
-		var fill := rail.get_node_or_null("StatsRowMetricFill_%s" % metric_id) as Control if rail != null else null
+		var fill: Control = rail.get_node_or_null("StatsRowMetricFill_%s" % metric_id) as Control if rail != null else null
 		if metric_id == "胜率" or metric_id == "胜场":
 			if rail != null:
 				rail.offset_top = -8.0
@@ -4767,7 +4768,7 @@ func _show_stats_screen_impl() -> void:
 	style_guofeng_secondary_action(filter_button, false)
 	if not filter_button.disabled:
 		var filter_face := filter_button.get_node_or_null("GptButtonFacePlate") as TextureRect
-		var filter_edges := filter_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if filter_face != null else null
+		var filter_edges: NinePatchRect = filter_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if filter_face != null else null
 		if filter_edges != null and filter_edges.visible:
 			filter_edges.self_modulate = Color(1.0, 0.95, 0.82)
 		elif filter_face != null:
@@ -4807,8 +4808,7 @@ func _show_stats_screen_impl() -> void:
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	var daily_back_left := 0.825 if daily_login_viewport_size.x <= 1050.0 else 0.845
-	apply_rect(back, rect_full(daily_back_left, 0.028, 0.945, 0.092))
+	apply_rect(back, rect_full(0.845, 0.028, 0.945, 0.092))
 	var stats_source := stats_source_for_filter(stats_selected_rule)
 	panel.set_meta("stats_source", stats_source.duplicate(true))
 	var stats_dash := draw_stats_dashboard_art(panel, stats_viewport_size)
@@ -8086,7 +8086,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_pane.add_child(archive_scroll)
 	if compact_replay_layout and not large_text_enabled:
 		var compact_archive_hint := make_label(archive_pane, "上下滑动查看更多归档", 11, Color(0.28, 0.36, 0.31), false)
-		compact_archive_hint.name = "ReplayArchiveCompactHint"
+		compact_archive_hint.name = "ReplaySavedCompactHint"
 		apply_rect(compact_archive_hint, rect_full(0.060, 0.830, 0.940, 0.940))
 		compact_archive_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		compact_archive_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -8283,7 +8283,7 @@ func fit_compact_replay_archive_viewport(scroll: ScrollContainer, list: VBoxCont
 	var bottom_offset := floorf(complete_height) - available if rows > 0 else 0.0
 	if not is_equal_approx(scroll.offset_bottom, bottom_offset):
 		scroll.offset_bottom = bottom_offset
-	var compact_hint := pane.get_node_or_null("ReplayArchiveCompactHint") as Label
+	var compact_hint := pane.get_node_or_null("ReplaySavedCompactHint") as Label
 	if compact_hint != null:
 		var total_archive_rows := 0
 		for child in list.get_children():
