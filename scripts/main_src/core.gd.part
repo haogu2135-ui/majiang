@@ -4558,18 +4558,19 @@ func battle_seat_layout_rect(seat: int, fallback_rect: Rect2, viewport_snapshot:
 	if seat != 2:
 		return fallback_rect
 	var content_size := safe_content_pixel_size_for_margins(viewport_snapshot, safe_area_margins)
-	var wall_layout: Array = WALL_LAYOUTS[0]
-	var wall_lane := battle_table_anchor_root_rect(Rect2(wall_layout[0], wall_layout[1]), viewport_snapshot)
-	# The wall's 30px tile faces extend beyond its normalized layout lane.
-	var wall_bottom := (wall_lane.position.y + wall_lane.size.y) * 0.5 + WALL_BACK_TILE_SIZE.y * 0.5 / content_size.y
+	var wall_lane := battle_table_anchor_root_rect(battle_wall_layout_rect(0, viewport_snapshot, content_size), viewport_snapshot)
+	# The wall's tile backs extend beyond its normalized layout lane; reserve
+	# extra breathing room in wide large-text mode so the top seat clears the wall.
+	var wide_large_text := viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0 and large_text_enabled
+	var wall_extra_pad := 6.0 if wide_large_text else 0.0
+	var wall_bottom := (wall_lane.position.y + wall_lane.size.y) * 0.5 + (WALL_BACK_TILE_SIZE.y * 0.5 + wall_extra_pad) / content_size.y
 	var river := battle_table_anchor_root_rect(seat_discard_rect(2), viewport_snapshot)
 	var compact := viewport_snapshot.x <= 960.0 or viewport_snapshot.y <= 560.0
 	var gutter := 2.0 if compact else 8.0
 	var available_height := (river.position.y - wall_bottom) * content_size.y - gutter * 2.0
 	if available_height < 24.0:
 		return fallback_rect
-	var wide_large_text := viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0 and large_text_enabled
-	var height := minf(68.0 if wide_large_text else 53.0, floorf(available_height))
+	var height := minf(60.0 if wide_large_text else 53.0, floorf(available_height))
 	var width := 360.0 if height >= 40.0 else minf(440.0, maxf(420.0, content_size.x * 0.33))
 	var left := 0.5 - width * 0.5 / content_size.x
 	var top := wall_bottom + (gutter + (available_height - height) * 0.5) / content_size.y
