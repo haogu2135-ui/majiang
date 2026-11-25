@@ -10658,11 +10658,13 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	configure_clipped_label(risk_caption)
 	var compact_reason := ""
 	var danger_source = report.get("danger_source", {})
-	if typeof(danger_source) == TYPE_DICTIONARY and str(danger_source.get("reason", "")) != "":
-		compact_reason = str(danger_source.get("reason", ""))
-	elif str(report.get("feed_text", "")) != "":
-		compact_reason = str(report.get("feed_text", ""))
-	var detail_slot_width := maxf(84.0, safe_content_pixel_size().x * (DANGER_DISCARD_CONFIRMATION_RECT.size.x - DANGER_DISCARD_CONFIRMATION_RECT.position.x) * 0.60)
+	var source_reason := str(danger_source.get("reason", "")).strip_edges() if typeof(danger_source) == TYPE_DICTIONARY else ""
+	var feed_reason := str(report.get("feed_text", "")).strip_edges()
+	if source_reason != "" and source_reason != "牌路危险" and source_reason != "危险":
+		compact_reason = source_reason
+	elif feed_reason != "" and feed_reason != "牌路危险" and feed_reason != "危险":
+		compact_reason = "%s，慎打" % feed_reason
+	var detail_slot_width := maxf(84.0, safe_content_pixel_size().x * (DANGER_DISCARD_CONFIRMATION_RECT.size.x - DANGER_DISCARD_CONFIRMATION_RECT.position.x) * 0.61)
 	var detail_display := danger_discard_detail_display_text(compact_reason, detail_slot_width)
 	var detail := make_label(panel, detail_display, 12, Color(0.96, 0.91, 0.80), true)
 	detail.name = "DangerDiscardDetailText"
@@ -10679,25 +10681,24 @@ func danger_discard_detail_display_text(reason: String, max_width_px: float = 12
 	var clean := reason.strip_edges()
 	var font := ui_cjk_font()
 	var font_size := accessibility_font_size(12)
-	if clean == "":
-		var rich_default := "警惕放铳 · 建议改打"
-		if font != null and font.get_string_size(rich_default, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
-			return rich_default
+	if clean == "" or clean == "牌路危险" or clean == "危险":
+		for rich_default in ["警惕放铳，建议改打", "警惕放铳，慎打", "警惕放铳"]:
+			if font == null or font.get_string_size(rich_default, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+				return rich_default
 		return "牌路危险"
-	if font != null and font.get_string_size(clean, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+	if font == null or font.get_string_size(clean, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
 		return clean
 	# Preserve the leading clause or fit as many real characters as the measured
 	# lane holds instead of unconditionally erasing every >6-char reason.
 	var first_clause := clean.split("，")[0].split("·")[0].strip_edges()
-	if first_clause != "" and font != null and font.get_string_size(first_clause, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+	if first_clause != "" and font.get_string_size(first_clause, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
 		return first_clause
 	var candidate := first_clause if first_clause != "" else clean
-	if font != null:
-		while candidate.length() > 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_width_px:
-			candidate = candidate.left(candidate.length() - 1)
-		if candidate.length() >= 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
-			return candidate + "…"
-	return "牌路危险"
+	while candidate.length() > 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_width_px:
+		candidate = candidate.left(candidate.length() - 1)
+	if candidate.length() >= 4 and font.get_string_size(candidate + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width_px:
+		return candidate + "…"
+	return "警惕放铳"
 
 
 func draw_deal_cascade_completion_art(parent: Control, dealer: int, center: Vector2, accent: Color) -> Control:
