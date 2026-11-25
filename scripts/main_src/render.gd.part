@@ -17324,7 +17324,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		mark_ui_optimization(section_nav_button, "F-713")
 		settings_section_navigation.add_child(section_nav_button)
 		if section_name == active_settings_section:
-			var active_marker := add_optional_gpt_illustration_texture(section_nav_button, "quiet_gold_accent", rect_full(0.240, 0.840, 0.760, 0.900), 0.92, false)
+			var active_marker: Control = add_optional_gpt_illustration_texture(section_nav_button, "quiet_gold_accent", rect_full(0.240, 0.840, 0.760, 0.900), 0.92, false)
 			if active_marker == null:
 				active_marker = make_gpt_tick_strip(rect_full(0.280, 0.835, 0.720, 0.895), Color(1.0, 0.88, 0.46, 0.95))
 				section_nav_button.add_child(active_marker)
