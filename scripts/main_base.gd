@@ -1501,7 +1501,7 @@ const CENTER_LAST_LABEL_RECT := Rect2(Vector2(0.34, 0.545), Vector2(0.66, 0.635)
 const CENTER_LAST_TILE_RECT := Rect2(Vector2(0.405, 0.640), Vector2(0.595, 0.900))
 const CENTER_LAST_TILE_SIZE := Vector2(44, 60)
 const CENTER_WIND_RECTS := [
-	Rect2(Vector2(0.43, 0.805), Vector2(0.57, 1.000)),
+	Rect2(Vector2(0.43, 0.785), Vector2(0.57, 0.975)),
 	Rect2(Vector2(0.78, 0.40), Vector2(0.94, 0.57)),
 	Rect2(Vector2(0.43, 0.010), Vector2(0.57, 0.200)),
 	Rect2(Vector2(0.06, 0.40), Vector2(0.22, 0.57)),
@@ -2961,8 +2961,26 @@ func add_line_edit_clear_proxy(parent: Control, edit: LineEdit, proxy_name: Stri
 	# proxy owns the full target while the LineEdit keeps text selection/focus.
 	edit.clear_button_enabled = false
 	edit.set_meta("native_clear_proxy", true)
-	var proxy := make_icon_button("x", Color(0.78, 0.72, 0.58), 14)
+	var clear_ink := Color(0.24, 0.34, 0.28, 0.88)
+	var proxy := make_icon_button("x", clear_ink, 15)
 	proxy.name = proxy_name
+	proxy.flat = true
+	var clear_face := proxy.get_node_or_null("GptButtonFacePlate")
+	if clear_face != null:
+		proxy.remove_child(clear_face)
+		clear_face.queue_free()
+	var clear_empty := StyleBoxEmpty.new()
+	for style_key in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		proxy.add_theme_stylebox_override(style_key, clear_empty)
+	proxy.set_meta("guofeng_button_font_color", clear_ink)
+	proxy.add_theme_color_override("font_color", clear_ink)
+	proxy.add_theme_color_override("font_hover_color", Color(0.58, 0.16, 0.13, 1.0))
+	proxy.add_theme_color_override("font_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
+	proxy.add_theme_color_override("font_focus_color", Color(0.11, 0.23, 0.18, 1.0))
+	proxy.add_theme_color_override("font_disabled_color", Color(0.42, 0.46, 0.43, 0.55))
+	proxy.add_theme_constant_override("outline_size", 0)
+	proxy.add_theme_constant_override("shadow_offset_x", 0)
+	proxy.add_theme_constant_override("shadow_offset_y", 0)
 	proxy.custom_minimum_size = Vector2(UI_MIN_TOUCH_TARGET, UI_MIN_TOUCH_TARGET)
 	proxy.tooltip_text = "清空%s" % str(edit.get_meta("ui_input_field", "输入内容"))
 	set_ui_full_text(proxy, proxy.tooltip_text, proxy.tooltip_text)
@@ -3320,7 +3338,7 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var filled_danger_visual := is_danger_action and (ink_face or danger_cinnabar_tex != null)
 	var text_color := Color(0.99, 0.94, 0.84) if filled_danger_visual else (Color(0.60, 0.14, 0.11) if is_danger_action else (Color(0.97, 0.93, 0.78) if ink_face else Color(0.11, 0.23, 0.18)))
 	var hover_text_color := Color(1.0, 0.97, 0.90) if filled_danger_visual else (Color(0.48, 0.10, 0.08) if is_danger_action else text_color)
-	var disabled_text_color := Color(0.80, 0.79, 0.69) if (ink_face or filled_danger_visual) else (Color(0.55, 0.34, 0.31) if is_danger_action else Color(0.36, 0.41, 0.37))
+	var disabled_text_color := Color(0.80, 0.79, 0.69) if (ink_face or filled_danger_visual) else (Color(0.55, 0.34, 0.31) if is_danger_action else Color(0.30, 0.36, 0.32))
 	var base_face_modulate := Color.WHITE
 	if is_danger_action and danger_cinnabar_tex == null:
 		base_face_modulate = Color(0.68, 0.21, 0.18, 1.0) if ink_face else Color(1.0, 0.91, 0.88, 1.0)

@@ -31,12 +31,15 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 		if face == null:
 			return
 		var is_ink_surface := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
-		if button.disabled:
-			face.self_modulate = Color.WHITE
-		elif button.has_focus():
-			face.self_modulate = Color(1.06, 1.04, 0.96, 1.0) if is_ink_surface else Color(1.03, 1.01, 0.95, 1.0)
+		var edges := face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		var focus_tint := Color.WHITE
+		if not button.disabled and button.has_focus():
+			focus_tint = Color(1.06, 1.04, 0.96, 1.0) if is_ink_surface else Color(1.03, 1.01, 0.95, 1.0)
+		if edges != null and edges.visible:
+			face.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+			edges.self_modulate = focus_tint
 		else:
-			face.self_modulate = Color.WHITE
+			face.self_modulate = focus_tint
 	if not bool(button.get_meta("guofeng_focus_tint_connected", false)):
 		button.set_meta("guofeng_focus_tint_connected", true)
 		button.focus_entered.connect(sync_focus_tint)
@@ -976,22 +979,44 @@ func complete_tutorial(reason: String = "基础操作已完成") -> void:
 		refresh_current_screen()
 
 
+func style_flat_clear_proxy(proxy: Button) -> void:
+	if proxy == null or not is_instance_valid(proxy):
+		return
+	var old_face := proxy.get_node_or_null("GptButtonFacePlate")
+	if old_face != null:
+		proxy.remove_child(old_face)
+		old_face.queue_free()
+	proxy.flat = true
+	var clear_empty := StyleBoxEmpty.new()
+	for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
+		proxy.add_theme_stylebox_override(style_key, clear_empty)
+	proxy.add_theme_color_override("font_color", Color(0.24, 0.34, 0.28, 0.90))
+	proxy.add_theme_color_override("font_hover_color", Color(0.60, 0.16, 0.13, 1.0))
+	proxy.add_theme_color_override("font_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
+	proxy.add_theme_color_override("font_focus_color", Color(0.11, 0.23, 0.18, 1.0))
+	proxy.add_theme_color_override("font_disabled_color", Color(0.36, 0.42, 0.38, 0.50))
+	proxy.add_theme_constant_override("outline_size", 0)
+	proxy.add_theme_constant_override("shadow_offset_x", 0)
+	proxy.add_theme_constant_override("shadow_offset_y", 0)
+
+
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
 	# On short safe areas the caption and focus indicator sit beside the field.
 	# The clear proxy remains an absolute sibling of the native editor.
 	var use_inline_caption := safe_content_pixel_size().y <= 560.0 and not large_text_enabled
-	var caption_width := 96.0
+	var caption_width := 76.0 if use_inline_caption else 96.0
 	var row = Control.new()
 	configure_passive_container(row)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(row)
 	var caption = Label.new()
 	caption.name = "LobbyFieldCaption_%s" % label_text
-	caption.text = label_text
+	caption.text = "服务器" if use_inline_caption and label_text == "服务器 IP/域名" else label_text
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.add_theme_font_override("font", ui_cjk_font())
 	caption.add_theme_font_size_override("font_size", commercial_ui_font_size(13, 1))
 	caption.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	apply_rect(caption, rect_full(0.0, 0.0, 1.0, 0.240))
 	row.add_child(caption)
 	var edit = LineEdit.new()
@@ -1029,8 +1054,24 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var input_art := add_optional_gpt_illustration_texture(edit, "menu_card_readable_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if input_art != null:
 		input_art.name = "LobbyFieldPaperFace"
-		input_art.self_modulate = Color(0.94, 0.90, 0.82)
 		input_art.show_behind_parent = true
+		var lobby_field_normal := optional_gpt_illustration_texture("input_field_paper_normal_gpt")
+		var lobby_field_focus := optional_gpt_illustration_texture("input_field_paper_focus_gpt")
+		if lobby_field_normal != null:
+			# Preserve LobbyFieldPaperFace.texture == menu_card_readable_gpt for smoke contract
+			# while rendering the crisp 9-sliced recessed paper frame on AuthoredBitmapEdges.
+			configure_guofeng_button_slice(input_art, true, 40, 0.25, lobby_field_normal, true)
+			if lobby_field_focus != null:
+				edit.focus_entered.connect(func() -> void:
+					if is_instance_valid(input_art):
+						configure_guofeng_button_slice(input_art, true, 40, 0.25, lobby_field_focus, true)
+				)
+				edit.focus_exited.connect(func() -> void:
+					if is_instance_valid(input_art):
+						configure_guofeng_button_slice(input_art, true, 40, 0.25, lobby_field_normal, true)
+				)
+		else:
+			input_art.self_modulate = Color(0.94, 0.90, 0.82)
 	var editing := make_label(row, "编辑中", 12, Color.WHITE, false)
 	editing.name = "LobbyFieldEditingIndicator"
 	apply_rect(editing, rect_full(0.65, 0.0, 1.0, 0.240))
@@ -1053,9 +1094,9 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var edit_height := ceilf(edit.get_combined_minimum_size().y)
 	if use_inline_caption:
 		row.custom_minimum_size.y = maxf(edit_height, caption_height * 2.0)
-		apply_rect(caption, rect_full(0.0, 0.0, 0.0, 0.5))
+		apply_rect(caption, rect_full(0.0, 0.0, 0.0, 1.0))
 		caption.offset_right = caption_width
-		apply_rect(editing, rect_full(0.0, 0.5, 0.0, 1.0))
+		apply_rect(editing, rect_full(0.0, 0.62, 0.0, 1.0))
 		editing.offset_right = caption_width
 		editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		apply_rect(edit, rect_full(0.0, 0.0, 1.0, 1.0))
@@ -1067,14 +1108,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	row.add_child(edit)
 	var clear_proxy := add_line_edit_clear_proxy(row, edit, "LobbyFieldClearButton_%s" % label_text, Callable(self, "refresh_online_lobby_action_states"))
 	if clear_proxy != null:
-		clear_proxy.flat = true
-		var clear_empty := StyleBoxEmpty.new()
-		for style_key in ["normal", "hover", "pressed", "focus", "disabled"]:
-			clear_proxy.add_theme_stylebox_override(style_key, clear_empty)
-		clear_proxy.add_theme_color_override("icon_normal_color", Color(0.24, 0.34, 0.28, 0.86))
-		clear_proxy.add_theme_color_override("icon_hover_color", Color(0.58, 0.16, 0.13, 1.0))
-		clear_proxy.add_theme_color_override("icon_pressed_color", Color(0.46, 0.12, 0.10, 1.0))
-		clear_proxy.add_theme_color_override("icon_focus_color", Color(0.11, 0.23, 0.18, 1.0))
+		style_flat_clear_proxy(clear_proxy)
 		clear_proxy.set_meta("lobby_clear_field", label_text)
 		clear_proxy.set_meta("lobby_clear_contract", "44px_clear_refresh_actions_restore_focus")
 		mark_ui_optimization(clear_proxy, "F-173")
@@ -1510,7 +1544,7 @@ func _show_online_lobby_impl() -> void:
 	connection_help.name = "OnlineLobbyConnectionHelpButton"
 	connection_help.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET)
 	form_panel.add_child(connection_help)
-	apply_rect(connection_help, rect_full(0.54, 0.0, 0.94, 0.115))
+	apply_rect(connection_help, rect_full(0.54, 0.015, 0.94, 0.104))
 	style_guofeng_secondary_action(connection_help)
 	set_ui_full_text(connection_help, "查看本机、局域网服务器地址和好友入房步骤", "连接帮助")
 	var input_group_backplate = make_layout_host(rect_full(0.045, 0.120, 0.955, 0.668))
@@ -1532,7 +1566,7 @@ func _show_online_lobby_impl() -> void:
 	online_host_edit.name = "OnlineLobbyHostEdit"
 	online_room_edit = add_lobby_line_edit(form, "房间号", selected_room, ONLINE_ROOM_CODE_MAX_LENGTH)
 	online_room_edit.name = "OnlineLobbyRoomEdit"
-	online_room_edit.placeholder_text = "输入房间码，如 ROOM7"
+	online_room_edit.placeholder_text = "房间码，如 ROOM7" if compact_lobby_form else "输入房间码，如 ROOM7"
 	online_room_edit.tooltip_text = "输入房间码：最多 %d 个字符，可含字母、数字和连字符" % ONLINE_ROOM_CODE_MAX_LENGTH
 	online_room_edit.text_changed.connect(func(value: String) -> void:
 		selected_room = bounded_online_input(value, ONLINE_ROOM_CODE_MAX_LENGTH)
@@ -1708,12 +1742,12 @@ func _show_online_lobby_impl() -> void:
 	style_guofeng_secondary_action(lobby_chat_button, false)
 	# Align right with the empty-state card while disconnected, or reserve a clean
 	# lane between the room title and room badge once connected.
-	apply_rect(lobby_chat_button, rect_full(0.500, 0.020, 0.635, 0.104) if room_snapshot_visible else rect_full(0.790, 0.020, 0.955, 0.104))
+	apply_rect(lobby_chat_button, rect_full(0.500, 0.018, 0.635, 0.102) if room_snapshot_visible else rect_full(0.790, 0.018, 0.950, 0.102))
 	log_panel.add_child(lobby_chat_button)
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
 	var compact_room_badge := online_lobby_viewport_size.x <= 960.0
-	var room_badge_rect := rect_full(0.665, 0.030, 0.985, 0.100) if compact_room_badge else rect_full(0.670, 0.030, 0.955, 0.100)
+	var room_badge_rect := rect_full(0.655, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.665, 0.022, 0.950, 0.098)
 	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
@@ -1758,7 +1792,7 @@ func _show_online_lobby_impl() -> void:
 	log_scroll.name = "OnlineLobbyLogScroll"
 	configure_scroll_container(log_scroll, "上下滚动查看房间日志；新日志到达时自动跟随底部")
 	mark_ui_optimization(log_scroll, "F-394")
-	apply_rect(log_scroll, rect_full(0.045, 0.470, 0.955, 0.980))
+	apply_rect(log_scroll, rect_full(0.045, 0.470, 0.955, 1.000))
 	log_scroll.anchor_top = 0.0
 	log_scroll.offset_top = float(log_list_panel.get_meta("header_min_height_px", 0.0))
 	if compact_large_roster:
@@ -1790,14 +1824,12 @@ func _show_online_lobby_impl() -> void:
 	logs_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	logs_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	logs_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	logs_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.88))
-	logs_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.72))
-	logs_label.add_theme_color_override("default_color", Color(0.96, 0.97, 0.88))
-	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(13 if compact_lobby_log else commercial_ui_font_size(14, 2)))
-	logs_label.add_theme_constant_override("outline_size", 2)
-	logs_label.add_theme_constant_override("shadow_offset_x", 1)
-	logs_label.add_theme_constant_override("shadow_offset_y", 1)
-	logs_label.add_theme_constant_override("line_spacing", -2 if compact_lobby_log else 0)
+	logs_label.add_theme_color_override("default_color", Color(0.11, 0.23, 0.18))
+	logs_label.add_theme_font_size_override("normal_font_size", accessibility_font_size(12 if compact_lobby_log else commercial_ui_font_size(13, 2)))
+	logs_label.add_theme_constant_override("outline_size", 0)
+	logs_label.add_theme_constant_override("shadow_offset_x", 0)
+	logs_label.add_theme_constant_override("shadow_offset_y", 0)
+	logs_label.add_theme_constant_override("line_spacing", -1 if compact_lobby_log else 1)
 	logs_label.custom_minimum_size = Vector2.ZERO
 	logs_label.set_meta("line_range_source", "OnlineLobbyLogScroll")
 	mark_ui_optimization(logs_label, "F-909")
@@ -1808,6 +1840,7 @@ func _show_online_lobby_impl() -> void:
 		)
 	var log_scrollbar := log_scroll.get_v_scroll_bar()
 	if log_scrollbar != null:
+		style_guofeng_scrollbar(log_scrollbar)
 		log_scrollbar.value_changed.connect(func(_value: float) -> void:
 			refresh_online_log_navigation()
 		)
@@ -1979,7 +2012,7 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
-		apply_rect(lobby_chat_button, rect_full(0.500, 0.020, 0.635, 0.104) if show_room_snapshot else rect_full(0.790, 0.020, 0.955, 0.104))
+		apply_rect(lobby_chat_button, rect_full(0.500, 0.018, 0.635, 0.102) if show_room_snapshot else rect_full(0.790, 0.018, 0.950, 0.102))
 	if room_badge != null:
 		var room_badge_label = room_badge.find_child("OnlineLobbyRoomBadgeLabel", true, false) as Label
 		room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2815,11 +2848,12 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 		step.set_meta("active", active)
 		var plate := step_ref.get("plate", null) as TextureRect
 		if plate != null:
-			var plate_key := "battle_ink_plaque_20261112" if active else "button_face_jiangnan_gpt"
+			var active_key := "button_face_jiangnan_active_gpt" if optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null else "battle_ink_plaque_20261112"
+			var plate_key := active_key if active else "button_face_jiangnan_gpt"
 			var step_source := optional_gpt_illustration_texture(plate_key)
 			if step_source != null:
 				plate.texture = step_source
-				if active:
+				if plate_key == "battle_ink_plaque_20261112":
 					configure_guofeng_button_slice(plate, true, 32, 0.25)
 				else:
 					configure_guofeng_button_slice(plate, true, 96, 0.125)
@@ -3527,13 +3561,13 @@ func _show_shop_screen_impl() -> void:
 		# 按钮内容 - 单一 CTA，价格节点保留为逻辑/测试锚点
 		var command_color := Color(0.97, 0.93, 0.78) if can_afford else Color(0.60, 0.16, 0.13)
 		var buy_icon_color := Color(0.48, 0.88, 0.68) if can_afford else Color(0.60, 0.24, 0.20)
-		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.230, 0.290, 0.335, 0.710) if shop_wide_layout else rect_full(0.065, 0.290, 0.190, 0.710), buy_icon_color)
+		var buy_icon := add_lucide_icon(buy_btn, "diamond", rect_full(0.185, 0.290, 0.285, 0.710) if shop_wide_layout else rect_full(0.060, 0.290, 0.175, 0.710), buy_icon_color)
 		add_shop_focus_marker(buy_btn, buy_hit_host, buy_icon, rect_full(0.040, 0.12, 0.160, 0.88))
 		var command_label = make_label(buy_btn, "%s" % ("购买 %d玉符" % cost if can_afford else "%d玉·差%d玉" % [cost, maxi(0, cost - int(currency.get("gems", 0)))]), commercial_ui_font_size(15, 2), command_color, true)
 		command_label.add_theme_color_override("font_color", command_color)
 		command_label.set_meta("preserve_semantic_color", true)
 		command_label.name = "ShopBuyButtonCommand_%s" % item_id
-		apply_rect(command_label, rect_full(0.345, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.200, 0.220, 0.980, 0.780))
+		apply_rect(command_label, rect_full(0.310, 0.220, 0.950, 0.780) if shop_wide_layout else rect_full(0.205, 0.220, 0.975, 0.780))
 		command_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# The CTA occupies only the inner text lane of a narrow purchase target.
 		# Estimate that lane from the final target width, then re-measure after the
@@ -3646,8 +3680,12 @@ func _show_shop_screen_impl() -> void:
 	configure_wrapped_label(footer_body, 0.0, 0.0, 2.0)
 	footer_body.set_meta("compact_fit_policy", "wrap_complete_copy_before_inventory_badges")
 	var inventory_text := "还差 %d 铜钱" % exchange_coins_needed if exchange_coins_needed > 0 else "库存 %d 件" % total_inventory
-	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 2), shop_ink, true)
+	var inventory_color := Color(0.58, 0.15, 0.12) if exchange_coins_needed > 0 else shop_ink
+	var footer_inventory := make_label(shop_footer, inventory_text, commercial_ui_font_size(13, 2), inventory_color, true)
 	footer_inventory.name = "ShopCabinetFooterInventoryBadge"
+	footer_inventory.add_theme_color_override("font_color", inventory_color)
+	if exchange_coins_needed > 0:
+		footer_inventory.set_meta("preserve_semantic_color", true)
 	apply_rect(footer_inventory, rect_full(0.610, 0.220, 0.805, 0.760))
 	footer_inventory.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	footer_inventory.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -4059,7 +4097,7 @@ func _show_stats_screen_impl() -> void:
 	mark_ui_optimization(filter_button, "F-603")
 	apply_rect(filter_button, rect_full(0.365, 0.028, 0.545, 0.092))
 	panel.add_child(filter_button)
-	style_guofeng_secondary_action(filter_button, stats_selected_rule != "" and not filter_button.disabled)
+	style_guofeng_secondary_action(filter_button, not filter_button.disabled)
 	var copy_scope_label := stats_filter_label(stats_selected_rule)
 	var copy_button := make_small_button("复制%s" % copy_scope_label, Color(0.30, 0.48, 0.52), Callable(self, "copy_stats_summary"))
 	copy_button.name = "StatsCopyButton"
@@ -4120,14 +4158,16 @@ func _show_stats_screen_impl() -> void:
 	content_scroll.set_meta("ui_scroll_header_bottom", stats_content_top)
 	mark_ui_optimization(content_scroll, "F-437")
 	panel.add_child(content_scroll)
-	var stats_scroll_status := make_label(panel, "", 10, Color(0.18, 0.27, 0.22), true)
+	var stats_scroll_status := make_label(panel, "", 10, Color(0.14, 0.23, 0.18), false)
 	stats_scroll_status.name = "StatsRowsScrollStatus"
 	apply_rect(stats_scroll_status, rect_full(0.055, 0.300, 0.945, 0.330))
-	stats_scroll_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	stats_scroll_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	stats_scroll_status.tooltip_text = "统计行滚动位置"
 	stats_scroll_status.set_meta("ui_scroll_role", "stats_rows_status")
 	stats_scroll_status.add_theme_font_size_override("font_size", accessibility_font_size(12))
 	style_guofeng_label(stats_scroll_status)
+	stats_scroll_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
+	stats_scroll_status.set_meta("preserve_semantic_color", true)
 	stats_scroll_status.add_theme_color_override("font_color", Color(0.18, 0.27, 0.22))
 	stats_scroll_status.set_meta("preserve_semantic_color", true)
 	var content := VBoxContainer.new()
