@@ -2130,8 +2130,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if diff == AI_DIFFICULTY_HARD:
 				if risk >= AI_DANGER_RISK_SOFT:
 					cheap -= (risk - 12.0) * 1.35
-				if fast_max_opp_risk >= 24.0:
-					cheap -= (fast_max_opp_risk - 20.0) * 1.45
+				if fast_max_opp_risk >= 22.0:
+					cheap -= (fast_max_opp_risk - 19.0) * 1.35
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
 			var fast_safety_value := 0.0
@@ -2935,9 +2935,6 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	if shanten == 1 and ukeire >= 10 and risk < AI_DANGER_RISK_HIGH:
 		# 宽一向听（>=10有效进张）且非高危张时保持进攻节奏，避免中盘过早保守折返拖慢和牌速度。
 		tenpai_bonus = 60.0 + minf(60.0, float(ukeire - 10) * 6.0)
-	elif diff_idx == AI_DIFFICULTY_HARD and shanten == 1 and ukeire >= 8 and risk < AI_DANGER_RISK_SOFT and max_opp_risk < 12.0:
-		# 困难档安全局面下的厚一向听提速，避免在对手自摸前过度慢打。
-		tenpai_bonus = 42.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context, eval_context, kabe_strength, max_opp_risk)
 	# 静默模式下 2/3 向听未做 34 张进张扫描时，用搭子质量估算厚度，避免误判所有中盘手牌为 0 进张极薄牌。
 	var midgame_ukeire_arg: int = ukeire
