@@ -11642,7 +11642,7 @@ func refresh_chat_message_range_status() -> void:
 	var scrollbar := scroll.get_v_scroll_bar()
 	var max_scroll := maxf(0.0, scrollbar.max_value - scrollbar.page) if scrollbar != null else 0.0
 	var at_latest := max_scroll <= 0.5 or float(scroll.scroll_vertical) >= max_scroll - 1.0
-	status.text = "共%d条 · %s" % [total, "最新" if at_latest else "历史"]
+	status.text = "实时同步 · 最新" if max_scroll <= 0.5 else ("共%d条 · %s" % [total, "最新" if at_latest else "历史"])
 	status.tooltip_text = "共%d条消息%s" % [total, "；已到最新" if at_latest else "；可向下滚动到最新"]
 	set_ui_full_text(status, status.tooltip_text, "聊天消息范围")
 	status.set_meta("chat_total_message_count", total)

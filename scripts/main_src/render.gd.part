@@ -21096,19 +21096,18 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
 	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))
-	var use_raw_pending_face: bool = role in ["chi", "peng", "gang", "win", "pass"]
 	var action_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if action_face != null:
 		var face_source := optional_gpt_illustration_texture(face_key)
 		if face_source != null:
-			if use_raw_pending_face:
-				configure_guofeng_button_slice(action_face, false)
-				action_face.texture = face_source
-			else:
-				action_face.texture = face_source
-				configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
-			action_face.modulate = Color.WHITE
-			action_face.self_modulate = Color.WHITE
+			action_face.texture = face_source
+			configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
+			var face_tint := Color(0.84, 0.85, 0.82, 0.94) if role == "pass" else Color.WHITE
+			action_face.modulate = face_tint
+			action_face.self_modulate = face_tint
+			var action_edges := action_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if action_edges != null:
+				action_edges.self_modulate = face_tint
 			button.set_meta("guofeng_button_face_key", face_key)
 	if is_cinnabar_role:
 		var danger_text_color := Color(0.99, 0.95, 0.84) if has_cinnabar else Color(0.62, 0.16, 0.13)
