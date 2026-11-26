@@ -75,9 +75,27 @@ func style_guofeng_secondary_action(button: Button, ink_face: bool = false) -> v
 func make_guofeng_secondary_badge(parent: Control, rect: Rect2, text: String, font_size: int, fill: Color, border: Color, text_color: Color, plate_key: String = "") -> Control:
 	var badge := make_layout_host(rect)
 	parent.add_child(badge)
-	var label := make_label(badge, text, font_size, Color.WHITE, true)
+	var resolved_plate_key := plate_key
+	if resolved_plate_key == "ui_dark_scrim":
+		resolved_plate_key = "battle_ink_plaque_20261112" if optional_gpt_illustration_texture("battle_ink_plaque_20261112") != null else "ui_dark_scrim"
+	if resolved_plate_key != "":
+		var bg := add_optional_gpt_illustration_texture(badge, resolved_plate_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.92, false)
+		if bg != null:
+			bg.name = "GuofengSecondaryBadgePlate"
+			bg.show_behind_parent = true
+			if resolved_plate_key == "battle_ink_plaque_20261112":
+				configure_guofeng_button_slice(bg, true, 32, 0.22)
+				bg.self_modulate = Color(1.0, 1.0, 1.0, 0.92)
+			else:
+				bg.self_modulate = Color(fill.r, fill.g, fill.b, maxf(fill.a, 0.84))
+	var resolved_text_color := text_color if text_color.a > 0.01 else Color.WHITE
+	if resolved_plate_key == "battle_ink_plaque_20261112" and resolved_text_color.get_luminance() < 0.35:
+		resolved_text_color = Color(0.98, 0.93, 0.78, 1.0)
+	var label := make_label(badge, text, font_size, resolved_text_color, true)
 	apply_rect(label, rect_full(0.04, 0.04, 0.96, 0.96))
-	style_guofeng_label(label)
+	style_guofeng_label(label, resolved_plate_key == "battle_ink_plaque_20261112" or resolved_plate_key == "ui_dark_scrim")
+	label.set_meta("preserve_semantic_color", true)
+	label.add_theme_color_override("font_color", resolved_text_color)
 	configure_clipped_label(label)
 	return badge
 
@@ -143,8 +161,8 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
 	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
-	var achievement_scroll_top := 0.265
-	var achievement_scroll_max_bottom := 0.955
+	var achievement_scroll_top := 0.242 if large_text_enabled else 0.228
+	var achievement_scroll_max_bottom := 0.935
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
 	var achievement_row_height := achievement_row_height_contract(achievement_viewport_size)
 	var achievement_row_gap := 12.0 if wide_achievement_gallery else 8.0
@@ -182,7 +200,7 @@ func _show_achievements_screen_impl() -> void:
 	configure_scroll_container(scroll, "上下滚动查看完整成就图鉴")
 	scroll.anchor_left = 0.055
 	scroll.anchor_top = achievement_scroll_top
-	scroll.anchor_right = 0.942
+	scroll.anchor_right = 0.935
 	scroll.anchor_bottom = achievement_scroll_bottom
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -193,7 +211,7 @@ func _show_achievements_screen_impl() -> void:
 		achievements_scrollbar.name = "AchievementsScrollBar"
 		achievements_scrollbar.visible = false
 		achievements_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var achievements_scroll_gutter := make_layout_host(rect_full(0.952, achievement_scroll_top + 0.008, 0.964, achievement_scroll_bottom - 0.008))
+	var achievements_scroll_gutter := make_layout_host(rect_full(0.946, achievement_scroll_top + 0.008, 0.958, achievement_scroll_bottom - 0.008))
 	achievements_scroll_gutter.name = "AchievementsScrollGutter"
 	achievements_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(achievements_scroll_gutter)
@@ -237,8 +255,8 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.14, 0.23, 0.18), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.055, 0.202, 0.942, 0.248))
-	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	apply_rect(achievements_browse_status, rect_full(0.560, 0.156, 0.935, 0.198))
+	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(achievements_browse_status)
 	achievements_browse_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
 	achievements_browse_status.set_meta("preserve_semantic_color", true)
@@ -690,7 +708,7 @@ func _show_menu_impl() -> void:
 		card1_art.add_child(hero_vignette)
 		if card1_emblem != null and card1_emblem.get_parent() == card1_art:
 			card1_art.move_child(hero_vignette, card1_emblem.get_index())
-			apply_rect(card1_emblem, rect_full(0.765, 0.340, 0.920, 0.845))
+			apply_rect(card1_emblem, rect_full(0.818, 0.140, 0.908, 0.450))
 			card1_emblem.modulate = Color.WHITE
 			card1_emblem.self_modulate = Color.WHITE
 	row.add_child(card1)
@@ -736,12 +754,12 @@ func _show_menu_impl() -> void:
 		var daily_dot := quick_rail.find_child("MenuQuickDailyClaimDot", true, false) as Control
 		if daily_dot != null:
 			var compact_dot := content_size.y <= 560.0 or content_size.x <= 960.0
-			daily_dot.custom_minimum_size = Vector2(14.0, 14.0)
+			daily_dot.custom_minimum_size = Vector2(13.0, 13.0)
 			apply_rect(daily_dot, rect_full(0.5, 0.5, 0.5, 0.5))
-			daily_dot.offset_left = -15.0 if compact_dot else -14.0
-			daily_dot.offset_right = -1.0 if compact_dot else 0.0
-			daily_dot.offset_top = -13.0 if compact_dot else -16.0
-			daily_dot.offset_bottom = 1.0 if compact_dot else -2.0
+			daily_dot.offset_left = -12.0 if compact_dot else -11.0
+			daily_dot.offset_right = 1.0 if compact_dot else 2.0
+			daily_dot.offset_top = -11.0 if compact_dot else -12.0
+			daily_dot.offset_bottom = 2.0 if compact_dot else 1.0
 			daily_dot.z_index = 12
 	# Season and daily status remain available in their dedicated screens; the main
 	# menu hero uses GPT art only to avoid legacy procedural point/line overlays.
@@ -1282,7 +1300,7 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 		editing.offset_right = caption_width
 		editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		apply_rect(edit, rect_full(0.0, 0.0, 1.0, 1.0))
-		edit.offset_left = caption_width + 6.0
+		edit.offset_left = caption_width + 10.0
 	else:
 		row.custom_minimum_size.y = caption_height + 2.0 + edit_height
 		apply_rect(edit, rect_full(0.0, 1.0, 1.0, 1.0))
@@ -1394,10 +1412,10 @@ func refresh_online_lobby_action_states() -> void:
 			var btn_edges: NinePatchRect = btn_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if btn_face != null else null
 			if lobby_btn.disabled:
 				if btn_edges != null and btn_edges.visible:
-					btn_edges.self_modulate = Color(0.88, 0.85, 0.80, 0.62)
+					btn_edges.self_modulate = Color(0.88, 0.85, 0.80, 0.72)
 				elif btn_face != null:
-					btn_face.self_modulate = Color(0.88, 0.85, 0.80, 0.62)
-				lobby_btn.add_theme_color_override("font_disabled_color", Color(0.28, 0.34, 0.30, 0.78))
+					btn_face.self_modulate = Color(0.88, 0.85, 0.80, 0.72)
+				lobby_btn.add_theme_color_override("font_disabled_color", Color(0.20, 0.25, 0.22, 0.92))
 			else:
 				if btn_edges != null and btn_edges.visible:
 					btn_edges.self_modulate = Color.WHITE
@@ -1741,7 +1759,7 @@ func _show_online_lobby_impl() -> void:
 	retry_connection_button.set_meta("layout_role", "connection_state_retry_lane")
 	retry_connection_button.set_meta("minimum_clearance_px", 8.0)
 	set_ui_full_text(retry_connection_button, retry_connection_button.tooltip_text, "连接状态恢复操作")
-	var retry_top_px: float = hdr_top_px + hdr_h_px + (2.0 if compact_lobby_hdr else 6.0)
+	var retry_top_px: float = hdr_top_px + hdr_h_px + (4.0 if compact_lobby_hdr else 10.0)
 	apply_rect(retry_connection_button, rect_full(hdr_state_left, 0.0, hdr_right, 0.0))
 	retry_connection_button.offset_top = retry_top_px
 	retry_connection_button.offset_bottom = retry_top_px + float(UI_MIN_TOUCH_TARGET)
@@ -2112,7 +2130,7 @@ func _show_online_lobby_impl() -> void:
 	var snap_online_log_viewport := func() -> void:
 		if compact_large_roster or not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
 			return
-		var avail_h: float = log_list_panel.size.y * 0.995 - 1.0 - log_scroll_base_top
+		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
 		var line_count: int = logs_label.get_line_count()
 		var content_h: float = float(logs_label.get_content_height())
 		if avail_h < 18.0 or line_count <= 0 or content_h <= 1.0:
@@ -2216,7 +2234,7 @@ func _refine_online_lobby_roster_and_log_wave5(log_panel: Control, room_art: Con
 			var top_f: float = first_top_f + float(slot) * row_step_f
 			apply_rect(row, rect_full(0.035, top_f, 0.965, top_f + row_h_f))
 			_tint_online_lobby_roster_row_wave5(row, online_lobby_player_for_slot(entries, slot))
-	var log_top_f: float = clampf((roster_top_px + roster_h + 10.0) / lp_h, roster_bottom_f + 0.014, 0.680)
+	var log_top_f: float = clampf((roster_top_px + roster_h + 14.0) / lp_h, roster_bottom_f + 0.020, 0.680)
 	log_list_panel.anchor_top = log_top_f
 	call_deferred("sync_online_lobby_detail_targets")
 
@@ -2761,7 +2779,7 @@ func _polish_online_lobby_feedback_wave6(feedback_art: Control, viewport_snapsho
 	var vp := viewport_snapshot if viewport_snapshot.x > 1.0 else effective_viewport_size()
 	var room_first: bool = use_jiangnan_secondary_composition(vp)
 	if is_recovery and room_first and feedback_art.get_parent() != null and feedback_art.get_parent().name == "OnlineLobbyLogPanel":
-		apply_rect(feedback_art, rect_full(0.050, 0.870, 0.950, 0.996))
+		apply_rect(feedback_art, rect_full(0.050, 0.865, 0.950, 0.968))
 	var fb_title := feedback_art.get_node_or_null("OnlineFeedbackText") as Label
 	var fb_reason := feedback_art.get_node_or_null("OnlineFeedbackReasonAndNextStep") as Label
 	if is_recovery:
@@ -2774,7 +2792,7 @@ func _polish_online_lobby_feedback_wave6(feedback_art: Control, viewport_snapsho
 			alert_bg.stretch_mode = TextureRect.STRETCH_SCALE
 			alert_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			alert_bg.show_behind_parent = true
-			apply_rect(alert_bg, rect_full(-0.015, -0.06, 1.015, 1.06))
+			apply_rect(alert_bg, rect_full(0.0, 0.0, 1.0, 1.0))
 			feedback_art.add_child(alert_bg)
 			feedback_art.move_child(alert_bg, 0)
 			configure_guofeng_button_slice(alert_bg, true, 104, 0.13, alert_frame_tex, false)
@@ -2942,7 +2960,9 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var gutter_left := 0.935
 	var gutter_right := 0.958
-	var rules_scroll_gutter = make_gpt_center_crop_plate_rect(rect_full(gutter_left, rules_content_top + 0.012, gutter_right, rules_content_bottom), Color(0.84, 0.80, 0.70, 0.42), "menu_card_readable_gpt", 0.30)
+	var gutter_tex_key := "battle_ink_plaque_20261112" if optional_gpt_illustration_texture("battle_ink_plaque_20261112") != null else "menu_card_readable_gpt"
+	var gutter_color := Color(1.0, 1.0, 1.0, 0.24) if gutter_tex_key == "battle_ink_plaque_20261112" else Color(0.68, 0.64, 0.56, 0.55)
+	var rules_scroll_gutter = make_gpt_center_crop_plate_rect(rect_full(gutter_left, rules_content_top + 0.012, gutter_right, rules_content_bottom), gutter_color, gutter_tex_key, 0.30)
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(rules_scroll_gutter)
@@ -3495,7 +3515,7 @@ func sync_rules_guide_state(content_scroll: ScrollContainer, guide: Control, for
 			label.add_theme_color_override("font_color", Color(0.99, 0.96, 0.86) if active else Color(0.10, 0.21, 0.16))
 		var state_label := step_ref.get("state", null) as Label
 		if state_label != null:
-			var state_text := "当前" if active else ("已读" if i < active_step else "%02d" % (i + 1))
+			var state_text := "当前" if active else ("已读" if i < active_step else "第%d节" % (i + 1))
 			state_label.text = state_text
 			set_ui_full_text(state_label, state_text, "规则导航状态：" + state_text)
 			state_label.set_meta("rules_step_state", state_text)
@@ -3840,36 +3860,47 @@ func _show_shop_screen_impl() -> void:
 	title.add_theme_color_override("font_color", shop_ink)
 	title.add_theme_constant_override("outline_size", 0)
 
-	# 货币显示 - 增强样式
+	# 货币显示 - 增强样式（铜钱与玉符等尺寸正方形图标）
+	var shop_icon_px := 26.0 if shop_wide_layout else 22.0
 	var coins_panel := make_layout_host(rect_full(0.42, 0.035, 0.62, 0.090))
 	coins_panel.name = "ShopCurrencyPanel_coins"
 	panel.add_child(coins_panel)
 	if optional_gpt_illustration_texture("icon_coin_bronze_gpt") != null:
-		var coin_art := add_optional_gpt_illustration_texture(coins_panel, "icon_coin_bronze_gpt", rect_full(0.05, 0.12, 0.23, 0.88), 1.0, true)
+		var coin_art := add_optional_gpt_illustration_texture(coins_panel, "icon_coin_bronze_gpt", rect_full(0.0, 0.5, 0.0, 0.5), 1.0, true)
 		if coin_art != null:
 			coin_art.name = "ShopCurrencyCoinGlyph"
+			coin_art.offset_left = 6.0
+			coin_art.offset_right = 6.0 + shop_icon_px
+			coin_art.offset_top = -shop_icon_px * 0.5
+			coin_art.offset_bottom = shop_icon_px * 0.5
 	else:
 		add_lucide_icon(coins_panel, "coin", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.76, 0.54, 0.22))
 	var coins_label = make_label(coins_panel, "铜钱 %d" % int(currency.get("coins", 0)), commercial_ui_font_size(16, 2), shop_ink, true)
 	coins_label.name = "ShopCurrencyValue_coins"
 	coins_label.add_theme_color_override("font_color", shop_ink)
-	apply_rect(coins_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	apply_rect(coins_label, rect_full(0.0, 0.10, 0.96, 0.90))
+	coins_label.offset_left = 12.0 + shop_icon_px
 	coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(coins_label, "铜钱余额：%d" % int(currency.get("coins", 0)), "铜钱余额")
 
-	var gems_panel := make_layout_host(rect_full(0.635, 0.035, 0.785, 0.090))
+	var gems_panel := make_layout_host(rect_full(0.635, 0.035, 0.795, 0.090))
 	gems_panel.name = "ShopCurrencyPanel_gems"
 	panel.add_child(gems_panel)
 	if optional_gpt_illustration_texture("icon_jade_token_gpt") != null:
-		var gem_art := add_optional_gpt_illustration_texture(gems_panel, "icon_jade_token_gpt", rect_full(0.05, 0.12, 0.23, 0.88), 1.0, true)
+		var gem_art := add_optional_gpt_illustration_texture(gems_panel, "icon_jade_token_gpt", rect_full(0.0, 0.5, 0.0, 0.5), 1.0, true)
 		if gem_art != null:
 			gem_art.name = "ShopCurrencyJadeGlyph"
+			gem_art.offset_left = 6.0
+			gem_art.offset_right = 6.0 + shop_icon_px
+			gem_art.offset_top = -shop_icon_px * 0.5
+			gem_art.offset_bottom = shop_icon_px * 0.5
 	else:
 		add_lucide_icon(gems_panel, "diamond", rect_full(0.06, 0.15, 0.22, 0.85), Color(0.24, 0.62, 0.44))
 	var gems_label = make_label(gems_panel, "玉符 %d" % int(currency.get("gems", 0)), commercial_ui_font_size(16, 2), shop_ink, true)
 	gems_label.name = "ShopCurrencyValue_gems"
 	gems_label.add_theme_color_override("font_color", shop_ink)
-	apply_rect(gems_label, rect_full(0.25, 0.10, 0.95, 0.90))
+	apply_rect(gems_label, rect_full(0.0, 0.10, 0.96, 0.90))
+	gems_label.offset_left = 12.0 + shop_icon_px
 	gems_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	set_ui_full_text(gems_label, "玉符余额：%d" % int(currency.get("gems", 0)), "玉符余额")
 
@@ -4789,20 +4820,20 @@ func _apply_wave5_guofeng_meter_skin(rail: Control, fill: Control, is_negative: 
 		var fill_tint := Color(0.92, 0.38, 0.28, 1.0) if is_negative else (Color(1.0, 0.88, 0.48, 1.0) if is_gold else Color.WHITE)
 		if rail_tex != null and fill_rect.anchor_right > 0.001:
 			fill_rect.anchor_left = maxf(fill_rect.anchor_left, 0.024)
-			fill_rect.anchor_right = clampf(fill_rect.anchor_right, fill_rect.anchor_left + 0.060, 0.976)
-			fill_rect.anchor_top = 0.18
-			fill_rect.anchor_bottom = 0.82
+			fill_rect.anchor_right = clampf(fill_rect.anchor_right, fill_rect.anchor_left + 0.120, 0.976)
+			fill_rect.anchor_top = 0.20
+			fill_rect.anchor_bottom = 0.80
 		if fill_tex != null:
 			fill_rect.texture = fill_tex
 			fill_rect.modulate = Color.WHITE
 			fill_rect.self_modulate = Color.WHITE
-			configure_guofeng_button_slice(fill_rect, true, 10, 0.28, fill_tex, false)
+			configure_guofeng_button_slice(fill_rect, true, 10, 0.24, fill_tex, false)
 			var f_edges := fill_rect.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 			if f_edges != null:
-				f_edges.patch_margin_left = 26
-				f_edges.patch_margin_right = 26
-				f_edges.patch_margin_top = 10
-				f_edges.patch_margin_bottom = 10
+				f_edges.patch_margin_left = 14
+				f_edges.patch_margin_right = 14
+				f_edges.patch_margin_top = 8
+				f_edges.patch_margin_bottom = 8
 				f_edges.self_modulate = fill_tint
 		elif not is_negative and not is_gold:
 			fill_rect.self_modulate = Color(0.12, 0.60, 0.38, 1.0)
@@ -5739,8 +5770,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		avail_w = maxf(120.0, scroll_parent.size.x - 16.0) if scroll_parent != null else 220.0
 	var lines: PackedStringArray = text_val.split("\n")
 	var cursor_y: float = 0.0
-	var pad_y: float = 0.0 if (compact and large_text_enabled) else (1.5 if compact else (3.5 if wide else 2.5))
-	var pad_x_right: float = 12.0 if compact else (18.0 if wide else 14.0)
+	var pad_y: float = 0.0 if (compact and large_text_enabled) else (2.0 if compact else (5.0 if wide else 4.0))
+	var pad_x_right: float = 16.0 if compact else (28.0 if wide else 24.0)
 	var slice_margin: int = 24 if is_bubble_art else 104
 	var slice_scale: float = (0.24 if compact else (0.38 if wide else 0.30)) if is_bubble_art else 0.14
 	var label_max_h: float = chat_label.size.y if chat_label.size.y > 1.0 else INF
@@ -5752,7 +5783,7 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		var block_h: float = float(wrapped_lines) * single_h + float(maxi(0, wrapped_lines - 1)) * spacing
 		if trimmed != "":
 			var single_w: float = font.get_string_size(raw_line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fsize).x
-			var bubble_w: float = clampf((avail_w - 4.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 4.0, 92.0), maxf(92.0, avail_w - 4.0))
+			var bubble_w: float = clampf((avail_w - 2.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 2.0, 100.0), maxf(100.0, avail_w - 2.0))
 			var bubble_top: float = maxf(0.0, cursor_y - pad_y * 0.5)
 			var bubble_bottom: float = minf(label_max_h, cursor_y + block_h + pad_y * 0.85)
 			var bubble := TextureRect.new()
@@ -5762,8 +5793,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 			bubble.stretch_mode = TextureRect.STRETCH_SCALE
 			bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bubble.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			bubble.position = Vector2(0.0, bubble_top)
-			bubble.size = Vector2(bubble_w, maxf(single_h, bubble_bottom - bubble_top))
+			bubble.position = Vector2(-4.0, bubble_top)
+			bubble.size = Vector2(bubble_w, maxf(single_h + pad_y, bubble_bottom - bubble_top))
 			host.add_child(bubble)
 			var is_self_msg: bool = trimmed.begins_with("你:") or trimmed.begins_with("你：") or trimmed.contains("  你:") or trimmed.contains("  你：")
 			var bubble_tint: Color = Color(0.90, 0.98, 0.92, 0.96) if is_self_msg else Color(1.0, 0.99, 0.95, 0.96)
@@ -5848,14 +5879,15 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		apply_rect(history, rect_full(0.0, 0.0, 0.0, 0.0))
 		history.position = Vector2(history_left, edge_top)
 		history.size = Vector2(target, target)
+	var effective_header_h: float = maxf(header_height, close.get_combined_minimum_size().y)
 	var header_divider_gap: float = 0.0
 	if not compact:
 		var chat_divider := make_brush_stroke_divider(panel, rect_full(0.0, 0.0, 0.0, 0.0))
 		if chat_divider != null:
-			chat_divider.position = Vector2(edge_x, edge_top + header_height + 4.0)
+			chat_divider.position = Vector2(edge_x, edge_top + effective_header_h + 6.0)
 			chat_divider.size = Vector2(maxf(40.0, panel.size.x - edge_x * 2.0), 6.0)
 			chat_divider.modulate = Color(0.74, 0.64, 0.40, 0.70)
-			header_divider_gap = 10.0
+			header_divider_gap = 12.0
 	var body := ScrollContainer.new()
 	body.name = "ChatPanelBodyScroll"
 	configure_scroll_container(body, "上下滚动查看消息、快捷消息和完整发送区")
@@ -5867,7 +5899,7 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	var body_bottom_gap: float = (4.0 if compact_tight else 12.0) if compact else (18.0 if wide_chat else 14.0)
 	body.offset_left = edge_x
 	body.offset_right = -edge_x
-	body.offset_top = edge_top + header_height + body_top_gap
+	body.offset_top = edge_top + effective_header_h + body_top_gap
 	body.offset_bottom = -body_bottom_gap
 	body.set_meta("layout_role", "chat_scrollable_reading_and_composing_lanes")
 	panel.add_child(body)
@@ -6113,14 +6145,19 @@ func show_chat_panel() -> void:
 	)
 	root_layer.add_child(input_shield)
 	# Crop the quiet Xuan-paper center of settings_readable_gpt and frame with crisp 9-sliced
-	# guofeng_card_frame_gpt so decorative corners scale proportionally without colliding with text.
+	# guofeng_card_frame_gpt on a dedicated border child so the paper backdrop never turns transparent.
 	var chat_panel = make_gpt_center_crop_plate_rect(panel_rect, Color.WHITE, "settings_readable_gpt", 0.84)
 	chat_panel.name = "ChatPanel"
-	chat_panel.self_modulate = Color.WHITE
+	chat_panel.self_modulate = Color(1.0, 1.0, 1.0, 0.98)
 	var chat_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if chat_frame_tex != null:
-		configure_guofeng_button_slice(chat_panel, true, 104, 0.14 if compact_chat else (0.22 if wide_chat_ui else 0.18), chat_frame_tex, true)
-		var chat_frame_edges: NinePatchRect = chat_panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		var chat_frame_host := TextureRect.new()
+		chat_frame_host.name = "ChatPanelFrameBorder"
+		chat_frame_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chat_frame_host.set_anchors_preset(Control.PRESET_FULL_RECT)
+		chat_panel.add_child(chat_frame_host)
+		configure_guofeng_button_slice(chat_frame_host, true, 104, 0.14 if compact_chat else (0.22 if wide_chat_ui else 0.18), chat_frame_tex, false)
+		var chat_frame_edges: NinePatchRect = chat_frame_host.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if chat_frame_edges != null:
 			chat_frame_edges.draw_center = false
 			chat_frame_edges.self_modulate = Color(0.96, 0.91, 0.78, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.94)
@@ -6224,7 +6261,7 @@ func show_chat_panel() -> void:
 	chat_label.clip_contents = false
 	chat_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.add_theme_constant_override("line_spacing", 0 if compact_chat and large_text_enabled else (4 if compact_chat else (12 if wide_chat_ui else (7 if chat_vp.y <= 580.0 else 9))))
+	chat_label.add_theme_constant_override("line_spacing", 2 if compact_chat and large_text_enabled else (6 if compact_chat else (15 if wide_chat_ui else (9 if chat_vp.y <= 580.0 else 12))))
 	chat_label.tooltip_text = chat_text
 	var bubbles_host := Control.new()
 	bubbles_host.name = "ChatMsgBubblesHost"

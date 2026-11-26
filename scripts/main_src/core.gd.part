@@ -4100,6 +4100,7 @@ func pending_claim_response_summary(action_key: String, visible_label: String, s
 
 func action_intent_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	var dock_rect = action_dock_rect_for_count(count, viewport_snapshot, content_size_snapshot)
+	var content_size := content_size_snapshot if content_size_snapshot.x > 1.0 else safe_content_pixel_size()
 	var left = max(0.580, dock_rect.position.x)
 	if has_pending_claim_window():
 		# The pending dock owns the lower decision lane. Keep its summary above the
@@ -4108,10 +4109,15 @@ func action_intent_rect_for_count(count: int, viewport_snapshot: Vector2 = Vecto
 		var intent_left := maxf(0.780, left)
 		var intent_bottom: float = dock_rect.position.y - 0.008
 		return rect_full(intent_left, maxf(0.500, intent_bottom - 0.060), 0.985, intent_bottom)
+	# Ensure regular action intent banner always has >=200px readability width even on 1-button docks.
+	var min_intent_width_ratio := minf(0.320, 210.0 / maxf(1.0, content_size.x))
+	var right := 0.975
+	left = minf(left, right - min_intent_width_ratio)
+	left = maxf(0.580, left)
 	# Keep the regular intent strip below the advisor's compact panel and above
 	# the action dock. The previous .604-.650 slot overlapped the advisor's
 	# .330-.635 panel at 960x540.
-	return Rect2(Vector2(left, 0.642), Vector2(0.975, 0.682))
+	return Rect2(Vector2(left, 0.636), Vector2(right, 0.676))
 
 func action_intent_state_cache_token() -> String:
 	var disconnected := mode == "online_game" and online_game_disconnected()
@@ -4149,7 +4155,10 @@ func action_intent_text(count: int) -> String:
 	elif mode == "offline" and can_self_discard():
 		result = "出牌 · 点击下方手牌"
 	elif mode == "online_game":
-		result = "联机对局 · 等待响应" if count <= 1 else "联机对局 · 处理响应"
+		if can_self_discard():
+			result = "出牌 · 点击下方手牌"
+		else:
+			result = "联机对局 · 等待响应" if count <= 1 else "联机对局 · 处理响应"
 	action_intent_text_cache_key = cache_key
 	action_intent_text_cache_value = result
 	return result
@@ -4354,6 +4363,9 @@ func round_summary_action_vertical_shift(viewport_snapshot: Vector2 = Vector2.ZE
 		return 0.095
 	if content_size.x >= 1600.0 and content_size.y >= 900.0:
 		return 0.042
+	# Release ~34px extra vertical room for 1280x720 settlement panel so hand strip & body scroll stay spacious.
+	if content_size.y >= 640.0:
+		return -0.046
 	return 0.0
 
 func round_summary_action_alignment_shift(content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
@@ -5738,16 +5750,18 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
 	style_guofeng_secondary_action(update_secondary_button, false)
 	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
-	# Preserve the visible imperial-gold keyboard focus ring on UpdateSecondaryButton
-	# (which holds default focus) even though style_guofeng_secondary_action strips
-	# ButtonFocusPlate from generic page_back buttons.
+	# Preserve a chamfer-matched focus plate on UpdateSecondaryButton instead of a
+	# 90-degree outer rectangle that leaves corner gaps on chamfered Jiangnan buttons.
 	if update_secondary_button.get_node_or_null("ButtonFocusPlate") == null:
-		var sec_focus_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
+		var sec_focus_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		if sec_focus_tex != null:
-			var sec_focus := add_optional_gpt_illustration_texture(update_secondary_button, "focus_ring_gold_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+			var sec_focus := add_optional_gpt_illustration_texture(update_secondary_button, "button_face_jiangnan_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 			if sec_focus != null:
 				sec_focus.name = "ButtonFocusPlate"
-				configure_guofeng_button_slice(sec_focus, true, 48, 0.22, sec_focus_tex, false)
+				sec_focus.show_behind_parent = true
+				configure_guofeng_button_slice(sec_focus, true, 96, 0.125, sec_focus_tex, false)
+				update_secondary_button.set_meta("guofeng_chamfer_focus_enabled", true)
+				update_secondary_button.set_meta("guofeng_chamfer_focus_ink", false)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -5759,7 +5773,10 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.focus_previous = update_primary_button.get_path()
 	style_guofeng_reading_tree(panel)
 	refresh_update_dialog()
-	update_secondary_button.grab_focus()
+	if update_state == "ready" and not update_primary_button.disabled:
+		update_primary_button.grab_focus()
+	else:
+		update_secondary_button.grab_focus()
 	sync_guofeng_button_focus_visual(update_secondary_button, update_secondary_button.has_focus())
 	sync_guofeng_button_focus_visual(update_primary_button, update_primary_button.has_focus())
 	register_ui_round_681_710(root_layer)

@@ -68,15 +68,17 @@ func _notification(what: int) -> void:
 		sync_wall_faces()
 
 
-static func face_center_for_layout(index: int, capacity: int, is_horizontal: bool, available_size: Vector2, face_size: Vector2) -> Vector2:
+static func face_center_for_layout(index: int, capacity: int, is_horizontal: bool, available_size: Vector2, face_size: Vector2, visible_count: int = -1) -> Vector2:
 	var slots := float(maxi(1, capacity))
+	var active_slots := float(maxi(1, visible_count if visible_count > 0 else capacity))
+	var center_shift := maxf(0.0, (slots - active_slots) * 0.5)
 	if is_horizontal:
 		var pitch := minf(available_size.x / slots, face_size.x * 4.0 / 3.0)
 		var start := (available_size.x - pitch * slots) * 0.5
-		return Vector2(start + (float(index) + 0.5) * pitch, available_size.y * 0.5)
+		return Vector2(start + (float(index) + center_shift + 0.5) * pitch, available_size.y * 0.5)
 	var v_pitch := minf(available_size.y / slots, face_size.y * 4.0 / 3.0)
 	var v_start := (available_size.y - v_pitch * slots) * 0.5
-	return Vector2(available_size.x * 0.5, v_start + (float(index) + 0.5) * v_pitch)
+	return Vector2(available_size.x * 0.5, v_start + (float(index) + center_shift + 0.5) * v_pitch)
 
 
 func sync_wall_faces() -> void:
@@ -99,9 +101,8 @@ func sync_wall_faces() -> void:
 		face.visible = index < visible_count
 		if not face.visible:
 			continue
-		# Large tables keep the authored backs in a readable group. Empty slots
-		# retain their positions as the wall is drawn down.
-		var center := face_center_for_layout(index, capacity_count, horizontal, size, tile_size)
+		# Center remaining stacks along the wall track around the table compass.
+		var center := face_center_for_layout(index, capacity_count, horizontal, size, tile_size, visible_count)
 		face.position = center - tile_size * 0.5
 		face.size = tile_size
 	set_meta("wall_bitmap_face_count", visible_count)

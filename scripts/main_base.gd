@@ -1515,8 +1515,8 @@ const MELD_LAYOUTS := [
 	# separate bottom action channel while pagination preserves full meld access.
 	[1, Rect2(Vector2(0.815, 0.240), Vector2(0.875, 0.600))],
 	# Top melds occupy the clear upper-right lane beside the centered dark hand,
-	# beyond the physical upper wall; all faces still point toward table center.
-	[2, Rect2(Vector2(0.684, 0.136), Vector2(0.980, 0.203))],
+	# keeping >=12px clearance from right-seat melds and upper-right wall.
+	[2, Rect2(Vector2(0.668, 0.136), Vector2(0.896, 0.203))],
 	[3, Rect2(Vector2(0.125, 0.240), Vector2(0.185, 0.600))],
 ]
 const CENTER_WIND_LABELS := ["东", "南", "西", "北"]
@@ -1599,7 +1599,7 @@ const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
 # Keep a dedicated top prompt lane above the clickable tile row while moving the
 # row upward enough to preserve the minimum touch width at the compact gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.270), Vector2(0.985, 0.982))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.260), Vector2(0.985, 0.945))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 2],
 	[6.0, 4],

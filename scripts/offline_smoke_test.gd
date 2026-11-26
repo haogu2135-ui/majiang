@@ -46,6 +46,7 @@ const REPLACED_GPT_ILLUSTRATION_PNG_SHA256 := {
 	"menu_moonlit_garden_gpt.png": "6faae0d3da62681e76ffc400aeffa871cfa3c272e9f4e59a32adf9070cc4dcfa",
 }
 const VISUAL_NODE_REFERENCE_BACKFILL := [
+	"ButtonFocusPlate",
 	"MeldKindBadge",
 	"MeldKindBadgeLabel",
 	"MeldGroup3DCastShadow",
