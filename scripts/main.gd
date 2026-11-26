@@ -28620,8 +28620,8 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	var text_left := 0.195 if narrow_context else 0.240
 	var panel_px_width := maxf(180.0, safe_content_pixel_size().x * maxf(0.10, context_rect.size.x - context_rect.position.x))
 	var top_lane_top := 0.000 if compact_large_context else 0.020
-	var top_lane_bottom := 0.500 if compact_large_context else 0.520
-	var bottom_lane_top := 0.530 if compact_large_context else 0.540
+	var top_lane_bottom := 0.510 if compact_large_context else 0.520
+	var bottom_lane_top := 0.535 if compact_large_context else 0.540
 	var bottom_lane_bottom := 1.000 if compact_large_context else 0.980
 	var title := make_label(panel, "%s 打出" % source_name, 13, Color.WHITE, true)
 	title.name = "PendingClaimSourceText"
@@ -28675,9 +28675,9 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
 		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
-		var context_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
+		var context_gap_px := 2.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
 		var timer_top := context_rect.size.y + context_gap_px / content_size.y
-		var seat_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
+		var seat_gap_px := 2.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
 		var est_countdown_h := ceilf(ui_heading_font().get_height(accessibility_font_size(12)))
 		var est_warning_h := ceilf(ui_cjk_font().get_height(accessibility_font_size(10)))
 		var desired_timer_h := maxf(50.0, est_countdown_h + est_warning_h + 18.0)
@@ -53932,15 +53932,15 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane or top HUD.
-		context_height_px = 55.0 if large_text_enabled else 48.0
+		context_height_px = 54.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
 		context_height_px = 56.0 if large_text_enabled else 48.0
 	# Keep every viewport in the same upper-left reading lane strictly below Top HUD
-	# (>=2px on compact large-text to clear left wall gutter, >=4px elsewhere).
+	# (>=1px on compact large-text to clear left wall gutter at 522px safe height, >=4px elsewhere).
 	var header_left := 0.020
-	var header_gap_px := 2.0 if (narrow_context and large_text_enabled) else 4.0
+	var header_gap_px := 1.0 if (narrow_context and large_text_enabled) else 4.0
 	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + header_gap_px / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
