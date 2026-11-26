@@ -422,7 +422,7 @@ func build_ai_claim_report(seat: int, claim: String, tile: String, chi_choice: D
 			allow = false
 			reason = "起胡番不足"
 			declined_by_plan = true
-		elif bool(continuation.get("wait_discard_furiten", false)) and post_ukeire <= 2 and exposed_melds == 0 and claim_diff == AI_DIFFICULTY_HARD:
+		elif bool(continuation.get("wait_discard_furiten", false)) and post_ukeire <= 4 and claim_diff == AI_DIFFICULTY_HARD:
 			allow = false
 			reason = "避振听副露"
 	var declined_by_opening = false
@@ -1553,7 +1553,8 @@ func human_target_discard_pressure_report(seat: int, tile: String, risk: float, 
 	if shanten >= 3:
 		adjusted_pen *= 1.18
 	elif shanten <= 0:
-		adjusted_pen *= 0.42
+		var hot_table: bool = readiness >= 9.0 or human_threat >= 10.0 or human_feed >= 16.0 or risk >= AI_DANGER_RISK_HIGH
+		adjusted_pen *= 0.68 if hot_table else 0.42
 	elif shanten == 1:
 		adjusted_pen *= 0.72
 	return {"pressure": clamp(adjusted_pen, 0.0, 220.0), "exposure": clamp(exposure_pen, 0.0, 220.0), "human_risk": human_risk}
@@ -1596,7 +1597,8 @@ func fast_human_target_discard_pressure(seat: int, tile: String, risk: float, sh
 	if shanten >= 3:
 		pen *= 1.10
 	elif shanten <= 0:
-		pen *= 0.45
+		var fast_hot_table: bool = readiness >= 9.0 or human_threat >= 10.0 or risk >= AI_DANGER_RISK_HIGH
+		pen *= 0.66 if fast_hot_table else 0.45
 	elif shanten == 1:
 		pen *= 0.70
 	return clamp(pen, 0.0, 180.0)
@@ -1774,7 +1776,7 @@ func human_claim_discipline_report(seat: int, claim: String, from_seat: int, bef
 			reason = "残局拒吃"
 	# 4) 困难档未听副露后被迫直切高危（>=31）喂玩家牌：即使降向听（如2->1）也绝不为了加速而直接送玩家大炮。
 	if (not decline) and diff == AI_DIFFICULTY_HARD and claim != "gang" and after_shanten >= 1:
-		if forced_safety != "安" and forced_safety != "现" and feed_human >= 28.0 and forced_risk >= AI_DANGER_RISK_HIGH and readiness >= 8.5:
+		if forced_safety != "安" and forced_safety != "现" and (feed_human >= 22.0 or from_human) and forced_risk >= AI_DANGER_RISK_HIGH and readiness >= 8.0:
 			decline = true
 			reason = "防点玩家"
 	out["decline"] = decline
@@ -3082,11 +3084,13 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		var danger_pen = over * 0.55
 		match diff_idx:
 			AI_DIFFICULTY_HARD:
-				danger_pen *= 1.55
+				danger_pen *= 1.60
+			AI_DIFFICULTY_NORMAL:
+				danger_pen *= 1.14
 			AI_DIFFICULTY_EASY:
 				danger_pen *= 0.72
 		if risk >= AI_DANGER_RISK_HIGH:
-			danger_pen += (44.0 if shanten >= 1 else 34.0) if diff_idx == AI_DIFFICULTY_HARD else (28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0)
+			danger_pen += (46.0 if shanten >= 1 else 36.0) if diff_idx == AI_DIFFICULTY_HARD else ((32.0 if shanten >= 1 else 26.0) if diff_idx != AI_DIFFICULTY_EASY else 12.0)
 		# 困难档中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张」与「两见幺九/字牌」（权重低于真实花色危险差，不倒挂已知副露危险）。
 		if safety == "" and risk >= 20.0 and diff_idx == AI_DIFFICULTY_HARD and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
 			var tile_vis: int = int(risk_vector.get("visible", -1))
@@ -3286,7 +3290,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 		var points = int(score_data.get("points", 0))
 		points_by_tile[tile] = points
 		fan_by_tile[tile] = fan
-		var wait_weight = 0.62 if discard_furiten else 1.0
+		var wait_weight = 0.40 if discard_furiten else 1.0
 		var effective_points: int = points
 		# 地方规则起胡番门槛（如广东3番起胡）：未达起胡番的待牌不可荣和，连自摸(+1)也不足则近似死听。
 		if min_fan > 1 and fan < min_fan:
@@ -3343,10 +3347,10 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 func wait_quality_penalty(total_remaining: int, self_discarded_count: int, wait_variety: int) -> float:
 	var penalty = 0.0
 	if total_remaining <= 2:
-		penalty += float(3 - total_remaining) * 18.0
+		penalty += float(3 - total_remaining) * 20.0
 	if self_discarded_count > 0:
 		var ratio = float(self_discarded_count) / max(1.0, float(wait_variety))
-		penalty += 24.0 + 34.0 * ratio + float(self_discarded_count - 1) * 10.0
+		penalty += 32.0 + 40.0 * ratio + float(self_discarded_count - 1) * 12.0
 	return penalty
 
 func wait_quality_text_from_values(total_remaining: int, self_discarded_waits: Array, discard_furiten: bool = false) -> String:
