@@ -2713,9 +2713,10 @@ func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int,
 		var content := safe_content_pixel_size_for_margins(vp, safe_area_margins)
 		var zone_root := battle_table_anchor_root_rect(zone_rect, vp)
 		var dock_left_px: float = action_bar_dock_layout_rect(vp, content).position.x * content.x
+		var archive_on_left := has_pending_claim_window() or vp.x >= 1150.0
 		var archive_gap_px: float = 10.0 if vp.x <= 960.0 else 8.0
-		var archive_left_px: float = dock_left_px - archive_gap_px - 50.0
-		var local_limit_px: float = archive_left_px - zone_root.position.x * content.x - 6.0
+		var right_limit_root_px: float = (dock_left_px - archive_gap_px) if archive_on_left else (dock_left_px - archive_gap_px - 50.0)
+		var local_limit_px: float = right_limit_root_px - zone_root.position.x * content.x - 6.0
 		max_right_px = minf(max_right_px, maxf(0.0, local_limit_px))
 	elif seat == 2 and archive_reserved_start >= 0 and not top_discard_archive_uses_side_gutter(effective_viewport_size()):
 		if archive_reserved_start >= columns or archive_reserved_start <= 0:
@@ -4457,7 +4458,7 @@ func pending_claim_action_dock_rect_for_count(count: int, viewport_snapshot: Vec
 	var dock_bottom := minf(base_rect.size.y, HAND_TRAY_RECT.position.y - 14.0 / content_height)
 	var top = maxf(compact_min_top, dock_bottom - dock_height)
 	var dock_left: float = base_rect.position.x
-	if pending_claim_response_count(count) == 1 and mode != "online_game":
+	if count > 0 and pending_claim_response_count(count) == 1 and mode != "online_game":
 		var sep := action_button_separation_for_count(count, resolved_viewport)
 		var single_w := pending_claim_response_button_width(count, sep, resolved_viewport, resolved_content_size)
 		dock_left = maxf(base_rect.position.x, base_rect.size.x - (single_w + 22.0) / content_width)
@@ -4858,11 +4859,24 @@ func pending_claim_context_candidate_is_clear(candidate: Rect2, table_left: floa
 			return false
 	return true
 
+func pending_claim_expected_action_count() -> int:
+	var live_count := action_bar_button_count()
+	if live_count > 0:
+		return live_count
+	var pending := pending_claim_display_model()
+	var response_count := 0
+	for option in ordered_pending_claim_options(pending.get("options", [])):
+		if str(option) == "chi":
+			response_count += maxi(1, ordered_pending_chi_choices(pending.get("chi_choices", [])).size())
+		else:
+			response_count += 1
+	return maxi(1, response_count) + pending_claim_tail_button_count()
+
 func action_bar_dock_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> Rect2:
 	if mode == "offline" and has_pending_danger_discard():
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if has_pending_claim_window():
-		return pending_claim_action_dock_rect_for_count(action_bar_button_count(), viewport_snapshot, content_size_snapshot)
+		return pending_claim_action_dock_rect_for_count(pending_claim_expected_action_count(), viewport_snapshot, content_size_snapshot)
 	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), 0.0)
 	return Rect2(ACTION_BAR_DOCK_RECT.position - shift, ACTION_BAR_DOCK_RECT.size - shift)
 
