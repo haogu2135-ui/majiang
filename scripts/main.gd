@@ -24801,7 +24801,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			# The right history control shares the corner with the top pager and
 			# response dock. A compact target leaves a horizontal gap beside the
 			# top pager instead of pushing the whole control into the action rows.
-			var gutter_width := UI_MIN_TOUCH_TARGET if seat == 1 else maxf(68.0, minf(overlay.size.x, float(mini(columns, visible_count)) * tile_size.x + float(maxi(0, mini(columns, visible_count) - 1) * DISCARD_GRID_SEPARATION)))
+			var gutter_width := UI_MIN_TOUCH_TARGET if seat == 1 else (64.0 if overlay.size.x < 105.0 else maxf(68.0, minf(overlay.size.x, float(mini(columns, visible_count)) * tile_size.x + float(maxi(0, mini(columns, visible_count) - 1) * DISCARD_GRID_SEPARATION))))
 			var gutter_left := maxf(0.0, overlay.size.x - gutter_width)
 			if seat == 1:
 				var bottom_archive := parent.find_child("DiscardRiverArchiveButton_0", true, false) as Control
@@ -24831,12 +24831,16 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			var bottom_river_root := battle_table_anchor_root_rect(seat_discard_rect(0), archive_viewport)
 			var bottom_river_left_px := bottom_river_root.position.x * archive_content.x
 			var bottom_river_right_px := bottom_river_root.size.x * archive_content.x
-			var seat0_height := minf(archive_height, 46.0) if archive_viewport.x <= 960.0 else archive_height
-			seat0_height = maxf(float(UI_MIN_TOUCH_TARGET), seat0_height)
+			var seat0_min_h := archive_button.get_combined_minimum_size().y
+			var seat0_height := minf(archive_height, 46.0) if (archive_viewport.x <= 960.0 and not large_text_enabled) else archive_height
+			seat0_height = maxf(maxf(float(UI_MIN_TOUCH_TARGET), seat0_min_h), seat0_height)
 			var target_x: float
 			if has_pending_claim_window() or archive_viewport.x >= 1150.0:
 				# Place left of Seat 0's river so pending claim docks & buttons are never occluded.
 				target_x = bottom_river_left_px - 6.0 - 50.0
+				if archive_viewport.x <= 960.0 and large_text_enabled:
+					var left_river_right_px := battle_table_anchor_root_rect(seat_discard_rect(3), archive_viewport).size.x * archive_content.x
+					target_x = minf(target_x, left_river_right_px - 64.0 - 8.0 - 50.0)
 			else:
 				target_x = bottom_river_right_px + 6.0
 				var dock_left_px := action_bar_dock_layout_rect(archive_viewport, archive_content).position.x * archive_content.x
