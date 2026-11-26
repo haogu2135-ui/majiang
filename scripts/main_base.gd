@@ -168,6 +168,9 @@ const GPT_ILLUSTRATION_ASSET_PATHS := {
 	"ui_meter_guofeng_fill_jade_gpt": "res://assets/illustrations/ui_meter_guofeng_fill_jade_gpt.png",
 	"ui_scrollbar_guofeng_thumb_gpt": "res://assets/illustrations/ui_scrollbar_guofeng_thumb_gpt.png",
 	"daily_milestone_gold_frame_gpt": "res://assets/illustrations/daily_milestone_gold_frame_gpt.png",
+	"chat_bubble_guofeng_gpt": "res://assets/illustrations/chat_bubble_guofeng_gpt.png",
+	"yaku_chip_plaque_gpt": "res://assets/illustrations/yaku_chip_plaque_gpt.png",
+	"battle_dock_lacquer_gpt": "res://assets/illustrations/battle_dock_lacquer_gpt.png",
 	"loading_scene_gpt_backdrop": "res://assets/illustrations/loading_scene_gpt_backdrop.png",
 	"daily_login_gpt_calendar": "res://assets/illustrations/daily_login_gpt_calendar.png",
 	"daily_login_gpt_calendar_warm": "res://assets/illustrations/daily_login_gpt_calendar_warm_v392.png",
@@ -3461,6 +3464,8 @@ func sync_guofeng_button_face_state(button: Button) -> void:
 		)
 	else:
 		face.modulate = base_modulate
+	if button.has_meta("guofeng_chamfer_focus_enabled") and bool(button.get_meta("guofeng_chamfer_focus_enabled")):
+		sync_guofeng_button_focus_visual(button, button.has_focus())
 
 
 func mark_guofeng_danger_button(button: Button, filled_cinnabar: bool = false) -> void:
@@ -3487,14 +3492,17 @@ func _make_guofeng_focus_ring_style(left_aligned: bool = false, ink_face: bool =
 	if use_authored_ring:
 		var min_dim := minf(border_tex.get_size().x, border_tex.get_size().y)
 		border_px = clampf(min_dim * 0.125, 8.0, 12.0)
-		ring.modulate_color = Color.WHITE
+		if high_contrast_enabled:
+			ring.modulate_color = Color(1.18, 1.06, 0.80, 1.0) if ink_face else Color(1.14, 0.88, 0.34, 1.0)
+		else:
+			ring.modulate_color = Color.WHITE
 	else:
 		var tex_size := border_tex.get_size()
 		if tex_size.x >= 384.0 and tex_size.y >= 384.0:
 			ring.region_rect = Rect2(Vector2(64.0, 64.0), Vector2(256.0, 256.0))
 		border_px = 4.0 if high_contrast_enabled else 3.0
 		if high_contrast_enabled:
-			ring.modulate_color = Color(1.0, 0.90, 0.36, 1.0) if ink_face else Color(0.76, 0.18, 0.12, 1.0)
+			ring.modulate_color = Color(1.0, 0.90, 0.36, 1.0) if ink_face else Color(0.92, 0.56, 0.06, 1.0)
 		else:
 			ring.modulate_color = Color(1.0, 0.84, 0.34, 0.98) if ink_face else Color(0.78, 0.42, 0.10, 0.98)
 	ring.texture_margin_left = border_px
@@ -3550,16 +3558,30 @@ func sync_guofeng_button_focus_visual(button: Button, focused: bool) -> bool:
 	var focus_plate: CanvasItem = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
 	var face: TextureRect = button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	var is_dark_face: bool = button.has_meta("guofeng_chamfer_focus_ink") and bool(button.get_meta("guofeng_chamfer_focus_ink"))
+	var pad: float = 0.0
 	if focus_plate != null:
 		if focused:
 			if high_contrast_enabled:
-				focus_plate.modulate = Color(1.0, 0.90, 0.30, 1.0) if is_dark_face else Color(0.86, 0.22, 0.12, 1.0)
+				# Luminous imperial amber-gold / bright-gold chamfer halo:
+				# outer dark-bronze bevel clears cream parchment (>=8:1) while
+				# luminous inner band clears dark button/jade rims (>=3.2:1).
+				focus_plate.modulate = Color(1.25, 1.04, 0.28, 1.0) if is_dark_face else Color(1.18, 0.66, 0.06, 1.0)
+				pad = 4.0
 			else:
-				focus_plate.modulate = Color(0.98, 0.80, 0.28, 1.0) if is_dark_face else Color(0.88, 0.58, 0.14, 1.0)
+				focus_plate.modulate = Color(0.98, 0.80, 0.28, 1.0) if is_dark_face else Color(0.90, 0.60, 0.14, 1.0)
+				pad = 2.5
+		elif high_contrast_enabled:
+			# Chamfer-matched high-contrast idle border (eliminates 90-deg corner spikes).
+			if button.disabled:
+				focus_plate.modulate = Color(0.86, 0.78, 0.44, 0.70) if is_dark_face else Color(0.20, 0.26, 0.22, 0.72)
+				pad = 1.5
+			else:
+				focus_plate.modulate = Color(1.12, 0.94, 0.36, 1.0) if is_dark_face else Color(0.06, 0.12, 0.08, 1.0)
+				pad = 2.0
 		else:
 			focus_plate.modulate = Color(1.0, 0.82, 0.34, 0.0)
+			pad = 0.0
 	if face != null:
-		var pad: float = (3.0 if high_contrast_enabled else 2.5) if focused else 0.0
 		face.offset_left = pad
 		face.offset_top = pad
 		face.offset_right = -pad
@@ -3643,7 +3665,7 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var paper_chamfer_tex: Texture2D = optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 	var use_chamfer_focus_halo: bool = button != null and not is_battle_action_role and not is_menu_quick and not is_top_hud_action and focus_plate != null and face != null and paper_chamfer_tex != null and not (ink_face and is_raw_ink_contract)
 	var focus_style: StyleBox = empty_style if (is_battle_action_role or use_chamfer_focus_halo) else _make_guofeng_focus_ring_style(left_aligned, ink_face or filled_danger_visual)
-	var use_hc_border: bool = high_contrast_enabled and not is_battle_action_role and not is_menu_quick
+	var use_hc_border: bool = high_contrast_enabled and not is_battle_action_role and not is_menu_quick and not use_chamfer_focus_halo and not is_top_hud_action
 	var idle_style: StyleBox = _make_guofeng_high_contrast_border_style(left_aligned, ink_face or filled_danger_visual) if use_hc_border else empty_style
 	for state in ["normal", "hover", "pressed", "hover_pressed"]:
 		button.add_theme_stylebox_override(state, idle_style)
@@ -4601,7 +4623,7 @@ func guofeng_card_title_font_size(base_size: int = 16) -> int:
 
 
 func guofeng_high_contrast_card_tint() -> Color:
-	return Color(1.0, 0.99, 0.95, 1.0) if high_contrast_enabled else Color.WHITE
+	return Color(0.84, 0.78, 0.64, 1.0) if high_contrast_enabled else Color.WHITE
 
 
 func is_wide_desktop_viewport() -> bool:
@@ -4613,6 +4635,28 @@ func is_wide_desktop_viewport() -> bool:
 	elif get_viewport() != null:
 		vp = get_viewport().get_visible_rect().size
 	return vp.x >= 1600.0 and vp.y >= 900.0
+
+
+func guofeng_1080p_modal_scale(viewport_snapshot: Vector2 = Vector2.ZERO) -> float:
+	var vp: Vector2 = viewport_snapshot
+	if vp.x <= 1.0 or vp.y <= 1.0:
+		if has_method("effective_viewport_size"):
+			var raw_vp: Variant = call("effective_viewport_size")
+			if raw_vp is Vector2:
+				vp = raw_vp as Vector2
+		elif get_viewport() != null:
+			vp = get_viewport().get_visible_rect().size
+	if vp.x < 1600.0 or vp.y < 900.0:
+		return 1.0
+	return clampf(minf(vp.x / 1280.0, vp.y / 720.0), 1.0, 1.35)
+
+
+func guofeng_modal_font_size(base_size: int, viewport_snapshot: Vector2 = Vector2.ZERO, max_scale: float = 1.28) -> int:
+	var accessible_base: int = accessibility_font_size(base_size)
+	var modal_scale: float = minf(guofeng_1080p_modal_scale(viewport_snapshot), maxf(1.0, max_scale))
+	if modal_scale <= 1.001:
+		return accessible_base
+	return maxi(accessible_base, int(round(float(accessible_base) * modal_scale)))
 
 
 func menu_wide_font_size(base_size: int, wide_delta: int = 0) -> int:
@@ -4919,6 +4963,18 @@ func guofeng_scrollbar_thumb_texture() -> Texture2D:
 
 func guofeng_daily_milestone_frame_texture() -> Texture2D:
 	return optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
+
+
+func guofeng_chat_bubble_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("chat_bubble_guofeng_gpt")
+
+
+func guofeng_yaku_chip_plaque_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("yaku_chip_plaque_gpt")
+
+
+func guofeng_battle_dock_lacquer_texture() -> Texture2D:
+	return optional_gpt_illustration_texture("battle_dock_lacquer_gpt")
 
 
 func table_tile_back_texture() -> Texture2D:
