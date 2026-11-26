@@ -28616,8 +28616,8 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.add_child(tile_preview)
 	var narrow_context := viewport_size.x <= 960.0
 	var compact_large_context := large_text_enabled
-	apply_rect(tile_preview, rect_full(0.025, 0.040, 0.165 if narrow_context else 0.210, 0.960))
-	var text_left := 0.195 if narrow_context else 0.240
+	apply_rect(tile_preview, rect_full(0.025, 0.040, 0.155 if (narrow_context and compact_large_context) else (0.165 if narrow_context else 0.210), 0.960))
+	var text_left := 0.175 if (narrow_context and compact_large_context) else (0.195 if narrow_context else 0.240)
 	var panel_px_width := maxf(180.0, safe_content_pixel_size().x * maxf(0.10, context_rect.size.x - context_rect.position.x))
 	var top_lane_top := 0.000 if compact_large_context else 0.020
 	var top_lane_bottom := 0.510 if compact_large_context else 0.520
@@ -53942,7 +53942,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	var header_left := 0.020
 	var header_gap_px := 1.0 if (narrow_context and large_text_enabled) else 4.0
 	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + header_gap_px / safe_height)
-	var header_right := 0.285
+	var header_right := 0.223 if (narrow_context and large_text_enabled) else 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate

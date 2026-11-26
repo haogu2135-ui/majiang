@@ -4741,7 +4741,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	var header_left := 0.020
 	var header_gap_px := 1.0 if (narrow_context and large_text_enabled) else 4.0
 	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + header_gap_px / safe_height)
-	var header_right := 0.285
+	var header_right := 0.223 if (narrow_context and large_text_enabled) else 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
 		return header_candidate
