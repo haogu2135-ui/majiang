@@ -13464,6 +13464,7 @@ func _skin_guofeng_meter_bar(rail: TextureRect, fill: TextureRect, rail_tex: Tex
 			r_edges.patch_margin_top = 14
 			r_edges.patch_margin_bottom = 14
 			r_edges.self_modulate = Color.WHITE
+			rail.move_child(r_edges, 0)
 	if fill != null and fill_tex != null:
 		fill.texture = fill_tex
 		fill.modulate = Color.WHITE
@@ -13476,6 +13477,8 @@ func _skin_guofeng_meter_bar(rail: TextureRect, fill: TextureRect, rail_tex: Tex
 			f_edges.patch_margin_top = 10
 			f_edges.patch_margin_bottom = 10
 			f_edges.self_modulate = fill_tint
+	if rail != null and fill != null and fill.get_parent() == rail:
+		rail.move_child(fill, rail.get_child_count() - 1)
 
 
 func draw_achievements_dashboard_art(parent: Control) -> Control:
@@ -28379,8 +28382,9 @@ func draw_online_lobby_roster_panel(parent: Control) -> Control:
 			if roster_plate != null:
 				roster_plate.name = "OnlineLobbyRosterRowPlate_%d" % i
 				roster_plate.self_modulate = Color(0.99, 0.97, 0.92, 1.0) if active else Color(0.91, 0.88, 0.82, 0.74)
-				configure_guofeng_button_slice(roster_plate, true, 104 if roster_plate_key == "guofeng_card_frame_gpt" else 96, 0.22 if roster_plate_key == "guofeng_card_frame_gpt" else 0.125)
+				configure_guofeng_button_slice(roster_plate, true, 104 if roster_plate_key == "guofeng_card_frame_gpt" else 96, 0.13 if roster_plate_key == "guofeng_card_frame_gpt" else 0.125)
 		row.name = "OnlineLobbyRosterRow_%d" % i
+		row.clip_contents = true
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.set_meta("column_contract", "seat|name|ready|status")
 		row.set_meta("column_baseline", 0.50)
