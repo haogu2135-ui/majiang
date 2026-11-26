@@ -3290,7 +3290,7 @@ func wait_value_metrics(seat: int, hand: Array, open_melds: int, shanten: int, e
 		var points = int(score_data.get("points", 0))
 		points_by_tile[tile] = points
 		fan_by_tile[tile] = fan
-		var wait_weight = 0.40 if discard_furiten else 1.0
+		var wait_weight = 0.62 if discard_furiten else 1.0
 		var effective_points: int = points
 		# 地方规则起胡番门槛（如广东3番起胡）：未达起胡番的待牌不可荣和，连自摸(+1)也不足则近似死听。
 		if min_fan > 1 and fan < min_fan:
