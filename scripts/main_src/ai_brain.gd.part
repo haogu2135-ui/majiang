@@ -3051,10 +3051,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				if is_term_or_hon:
 					danger_pen = maxf(0.0, danger_pen - 5.0)
 		score -= danger_pen * defense
-	# R8b: 困难档单家定点重危加罚（仅针对>=23的真正染手/多副露定点炮弹，避免中盘过度弃攻拖慢局速）。
-	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 23.0:
-		var focused_opp_pen: float = (max_opp_risk - 20.0) * 1.45
-		if max_opp_risk >= 28.0 and safety == "":
+	# R8b: 困难档单家定点重危加罚（仅针对>=21的真正染手/多副露定点炮弹，平衡放炮防线与局速）。
+	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 21.0:
+		var focused_opp_pen: float = (max_opp_risk - 19.0) * 1.40
+		if max_opp_risk >= 26.0 and safety == "":
 			focused_opp_pen += 16.0
 		score -= focused_opp_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
