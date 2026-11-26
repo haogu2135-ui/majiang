@@ -2786,10 +2786,11 @@ func _show_rules_screen_impl() -> void:
 	style_guofeng_label(title)
 
 	var wide_rules := rules_viewport_size.x >= 1600.0
+	var compact_rules_header := rules_viewport_size.x <= 1000.0
 	var rules_guide = draw_rules_guide_art(panel, rules_viewport_size)
 	mark_ui_optimization(rules_guide, "F-534")
 	if wide_rules:
-		rules_guide.anchor_right = 0.785
+		rules_guide.anchor_right = 0.812
 		var wide_tab_height: float = UI_MIN_TOUCH_TARGET
 		for tab_idx in range(RULES_SECTION_COUNT):
 			var tab_label := rules_guide.find_child("RulesGuideStepLabel_%d" % tab_idx, true, false) as Label
@@ -2810,6 +2811,10 @@ func _show_rules_screen_impl() -> void:
 					tab_marker.offset_bottom = tab_state.offset_bottom
 				wide_tab_height = maxf(wide_tab_height, line_h * 2.0 + 10.0)
 		rules_guide.set_meta("chapter_min_height_px", wide_tab_height)
+	elif not compact_rules_header:
+		rules_guide.anchor_right = 0.785
+	elif not large_text_enabled:
+		rules_guide.anchor_right = 0.752
 	var rules_content_top := 0.168
 	var rules_panel_height := panel.size.y
 	var title_height := maxf(rules_panel_height * (title.anchor_bottom - title.anchor_top), title.get_minimum_size().y)
@@ -2832,9 +2837,10 @@ func _show_rules_screen_impl() -> void:
 	back.add_theme_font_size_override("font_size", commercial_ui_font_size(16, 2))
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
-	apply_rect(back, rect_full(0.845, 0.024, 0.945, 0.090))
+	apply_rect(back, rect_full(0.855, 0.024, 0.955, 0.090))
 	var rules_status_font_size := commercial_ui_font_size(12, 3)
-	var rules_status_plate = make_layout_host(rect_full(0.795 if wide_rules else 0.755, rules_content_top - 0.085, 0.945, rules_content_top - 0.025))
+	var rules_status_left: float = 0.820 if wide_rules else (0.750 if compact_rules_header else 0.795)
+	var rules_status_plate = make_layout_host(rect_full(rules_status_left, rules_content_top - 0.085, 0.955, rules_content_top - 0.025))
 	rules_status_plate.name = "RulesReadingStatusPlate"
 	# The native return button can be taller than its proportional slot. Keep
 	# the reading state below its complete rectangle at every viewport size.
@@ -2871,9 +2877,8 @@ func _show_rules_screen_impl() -> void:
 	var rules_content_bottom := 0.946 if compact_rules_scroll else 0.922
 	content_scroll.anchor_left = 0.040
 	content_scroll.anchor_top = rules_content_top
-	# Reserve a small stable gap for the custom scroll lane instead of letting its
-	# wider visual thumb overlap the last glyph column.
-	content_scroll.anchor_right = 0.910
+	# Reserve a clean right-edge lane for the custom scroll bar while keeping a >=44px hit lane outside body text.
+	content_scroll.anchor_right = 0.924
 	content_scroll.anchor_bottom = rules_content_bottom
 	content_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	content_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -2884,16 +2889,16 @@ func _show_rules_screen_impl() -> void:
 		rules_scrollbar.name = "RulesContentScrollBar"
 		rules_scrollbar.visible = false
 		rules_scrollbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var gutter_left := 0.920
-	var gutter_right := 0.945
-	var rules_scroll_gutter = make_gpt_center_crop_plate_rect(rect_full(gutter_left, rules_content_top + 0.012, gutter_right, rules_content_bottom), Color(0.84, 0.80, 0.70, 0.38), "menu_card_readable_gpt", 0.30)
+	var gutter_left := 0.935
+	var gutter_right := 0.958
+	var rules_scroll_gutter = make_gpt_center_crop_plate_rect(rect_full(gutter_left, rules_content_top + 0.012, gutter_right, rules_content_bottom), Color(0.84, 0.80, 0.70, 0.42), "menu_card_readable_gpt", 0.30)
 	rules_scroll_gutter.name = "RulesContentScrollGutter"
 	rules_scroll_gutter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(rules_scroll_gutter)
 	# Solve the fraction from a pixel target so the grip remains discoverable on
 	# 960/1280/1920 captures and still has a stable touch target on Android.
 	var gutter_span_px := maxf(1.0, (gutter_right - gutter_left) * rules_viewport_size.x)
-	var rules_thumb_visual_width_px := 13.0 if wide_rules else 10.0
+	var rules_thumb_visual_width_px := 14.0 if wide_rules else 12.0
 	var thumb_span_frac := minf(rules_thumb_visual_width_px / gutter_span_px, 0.90)
 	var thumb_left := 0.5 - thumb_span_frac * 0.5
 	var thumb_right := 0.5 + thumb_span_frac * 0.5
@@ -2919,12 +2924,12 @@ func _show_rules_screen_impl() -> void:
 	rules_scroll_thumb.set_meta("hit_lane_px", UI_MIN_TOUCH_TARGET)
 	mark_ui_optimization(rules_scroll_thumb, "F-535")
 	mark_ui_optimization(rules_scroll_thumb, "F-228")
-	var scroll_icon_left := 0.080 if compact_rules_scroll else 0.205
-	var scroll_icon_right := 0.920 if compact_rules_scroll else 0.795
-	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(scroll_icon_left, 0.004, scroll_icon_right, 0.045), Color(0.24, 0.34, 0.28, 0.52))
+	var scroll_icon_left := 0.080 if compact_rules_scroll else 0.180
+	var scroll_icon_right := 0.920 if compact_rules_scroll else 0.820
+	var scroll_top_icon = add_lucide_icon(rules_scroll_gutter, "chevron-up", rect_full(scroll_icon_left, 0.004, scroll_icon_right, 0.045), Color(0.20, 0.30, 0.24, 0.85))
 	if scroll_top_icon != null:
 		scroll_top_icon.name = "RulesContentScrollTopCue"
-	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(scroll_icon_left, 0.955, scroll_icon_right, 0.995), Color(0.24, 0.34, 0.28, 0.52))
+	var scroll_bottom_icon = add_lucide_icon(rules_scroll_gutter, "chevron-down", rect_full(scroll_icon_left, 0.955, scroll_icon_right, 0.995), Color(0.20, 0.30, 0.24, 0.85))
 	if scroll_bottom_icon != null:
 		scroll_bottom_icon.name = "RulesContentScrollBottomCue"
 	var rules_scroll_hit_target = Control.new()
@@ -2942,7 +2947,7 @@ func _show_rules_screen_impl() -> void:
 	mark_ui_optimization(rules_scroll_hit_target, "F-536")
 	# Keep the transparent touch surface inside the scrollbar lane. The content
 	# viewport ends before this lane, so the last text column remains clickable.
-	apply_rect(rules_scroll_hit_target, rect_full(0.915, rules_content_top, 0.975, rules_content_bottom))
+	apply_rect(rules_scroll_hit_target, rect_full(0.928, rules_content_top, 0.980, rules_content_bottom))
 	panel.add_child(rules_scroll_hit_target)
 	content_scroll.set_meta("compact_first_section_boundary", "first_complete_section_then_scroll")
 	content_scroll.set_meta("content_bottom_anchor", rules_content_bottom)
@@ -3048,10 +3053,10 @@ func _show_rules_screen_impl() -> void:
 		"平胡1番；自摸、庄家、门清各加1番",
 		"每张花牌和每组杠各加1番" if bool(current_profile.get("include_flowers", true)) else "每组杠加1番；本档案不计花牌",
 		"情境：杠上开花加2番；海底捞月、河底捞鱼、抢杠胡各加1番",
-		"七对+3、十三幺+7、清一色+3、混一色+2",
-		"字一色+5、碰碰胡+2、一条龙+2、断幺九+1",
-		"大吊车+2；大三元+6、小三元+4",
-		"大四喜+7、小四喜+5；同组大/小牌型择高",
+		"七对+3番、十三幺+7番、清一色+3番、混一色+2番",
+		"字一色+5番、碰碰胡+2番、一条龙+2番、断幺九+1番",
+		"大吊车+2番；大三元+6番、小三元+4番",
+		"大四喜+7番、小四喜+5番；同组大/小牌型择高",
 	], 2)
 
 	add_rule_section(content, "牌型介绍", [
@@ -3069,12 +3074,18 @@ func _show_rules_screen_impl() -> void:
 	], 4)
 
 	add_rule_section(content, "游戏操作", [
-		"点手牌即可打出",
-		"出现吃/碰/杠/胡时点击响应",
-		"点'重开'重新开局",
-		"本页说明当前单机本地实现；当前档案为%s" % rule_variant_label(),
-		"特殊地方番型与包赔细则仍以正式发布规则为准",
+		"出牌：点击手牌直接打出；键盘方向键选牌，回车出牌",
+		"响应：出现「吃 / 碰 / 杠 / 胡」提示时，点击对应按钮即可操作",
+		"续局与重开：中途退出自动保存进度；点击「重开」可开始新局",
+		"当前规则档案：%s（可在首页或设置中随时切换）" % rule_variant_label(),
+		"单机牌局与联机好友房均遵循上述完整牌型、番数与结算规则",
 	], 5)
+	var rules_tail_spacer := Control.new()
+	rules_tail_spacer.name = "RulesBottomTailSpacer"
+	rules_tail_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rules_tail_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rules_tail_spacer.custom_minimum_size = Vector2(0.0, 0.0)
+	content.add_child(rules_tail_spacer)
 	# The section heights change the scrollbar range. Run one ordered layout pass
 	# before exposing the custom grip so its first frame cannot point at stale data.
 	call_deferred("normalize_rules_layout_and_sync", content_scroll, rules_scroll_thumb, rules_guide)
@@ -3297,6 +3308,20 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 		section.set_meta("section_height_policy", "content_measured_min_136px")
 		mark_ui_optimization(section, "F-532")
 		mark_ui_optimization(section, "F-227")
+	# Give the final chapter enough trailing scroll tail so jumping to Chapter 6
+	# aligns "游戏操作" cleanly to the top of the reading viewport instead of clamping mid-Chapter 5.
+	var tail_spacer: Control = content.get_node_or_null("RulesBottomTailSpacer") as Control
+	var last_chapter: Control = content.get_node_or_null("RuleSection_%d" % (RULES_SECTION_COUNT - 1)) as Control
+	if tail_spacer != null and last_chapter != null:
+		var scroll_view_h: float = content_scroll.size.y
+		if scroll_view_h <= 1.0:
+			var panel_host_est := content_scroll.get_parent() as Control
+			if panel_host_est != null and panel_host_est.size.y > 1.0:
+				scroll_view_h = panel_host_est.size.y * maxf(0.20, content_scroll.anchor_bottom - content_scroll.anchor_top)
+		var last_chapter_h: float = maxf(last_chapter.size.y, last_chapter.custom_minimum_size.y)
+		var desired_tail: float = ceilf(maxf(0.0, scroll_view_h - last_chapter_h - 20.0)) if scroll_view_h > 1.0 else 0.0
+		if absf(tail_spacer.custom_minimum_size.y - desired_tail) > 1.0:
+			tail_spacer.custom_minimum_size = Vector2(0.0, desired_tail)
 	# Snap compact RulesContentScroll bottom edge cleanly between complete text lines so
 	# the initial 960x540 view never slices the final visible rule clause mid-glyph.
 	if rules_vp.y <= 560.0 and not large_text_enabled:
@@ -7422,21 +7447,43 @@ func show_exit_confirm() -> void:
 	root_layer.add_child(overlay)
 	exit_confirm_panel = overlay
 
-	# 遮罩层 — r415: thinner scrim so GPT dialog plate can read warm, not void.
-	var mask = make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.60), "ui_dark_scrim")
+	# 遮罩层 — crisp 0.72 dark scrim framing the modal cleanly above table felt.
+	var mask = make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.72), "ui_dark_scrim")
 	mask.mouse_filter = Control.MOUSE_FILTER_STOP
+	mask.gui_input.connect(func(event: InputEvent) -> void:
+		if exit_confirm_decision_locked:
+			return
+		var dismiss := false
+		if event is InputEventScreenTouch:
+			dismiss = (event as InputEventScreenTouch).pressed
+		elif event is InputEventMouseButton:
+			var mouse_event := event as InputEventMouseButton
+			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
+		if dismiss:
+			mask.accept_event()
+			hide_exit_confirm()
+	)
 	overlay.add_child(mask)
 
-	# 对话框面板 — r415: thin lacquer shell under GPT confirm plate.
+	# 对话框面板 — responsive footprint across 960/1280/1920 with Guofeng card frame.
 	var exit_viewport := effective_viewport_size()
 	var compact_exit := exit_viewport.y <= 600.0 or exit_viewport.x <= 1000.0
+	var wide_exit := exit_viewport.x >= 1600.0 and exit_viewport.y >= 900.0
 	var content_size := safe_content_pixel_size()
-	var dialog_width := minf(content_size.x * 0.88, 620.0 if large_text_enabled else 560.0)
-	var dialog_height := minf(content_size.y * 0.88, 340.0 if large_text_enabled else 306.0)
+	var target_w: float = (500.0 if large_text_enabled else 440.0) if compact_exit else ((640.0 if large_text_enabled else 580.0) if wide_exit else (560.0 if large_text_enabled else 490.0))
+	var target_h: float = (300.0 if large_text_enabled else 252.0) if compact_exit else ((368.0 if large_text_enabled else 320.0) if wide_exit else (324.0 if large_text_enabled else 278.0))
+	var dialog_width := minf(content_size.x * 0.88, target_w)
+	var dialog_height := minf(content_size.y * 0.86, target_h)
 	var dialog_rect := rect_full(0.5 - dialog_width / content_size.x * 0.5, 0.5 - dialog_height / content_size.y * 0.5, 0.5 + dialog_width / content_size.x * 0.5, 0.5 + dialog_height / content_size.y * 0.5)
 	var dialog = make_gpt_center_crop_plate_rect(dialog_rect, Color.WHITE, "settings_readable_gpt", 1.0)
 	dialog.name = "ExitConfirmDialog"
 	dialog.self_modulate = Color.WHITE
+	var exit_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if exit_frame_tex != null:
+		configure_guofeng_button_slice(dialog, true, 104, 0.18 if compact_exit else (0.24 if wide_exit else 0.21), exit_frame_tex, true)
+		var exit_edges: NinePatchRect = dialog.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if exit_edges != null:
+			exit_edges.self_modulate = Color(0.62, 0.50, 0.26, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.92)
 	dialog.set_meta("viewport_snapshot", exit_viewport)
 	dialog.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	dialog.set_meta("compact_layout", compact_exit)
@@ -7446,27 +7493,36 @@ func show_exit_confirm() -> void:
 	dialog.set_meta("guofeng_surface_key", "settings_readable_gpt")
 	dialog.set_meta("opaque_reading_surface", true)
 
-	# 标题
-	var title = make_heading(dialog, "确认退出", 26, Color(0.10, 0.22, 0.16), true)
+	# 标题 + 墨韵分隔线
+	var exit_title_size: int = guofeng_modal_font_size(24 if compact_exit else 26, exit_viewport, 1.15)
+	var exit_msg_size: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
+	var exit_status_size: int = guofeng_modal_font_size(12 if compact_exit else 13, exit_viewport, 1.18)
+	var title = make_heading(dialog, "确认退出", exit_title_size, Color(0.10, 0.22, 0.16), true)
 	title.name = "ExitConfirmTitle"
 	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.22))
 	style_guofeng_label(title)
+	title.add_theme_font_size_override("font_size", exit_title_size)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var exit_divider := make_brush_stroke_divider(dialog, rect_full(0.16, 0.242, 0.84, 0.264))
+	if exit_divider != null:
+		exit_divider.modulate = Color(0.76, 0.64, 0.38, 0.72)
 
 	# 提示文本
 	var message = "是否暂离当前牌局？\n下次进入可随时续局。"
-	var msg_label = make_label(dialog, message, 16, Color(0.14, 0.24, 0.18), false)
-	apply_rect(msg_label, rect_full(0.10, 0.29, 0.90, 0.49))
+	var msg_label = make_label(dialog, message, exit_msg_size, Color(0.14, 0.24, 0.18), false)
+	apply_rect(msg_label, rect_full(0.09, 0.29, 0.91, 0.50))
 	style_guofeng_label(msg_label)
+	msg_label.add_theme_font_size_override("font_size", exit_msg_size)
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	msg_label.name = "ExitConfirmMessage"
 	set_ui_full_text(msg_label, message, "退出后果")
-	var save_status := make_label(dialog, "进度将在退出前自动保存", 13, Color(0.14, 0.44, 0.28), true)
+	var save_status := make_label(dialog, "进度将在退出前自动保存", exit_status_size, Color(0.14, 0.44, 0.28), true)
 	save_status.name = "ExitConfirmSaveStatus"
-	apply_rect(save_status, rect_full(0.10, 0.53, 0.90, 0.62))
+	apply_rect(save_status, rect_full(0.09, 0.53, 0.91, 0.63))
 	style_guofeng_label(save_status)
-	save_status.add_theme_color_override("font_color", Color(0.14, 0.44, 0.28))
+	save_status.add_theme_font_size_override("font_size", exit_status_size)
+	save_status.add_theme_color_override("font_color", Color(0.12, 0.42, 0.26))
 	save_status.set_meta("preserve_semantic_color", true)
 	save_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	save_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -7477,9 +7533,11 @@ func show_exit_confirm() -> void:
 	# 按钮行
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	button_row.add_theme_constant_override("separation", 18)
-	apply_rect(button_row, rect_full(0.10, 0.72, 0.90, 0.91))
+	button_row.add_theme_constant_override("separation", 16 if compact_exit else (24 if wide_exit else 18))
+	apply_rect(button_row, rect_full(0.09, 0.70, 0.91, 0.90))
 	dialog.add_child(button_row)
+	var exit_btn_min := Vector2(132, 48) if compact_exit else (Vector2(172, 56) if wide_exit else Vector2(148, 52))
+	var exit_btn_font: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
 
 	# 继续游戏按钮
 	var continue_btn = make_small_button("继续游戏", Color(0.42, 0.34, 0.22), func() -> void:  # r392 warm
@@ -7487,8 +7545,9 @@ func show_exit_confirm() -> void:
 	)
 	continue_btn.name = "ExitConfirmContinueButton"
 	continue_btn.focus_mode = Control.FOCUS_ALL
-	continue_btn.custom_minimum_size = Vector2(144, 52)
+	continue_btn.custom_minimum_size = exit_btn_min
 	style_guofeng_secondary_action(continue_btn, true)
+	continue_btn.add_theme_font_size_override("font_size", exit_btn_font)
 	button_row.add_child(continue_btn)
 
 	# 退出按钮
@@ -7531,13 +7590,21 @@ func show_exit_confirm() -> void:
 	)
 	exit_btn.name = "ExitConfirmLeaveButton"
 	exit_btn.focus_mode = Control.FOCUS_ALL
-	exit_btn.custom_minimum_size = Vector2(144, 52)
+	exit_btn.custom_minimum_size = exit_btn_min
 	exit_btn.set_meta("ui_danger_action", false)
 	style_guofeng_secondary_action(exit_btn, false)
-	exit_btn.add_theme_color_override("font_color", Color(0.46, 0.17, 0.13))
-	exit_btn.add_theme_color_override("font_hover_color", Color(0.54, 0.14, 0.10))
-	exit_btn.add_theme_color_override("font_focus_color", Color(0.46, 0.17, 0.13))
-	exit_btn.add_theme_color_override("font_pressed_color", Color(0.40, 0.13, 0.10))
+	exit_btn.add_theme_font_size_override("font_size", exit_btn_font)
+	if not high_contrast_enabled:
+		var exit_face: TextureRect = exit_btn.get_node_or_null("GptButtonFacePlate") as TextureRect
+		var exit_face_edges: NinePatchRect = exit_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect if exit_face != null else null
+		if exit_face_edges != null and exit_face_edges.visible:
+			exit_face_edges.self_modulate = Color(0.94, 0.86, 0.80, 1.0)
+		elif exit_face != null:
+			exit_face.self_modulate = Color(0.94, 0.86, 0.80, 1.0)
+	exit_btn.add_theme_color_override("font_color", Color(0.50, 0.15, 0.11))
+	exit_btn.add_theme_color_override("font_hover_color", Color(0.58, 0.13, 0.09))
+	exit_btn.add_theme_color_override("font_focus_color", Color(0.50, 0.15, 0.11))
+	exit_btn.add_theme_color_override("font_pressed_color", Color(0.42, 0.12, 0.09))
 	button_row.add_child(exit_btn)
 	continue_btn.focus_neighbor_left = exit_btn.get_path()
 	continue_btn.focus_neighbor_right = exit_btn.get_path()
@@ -9620,28 +9687,36 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	toast_bg.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	toast_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_container.add_child(toast_bg)
+	var toast_vp := effective_viewport_size()
 	var face := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "settings_readable_gpt", 1.0)
 	face.name = "ToastGptFacePlate"
-	face.self_modulate = Color(0.99, 0.96, 0.89)
+	face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var toast_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if toast_frame_tex != null:
-		configure_guofeng_button_slice(face, true, 104, 0.15, toast_frame_tex, true)
+		configure_guofeng_button_slice(face, true, 104, 0.20, toast_frame_tex, true)
+		var toast_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if toast_edges != null:
+			toast_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
 	toast_bg.add_child(face)
-	var label := make_label(toast_bg, safe_text.replace("\n", " "), 16, Color.WHITE, false)
+	var toast_msg_size: int = guofeng_modal_font_size(16, toast_vp, 1.16)
+	var toast_pending_size: int = guofeng_modal_font_size(11, toast_vp, 1.18)
+	var label := make_label(toast_bg, safe_text.replace("\n", " "), toast_msg_size, Color.WHITE, false)
 	label.name = "ToastMessageLabel"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(label)
-	label.add_theme_color_override("font_color", Color(0.09, 0.17, 0.13))
+	label.add_theme_font_size_override("font_size", toast_msg_size)
+	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
 	set_ui_full_text(label, safe_text, "通知：" + safe_text)
-	var pending_label := make_label(toast_bg, "", 11, Color.WHITE, false)
+	var pending_label := make_label(toast_bg, "", toast_pending_size, Color.WHITE, false)
 	pending_label.name = "ToastPendingLabel"
 	pending_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	pending_label.set_meta("toast_queue_indicator", true)
 	pending_label.set_meta("pending_queue_owner", "ToastContainer")
 	pending_label.set_meta("dwell_policy", "oldest_first_with_minimum_dwell")
 	style_guofeng_label(pending_label)
-	pending_label.add_theme_color_override("font_color", Color(0.18, 0.28, 0.22))
+	pending_label.add_theme_font_size_override("font_size", toast_pending_size)
+	pending_label.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var detail := make_small_button("详情", Color.WHITE, Callable(self, "open_toast_detail"))
 	detail.custom_minimum_size = Vector2(44.0, 44.0)
 	detail.add_theme_font_size_override("font_size", accessibility_font_size(12))
@@ -9692,35 +9767,41 @@ func toast_safe_rect(height: float, obstacles: Array[Control], content_width: fl
 	if container_rect.size.x < 196.0 or container_rect.size.y < height + 12.0:
 		return Rect2()
 	var bounds := container_rect.grow(-6.0)
-	var desired_width := minf(620.0, container_rect.size.x * 0.64)
-	if content_width > 0.0:
-		desired_width = clampf(ceilf(content_width) + 56.0, 232.0, desired_width)
-	var preferred := Vector2(container_rect.get_center().x - desired_width * 0.5, container_rect.position.y + container_rect.size.y * 0.215)
+	var max_width := minf(620.0, container_rect.size.x * 0.64)
+	var preferred := Vector2(container_rect.get_center().x, container_rect.position.y + container_rect.size.y * 0.215)
 	var slot_name := "page_header"
+	var align_mode := "center"
 	if mode == "menu":
 		var banner := root_layer.find_child("MenuTutorialEntryBanner", true, false)
 		if banner != null:
-			desired_width = minf(desired_width, container_rect.size.x * 0.34)
+			max_width = minf(max_width, container_rect.size.x * 0.34)
 			preferred = container_rect.position + container_rect.size * Vector2(0.64, 0.072)
 			slot_name = "menu_header_right"
+			align_mode = "left"
 		else:
-			preferred = Vector2(container_rect.get_center().x - desired_width * 0.5, container_rect.position.y + container_rect.size.y * 0.072)
+			preferred = Vector2(container_rect.get_center().x, container_rect.position.y + container_rect.size.y * 0.072)
 			slot_name = "menu_upper_sky_lane"
 	if mode == "offline" or mode == "online_game":
-		desired_width = minf(620.0, container_rect.size.x * 0.40)
-		preferred = Vector2(container_rect.get_center().x - desired_width * 0.5, container_rect.position.y + container_rect.size.y * 0.13)
+		max_width = minf(620.0, container_rect.size.x * 0.40)
+		preferred = Vector2(container_rect.get_center().x, container_rect.position.y + container_rect.size.y * 0.13)
 		slot_name = "battle_measured_clearance"
 	for obstacle in obstacles:
 		if str(obstacle.name) in ["SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel"]:
 			preferred = bounds.position
-			desired_width = minf(desired_width, container_rect.size.x * 0.36)
+			max_width = minf(max_width, container_rect.size.x * 0.36)
 			toast_current.set_meta("modal_safe_route", "measured_clear_of_reading_owner")
 			toast_current.set_meta("modal_safe_owner", str(obstacle.name))
 			slot_name = "modal_override_top_left"
+			align_mode = "left"
 			break
+	var desired_width := max_width
+	if content_width > 0.0:
+		desired_width = clampf(ceilf(content_width) + 48.0, 148.0, max_width)
+	if align_mode == "center":
+		preferred.x -= desired_width * 0.5
 	toast_current.set_meta("menu_safe_slot_name", slot_name)
 	toast_current.set_meta("menu_safe_slot_contract", "clear_of_title_tutorial_and_primary_cards")
-	for width in [desired_width, minf(desired_width, 300.0), minf(desired_width, 240.0), minf(desired_width, 184.0)]:
+	for width in [desired_width, minf(desired_width, 300.0), minf(desired_width, 240.0), minf(desired_width, 184.0), minf(desired_width, 148.0)]:
 		var horizontal: Array[float] = [clampf(preferred.x, bounds.position.x, bounds.end.x - width), bounds.position.x, bounds.end.x - width]
 		var vertical: Array[float] = [preferred.y, bounds.position.y]
 		for obstacle in obstacles:
@@ -9772,6 +9853,13 @@ func reflow_active_toast() -> void:
 	var pending := toast_current.get_node("ToastPendingLabel") as Label
 	var detail := toast_current.get_node("ToastDetailButton") as Button
 	var face := toast_current.get_node("ToastGptFacePlate") as Control
+	if face != null:
+		face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
+		var reflow_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if reflow_edges != null:
+			reflow_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
+	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
+	pending.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var height := maxf(float(UI_MIN_TOUCH_TARGET), label.get_minimum_size().y + 12.0)
 	var slot := Rect2()
 	var shop_body := root_layer.find_child("ShopCabinetFooterBody", true, false) as Control if mode == "shop" and root_layer != null else null
@@ -10336,7 +10424,7 @@ func cycle_accessibility_profile_setting() -> void:
 	save_settings()
 	if reduce_motion_enabled:
 		stop_ambient_animation()
-	show_toast("阅读辅助：%s" % next)
+	show_toast("阅读辅助：%s" % next, TOAST_DEFAULT_DURATION_MSEC, "setting_cycle_accessibility_profile_setting")
 	refresh_current_screen()
 
 func graphics_quality_label(short: bool = false) -> String:

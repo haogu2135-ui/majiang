@@ -3301,11 +3301,14 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_i
 	var selected_width = 1.0
 	var viewport_snapshot := effective_viewport_size()
 	var compact_view := viewport_snapshot.y <= 560.0 or viewport_snapshot.x <= 1100.0
+	var wide_view := viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0
 	var minimum_group_gap := HAND_MIN_GROUP_GAP if compact_view else 4.0
+	var max_group_gap := 4.0 if compact_view else 5.0
+	var effective_drawn_gap := maxf(HAND_DRAWN_TILE_GAP, 26.0 if wide_view else (20.0 if not compact_view else 16.0))
 	for candidate in HAND_LAYOUT_CANDIDATES:
-		var gap_width = float(candidate[0])
+		var gap_width = minf(float(candidate[0]), max_group_gap)
 		var separation = int(candidate[1])
-		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation, drawn_gap_count)
+		var candidate_width = hand_tile_width_for_space(content_size, count, gap_count, gap_width, separation, drawn_gap_count, effective_drawn_gap)
 		selected_gap = gap_width
 		selected_separation = separation
 		selected_width = candidate_width
@@ -3314,17 +3317,24 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_i
 			break
 	if selected_gap < minimum_group_gap:
 		selected_gap = minimum_group_gap
-		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation, drawn_gap_count)
+		selected_width = hand_tile_width_for_space(content_size, count, gap_count, selected_gap, selected_separation, drawn_gap_count, effective_drawn_gap)
 	# The candidate table is intentionally conservative, but the final fallback
 	# still has to protect the compact touch contract when a drawn-tile spacer is
 	# present. Spend separation down to zero before allowing a face below 46px.
 	if selected_width < HAND_TILE_MIN_TOUCH_WIDTH:
-		var compact_width := hand_tile_width_for_space(content_size, count, gap_count, minimum_group_gap, 0, drawn_gap_count)
+		var compact_width := hand_tile_width_for_space(content_size, count, gap_count, minimum_group_gap, 0, drawn_gap_count, effective_drawn_gap)
 		if compact_width >= HAND_TILE_MIN_TOUCH_WIDTH:
 			selected_gap = minimum_group_gap
 			selected_separation = 0
 			selected_width = compact_width
-	var tile_max_width := 88.0 if viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0 else HAND_TILE_MAX_WIDTH
+		elif effective_drawn_gap > HAND_DRAWN_TILE_GAP:
+			effective_drawn_gap = HAND_DRAWN_TILE_GAP
+			var fallback_width := hand_tile_width_for_space(content_size, count, gap_count, minimum_group_gap, 0, drawn_gap_count, effective_drawn_gap)
+			if fallback_width >= HAND_TILE_MIN_TOUCH_WIDTH:
+				selected_gap = minimum_group_gap
+				selected_separation = 0
+				selected_width = fallback_width
+	var tile_max_width := 88.0 if wide_view else HAND_TILE_MAX_WIDTH
 	var tile_width = min(tile_max_width, floor(max(1.0, selected_width)))
 	var tile_height = floor(tile_width * HAND_TILE_ASPECT)
 	return {
@@ -3334,16 +3344,16 @@ func hand_layout_metrics_for_content(hand: Array, content_size: Vector2, drawn_i
 		"group_gap_width": selected_gap,
 		"drawn_index": layout_drawn_index,
 		"drawn_gap_count": drawn_gap_count,
-		"drawn_gap_width": HAND_DRAWN_TILE_GAP if drawn_gap_count > 0 else 0.0,
+		"drawn_gap_width": effective_drawn_gap if drawn_gap_count > 0 else 0.0,
 		"separation": selected_separation,
 		"content_width": content_size.x,
 		"content_height": content_size.y,
 		"touch_width_ok": tile_width >= HAND_TILE_MIN_TOUCH_WIDTH,
 	}
 
-func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int, drawn_gap_count: int = 0) -> float:
+func hand_tile_width_for_space(content_size: Vector2, tile_count: int, gap_count: int, gap_width: float, separation: int, drawn_gap_count: int = 0, drawn_gap_width: float = HAND_DRAWN_TILE_GAP) -> float:
 	var gaps_width = float(max(0, gap_count)) * gap_width
-	var drawn_gaps_width = float(max(0, drawn_gap_count)) * HAND_DRAWN_TILE_GAP
+	var drawn_gaps_width = float(max(0, drawn_gap_count)) * maxf(HAND_DRAWN_TILE_GAP, drawn_gap_width)
 	var spacer_count: int = maxi(0, int(gap_count)) + maxi(0, int(drawn_gap_count))
 	var separations_width = float(max(0, tile_count + spacer_count - 1)) * float(max(0, separation))
 	var width_by_space = (content_size.x - gaps_width - drawn_gaps_width - separations_width) / float(max(1, tile_count))
@@ -4307,8 +4317,10 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 				if text_w + h_pad > btn_w:
 					btn_w = text_w + h_pad
 				measured_total += btn_w
-			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + (16.0 if live_buttons.size() == 1 else 24.0)
-		var solver_total: float = float(count) * width + float(maxi(0, count - 1) * separation) + (16.0 if count == 1 else 24.0)
+			var dock_hpad: float = 12.0 if live_buttons.size() == 1 else (30.0 if disconnected_online else 24.0)
+			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + dock_hpad
+		var solver_hpad: float = 12.0 if count == 1 else (30.0 if disconnected_online else 24.0)
+		var solver_total: float = float(count) * width + float(maxi(0, count - 1) * separation) + solver_hpad
 		dock_pixels = maxf(solver_total, measured_total)
 	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else (minf(dock_rect.position.x, 0.480) if disconnected_online else dock_rect.position.x)
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
@@ -4562,7 +4574,8 @@ func battle_seat_layout_rect(seat: int, fallback_rect: Rect2, viewport_snapshot:
 	var wall_lane := battle_table_anchor_root_rect(battle_wall_layout_rect(0, viewport_snapshot, content_size), viewport_snapshot)
 	# The wall's tile backs extend beyond its normalized layout lane; reserve
 	# extra breathing room in wide large-text mode so the top seat clears the wall.
-	var wide_large_text := viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0 and large_text_enabled
+	var wide_seat := viewport_snapshot.x >= 1600.0 and viewport_snapshot.y >= 900.0
+	var wide_large_text := wide_seat and large_text_enabled
 	var wall_extra_pad := 6.0 if wide_large_text else 0.0
 	var wall_bottom := (wall_lane.position.y + wall_lane.size.y) * 0.5 + (WALL_BACK_TILE_SIZE.y * 0.5 + wall_extra_pad) / content_size.y
 	var river := battle_table_anchor_root_rect(seat_discard_rect(2), viewport_snapshot)
@@ -4571,8 +4584,8 @@ func battle_seat_layout_rect(seat: int, fallback_rect: Rect2, viewport_snapshot:
 	var available_height := (river.position.y - wall_bottom) * content_size.y - gutter * 2.0
 	if available_height < 24.0:
 		return fallback_rect
-	var height := minf(60.0 if wide_large_text else 53.0, floorf(available_height))
-	var width := 360.0 if height >= 40.0 else minf(440.0, maxf(420.0, content_size.x * 0.33))
+	var height := minf(66.0 if wide_large_text else (64.0 if wide_seat else 53.0), floorf(available_height))
+	var width := (400.0 if wide_seat else 360.0) if height >= 40.0 else minf(440.0, maxf(420.0, content_size.x * 0.33))
 	var left := 0.5 - width * 0.5 / content_size.x
 	var top := wall_bottom + (gutter + (available_height - height) * 0.5) / content_size.y
 	return rect_full(left, top, 1.0 - left, top + height / content_size.y)
@@ -5285,7 +5298,7 @@ func action_bar_default_focus_name() -> String:
 
 func online_connection_status_text() -> String:
 	var disconnected := mode == "online_game" and online_game_disconnected()
-	var cache_key := "%s|%d|%d|%d" % [mode, tcp_status, 1 if disconnected else 0, online_game_revision]
+	var cache_key := "%s|%d|%d|%d|%d|%d" % [mode, tcp_status, 1 if disconnected else 0, online_game_revision, 1 if online_waiting_for_server else 0, 1 if online_retry_available else 0]
 	if cache_key == online_connection_status_cache_key:
 		return online_connection_status_cache_value
 	var result := ""
@@ -5301,7 +5314,10 @@ func online_connection_status_text() -> String:
 				StreamPeerTCP.STATUS_ERROR:
 					result = "连接异常"
 				_:
-					result = "待同步" if not online_game.is_empty() else "未连接"
+					if not online_game.is_empty():
+						result = "待同步" if (online_waiting_for_server or online_retry_available) else "已同步"
+					else:
+						result = "未连接"
 	online_connection_status_cache_key = cache_key
 	online_connection_status_cache_value = result
 	return result
@@ -5548,24 +5564,40 @@ func ensure_update_dialog() -> void:
 	update_dialog.mouse_filter = Control.MOUSE_FILTER_STOP
 	root_layer.add_child(update_dialog)
 
-	var dim = make_fullrect_overlay(Color(0.0, 0.0, 0.0, 0.40), "ui_dark_scrim")
+	var scrim_alpha := 0.86 if high_contrast_enabled else 0.80
+	var dim = make_fullrect_overlay(Color(0.004, 0.010, 0.012, scrim_alpha), "ui_dark_scrim")
 	dim.name = "UpdateDialogScrim"
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	update_dialog.add_child(dim)
+	if update_dialog.get_parent() == root_layer:
+		dim.offset_left = -safe_area_margins.x
+		dim.offset_top = -safe_area_margins.y
+		dim.offset_right = safe_area_margins.z
+		dim.offset_bottom = safe_area_margins.w
 
 	var compact_update_dialog := update_dialog_compact_layout()
+	var update_vp := effective_viewport_size()
+	var modal_scale := guofeng_1080p_modal_scale(update_vp)
 	var content_size := safe_content_pixel_size()
-	var paper_width := minf(content_size.x * 0.90, 680.0)
-	var paper_height := minf(content_size.y * 0.94, 490.0)
+	var paper_width := minf(content_size.x * 0.88, 680.0 * modal_scale)
+	var paper_height := minf(content_size.y * 0.92, 490.0 * modal_scale)
 	var panel_rect := rect_full(0.5 - paper_width / content_size.x * 0.5, 0.5 - paper_height / content_size.y * 0.5, 0.5 + paper_width / content_size.x * 0.5, 0.5 + paper_height / content_size.y * 0.5)
 	var panel := make_gpt_center_crop_plate_rect(panel_rect, Color.WHITE, "settings_readable_gpt", 1.0)
-	panel.self_modulate = Color(0.92, 0.88, 0.78)
+	panel.self_modulate = Color.WHITE
 	panel.set_meta("opaque_reading_surface", true)
 	panel.set_meta("guofeng_surface_key", "settings_readable_gpt")
 	update_art_fill = null
 	update_art_status_light = null
 	panel.name = "UpdateDialogPanel"
 	update_dialog.add_child(panel)
+	var modal_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if modal_frame_tex != null:
+		var modal_rim := add_optional_gpt_illustration_texture(panel, "guofeng_card_frame_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+		if modal_rim != null:
+			modal_rim.name = "UpdateModalRim"
+			modal_rim.self_modulate = Color.WHITE
+			configure_guofeng_button_slice(modal_rim, true, 104, 0.22, modal_frame_tex, false)
+			panel.move_child(modal_rim, 0)
 	# Entry animation: fade overlay + scale panel
 	if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 		update_dialog.modulate.a = 0.0
@@ -5575,22 +5607,25 @@ func ensure_update_dialog() -> void:
 		entry_tw.set_parallel(true)
 		entry_tw.tween_property(update_dialog, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		entry_tw.tween_property(panel, "scale", Vector2.ONE, 0.3).from(Vector2(0.8, 0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	var title = make_label(panel, "游戏更新 · 当前 v%s" % app_version_short(), 22, Color(0.10, 0.22, 0.16), true)
+	var title_fs := guofeng_modal_font_size(22, update_vp, 1.25)
+	var title = make_label(panel, "游戏更新 · 当前 v%s" % app_version_short(), title_fs, Color(0.10, 0.22, 0.16), true)
 	title.name = "UpdateDialogTitle"
 	title.add_theme_font_override("font", ui_heading_font())
 	style_guofeng_label(title)
 	title.set_meta("installed_version", app_version())
 	title.set_meta("available_version_owner", "UpdateStatusLabel")
 	title.set_meta("version_semantics", "当前版本与远端版本分列；远端版本不得替代当前版本")
-	apply_rect(title, rect_full(0.07, 0.04, 0.93, 0.12))
+	apply_rect(title, rect_full(0.07, 0.048, 0.93, 0.135))
 	draw_update_dialog_stage_map(panel)
-	update_status_label = make_label(panel, "", 18, Color(0.84, 1.0, 0.90), false)
+	var status_fs := guofeng_modal_font_size(18, update_vp, 1.22)
+	update_status_label = make_label(panel, "", status_fs, Color(0.10, 0.22, 0.16), false)
 	update_status_label.name = "UpdateStatusLabel"
 	update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
 	update_status_label.set_meta("error_is_self_describing", true)
-	# Reserve a second compact line for network/error states. The progress rail
-	# starts below this lane instead of relying on a clipped one-line status.
-	apply_rect(update_status_label, rect_full(0.07, 0.15, 0.93, 0.29))
+	# Reserve a second compact line for network/error states. Vertically center
+	# inside the status band so single-line copy sits cleanly above the meter rail.
+	apply_rect(update_status_label, rect_full(0.07, 0.165, 0.93, 0.295))
+	update_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	update_status_label.tooltip_text = update_message
 	configure_wrapped_label(update_status_label, paper_width * 0.86, 0.0, 4.0)
 	update_progress = ProgressBar.new()
@@ -5603,23 +5638,31 @@ func ensure_update_dialog() -> void:
 	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.0), 10, Color(0.22, 0.30, 0.30, 0.0), 0, 0))
 	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.0), 10, Color(0.54, 0.76, 0.60, 0.0), 0, 0))
 	panel.add_child(update_progress)
-	var progress_rect := rect_full(0.08, 0.326, 0.92, 0.354)
-	apply_rect(update_progress, progress_rect)
-	var update_track = add_optional_gpt_illustration_texture(panel, "menu_card_readable_gpt", progress_rect, 1.0, false)
+	var progress_track_rect := rect_full(0.072, 0.318, 0.928, 0.362)
+	var progress_fill_rect := rect_full(0.08, 0.330, 0.92, 0.350)
+	apply_rect(update_progress, progress_track_rect)
+	var meter_rail_tex := guofeng_meter_rail_texture()
+	var meter_fill_tex := guofeng_meter_fill_jade_texture()
+	var track_key := "ui_meter_guofeng_rail_gpt" if meter_rail_tex != null else "menu_card_readable_gpt"
+	var fill_key := "ui_meter_guofeng_fill_jade_gpt" if meter_fill_tex != null else "menu_ink_primary"
+	var update_track = add_optional_gpt_illustration_texture(panel, track_key, progress_track_rect, 1.0, false)
 	if update_track != null:
 		update_track.name = "UpdateProgressGptTrack"
-		update_track.self_modulate = Color(0.76, 0.72, 0.63, 1.0)
+		update_track.self_modulate = Color.WHITE if meter_rail_tex != null else Color(0.76, 0.72, 0.63, 1.0)
 		panel.move_child(update_track, update_progress.get_index())
-	var update_fill_face = add_optional_gpt_illustration_texture(panel, "menu_ink_primary", progress_rect, 1.0, false)
+	var update_fill_face = add_optional_gpt_illustration_texture(panel, fill_key, progress_fill_rect, 1.0, false)
 	if update_fill_face != null:
 		update_fill_face.name = "UpdateProgressGptFillFace"
-		update_fill_face.self_modulate = Color(0.18, 0.56, 0.40, 1.0)
+		update_fill_face.self_modulate = Color.WHITE if meter_fill_tex != null else Color(0.18, 0.56, 0.40, 1.0)
 		panel.move_child(update_fill_face, update_progress.get_index() + 1)
-	update_progress_label = make_label(panel, "", 15, Color(0.88, 0.90, 0.78), false)
+	if meter_rail_tex != null and meter_fill_tex != null and update_track != null and update_fill_face != null:
+		_skin_guofeng_meter_bar(update_track, update_fill_face, meter_rail_tex, meter_fill_tex)
+	var progress_fs := guofeng_modal_font_size(15, update_vp, 1.20)
+	update_progress_label = make_label(panel, "", progress_fs, Color(0.10, 0.22, 0.16), false)
 	update_progress_label.name = "UpdateProgressLabel"
 	update_progress_label.set_meta("status_hierarchy", "progress_percent_line")
 	update_progress_label.clip_contents = true
-	apply_rect(update_progress_label, rect_full(0.08, 0.365, 0.92, 0.425))
+	apply_rect(update_progress_label, rect_full(0.08, 0.372, 0.92, 0.432))
 	if compact_update_dialog:
 		update_progress_label.tooltip_text = update_progress_text()
 	draw_update_release_notes_art(panel)
@@ -5628,16 +5671,19 @@ func ensure_update_dialog() -> void:
 	configure_passive_container(row)
 	row.name = "UpdateDialogButtonRow"
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", 18 if modal_scale > 1.05 else 14)
 	panel.add_child(row)
-	apply_rect(row, rect_full(0.08, 0.84, 0.92, 0.95))
+	apply_rect(row, rect_full(0.08, 0.838, 0.92, 0.946))
 	update_primary_button = make_small_button("安装", Color(0.18, 0.42, 0.34), func() -> void:
 		on_update_primary_pressed()
 	)
 	update_primary_button.name = "UpdatePrimaryButton"
 	update_primary_button.set_meta("status_hierarchy", "next_step_cta")
 	update_primary_button.focus_mode = Control.FOCUS_ALL
+	update_primary_button.custom_minimum_size = Vector2(roundf(148.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
 	style_guofeng_secondary_action(update_primary_button, true)
+	var upd_btn_fs := guofeng_modal_font_size(15, update_vp, 1.20)
+	update_primary_button.add_theme_font_size_override("font_size", upd_btn_fs)
 	row.add_child(update_primary_button)
 	update_secondary_button = make_small_button("关闭", Color(0.26, 0.30, 0.34), func() -> void:
 		on_update_secondary_pressed()
@@ -5647,7 +5693,9 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.set_meta("accessible_name", "关闭更新")
 	update_secondary_button.set_meta("ui_navigation_role", "page_back")
 	update_secondary_button.focus_mode = Control.FOCUS_ALL
+	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
 	style_guofeng_secondary_action(update_secondary_button, false)
+	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -10342,7 +10390,12 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	var body_size := commercial_ui_font_size(15 if section_viewport.x <= 960.0 else 17, 2)
 	var line_font_size := accessibility_font_size(body_size)
 	var use_goal_tile_column := section_index == 0 and section_viewport.x >= 1200.0 and not large_text_enabled
-	var text_width := maxf(180.0, safe_content_pixel_size().x * 0.96 * 0.852 * (0.595 if use_goal_tile_column else 0.940) - 8.0)
+	var use_special_tile_column := section_index == 4 and section_viewport.x >= 1200.0 and not large_text_enabled
+	var use_fan_card_grid := section_index == 2 and not large_text_enabled
+	var section_inner_w := maxf(240.0, safe_content_pixel_size().x * 0.96 * 0.852)
+	var text_width := maxf(180.0, section_inner_w * (0.595 if use_goal_tile_column else (0.495 if use_special_tile_column else 0.940)) - 8.0)
+	if use_fan_card_grid:
+		text_width = maxf(160.0, (section_inner_w * 0.952 - 14.0) * 0.5 - 30.0)
 	var measured_line_heights: Array[float] = []
 	var group_titles := {0: "基本胡牌", 3: "轮次与响应", 7: "限制与例外"} if section_index == 0 else {}
 	var required_text_height := (30.0 if wide_typography else 28.0) + float(group_titles.size()) * (26.0 + line_gap)
@@ -10356,13 +10409,26 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 			var measured_lines := maxi(1, int(ceilf(multiline_size.y / maxf(1.0, single_line_h))))
 			line_height = maxf(single_line_h + 2.0, float(measured_lines) * single_line_h + float(measured_lines - 1) * line_gap + 2.0)
 		measured_line_heights.append(line_height)
-		required_text_height += line_height + line_gap
-	required_text_height += 44.0 if wide_typography else 38.0
+		if not use_fan_card_grid:
+			required_text_height += line_height + line_gap
+	if use_fan_card_grid:
+		var tag_h := 24.0 if wide_typography else 22.0
+		var card_vpad := 24.0 if wide_typography else 20.0
+		var card_vsep := 10.0 if wide_typography else 8.0
+		var pair_idx := 0
+		while pair_idx < measured_line_heights.size():
+			var h_left := measured_line_heights[pair_idx] + tag_h + card_vpad
+			var h_right := (measured_line_heights[pair_idx + 1] + tag_h + card_vpad) if (pair_idx + 1) < measured_line_heights.size() else 0.0
+			required_text_height += maxf(h_left, h_right) + card_vsep
+			pair_idx += 2
+	required_text_height += 48.0 if wide_typography else 42.0
+	if use_special_tile_column:
+		required_text_height = maxf(required_text_height, 420.0 if wide_typography else 316.0)
 	section.custom_minimum_size.y = maxf(136.0, required_text_height)
 	var vbox = VBoxContainer.new()
 	vbox.anchor_left = 0.024
 	vbox.anchor_top = 0.045
-	vbox.anchor_right = 0.625 if use_goal_tile_column else 0.976
+	vbox.anchor_right = 0.625 if use_goal_tile_column else (0.525 if use_special_tile_column else 0.976)
 	vbox.anchor_bottom = 0.965
 	vbox.add_theme_constant_override("separation", 6 if wide_typography else 4)
 	section.add_child(vbox)
@@ -10377,33 +10443,154 @@ func add_rule_section(parent: VBoxContainer, title_text: String, lines: Array, s
 	set_ui_full_text(title_label, title_text, "规则章节标题：" + title_text)
 	mark_ui_optimization(title_label, "F-472")
 
-	for line_index in range(lines.size()):
-		var line = lines[line_index]
-		if group_titles.has(line_index):
-			var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(17, 2), Color.WHITE, true)
-			group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
-			group_title.custom_minimum_size = Vector2(0, 24)
-			group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			style_guofeng_label(group_title)
-			group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
-		var line_label = make_label(vbox, str(line), body_size, Color(0.11, 0.23, 0.18), false)
-		style_guofeng_label(line_label)
-		line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
-		line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
-		line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
-		line_label.clip_text = false
-		line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-		set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
-		mark_ui_optimization(line_label, "F-473")
-		mark_ui_optimization(line_label, "F-531")
+	if use_fan_card_grid:
+		var fan_grid := GridContainer.new()
+		fan_grid.name = "RuleFanGrid_2"
+		configure_passive_container(fan_grid)
+		fan_grid.columns = 2
+		fan_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fan_grid.add_theme_constant_override("h_separation", 14 if wide_typography else 10)
+		fan_grid.add_theme_constant_override("v_separation", 10 if wide_typography else 8)
+		vbox.add_child(fan_grid)
+		var fan_tags := ["基础和牌", "花牌与杠", "情境加番", "经典大牌", "牌型加番", "吊车与三元", "风牌与四喜"]
+		var fan_card_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+		for line_index in range(lines.size()):
+			var line = lines[line_index]
+			var card := Control.new()
+			card.name = "RuleFanCard_%d" % line_index
+			card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var card_h := measured_line_heights[line_index] + (48.0 if wide_typography else 42.0)
+			card.custom_minimum_size = Vector2(0.0, card_h)
+			fan_grid.add_child(card)
+			var card_rim := add_optional_gpt_illustration_texture(card, fan_card_key, rect_full(0.0, 0.0, 1.0, 1.0), 0.96, false)
+			if card_rim != null:
+				card_rim.name = "RuleFanCardRim_%d" % line_index
+				card_rim.self_modulate = Color(0.99, 0.97, 0.92, 0.98) if not high_contrast_enabled else guofeng_high_contrast_card_tint()
+				configure_guofeng_button_slice(card_rim, true, 104 if fan_card_key == "guofeng_card_frame_gpt" else 96, 0.18 if fan_card_key == "guofeng_card_frame_gpt" else 0.125)
+			var card_margin := MarginContainer.new()
+			card_margin.name = "RuleFanCardPad_%d" % line_index
+			card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+			card_margin.add_theme_constant_override("margin_left", 14)
+			card_margin.add_theme_constant_override("margin_right", 14)
+			card_margin.add_theme_constant_override("margin_top", 8)
+			card_margin.add_theme_constant_override("margin_bottom", 8)
+			card.add_child(card_margin)
+			var card_box := VBoxContainer.new()
+			card_box.name = "RuleFanCardBox_%d" % line_index
+			configure_passive_container(card_box)
+			card_box.add_theme_constant_override("separation", 3)
+			card_margin.add_child(card_box)
+			var tag_text := str(fan_tags[line_index]) if line_index < fan_tags.size() else "计番规则"
+			var tag_lbl := make_label(card_box, tag_text, commercial_ui_font_size(14, 2), Color(0.54, 0.13, 0.10), true)
+			tag_lbl.name = "RuleFanCardTag_%d" % line_index
+			tag_lbl.add_theme_font_override("font", ui_heading_font())
+			style_guofeng_label(tag_lbl)
+			tag_lbl.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10) if line_index >= 3 else Color(0.11, 0.34, 0.24))
+			tag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			var line_label = make_label(card_box, str(line), body_size, Color(0.11, 0.23, 0.18), false)
+			style_guofeng_label(line_label)
+			line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index]
+			line_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
+			line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
+			line_label.clip_text = false
+			line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+			set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
+			mark_ui_optimization(line_label, "F-473")
+			mark_ui_optimization(line_label, "F-531")
+	else:
+		for line_index in range(lines.size()):
+			var line = lines[line_index]
+			if group_titles.has(line_index):
+				var group_title := make_label(vbox, str(group_titles[line_index]), commercial_ui_font_size(17, 2), Color.WHITE, true)
+				group_title.name = "RuleSectionGroup_%d_%d" % [section_index, line_index]
+				group_title.custom_minimum_size = Vector2(0, 24)
+				group_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+				style_guofeng_label(group_title)
+				group_title.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+			var line_label = make_label(vbox, str(line), body_size, Color(0.11, 0.23, 0.18), false)
+			style_guofeng_label(line_label)
+			line_label.name = "RuleSectionLine_%d_%d" % [section_index, line_index] if section_index >= 0 else "RuleSectionLine_%d" % line_index
+			line_label.custom_minimum_size = Vector2(0, measured_line_heights[line_index])
+			line_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			configure_wrapped_label(line_label, text_width, measured_line_heights[line_index], line_gap)
+			line_label.clip_text = false
+			line_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+			set_ui_full_text(line_label, str(line), "规则条款：" + str(line))
+			mark_ui_optimization(line_label, "F-473")
+			mark_ui_optimization(line_label, "F-531")
 
 	if use_goal_tile_column:
 		add_rules_goal_hand_showcase(section)
 
+	if use_special_tile_column:
+		add_rules_special_hands_showcase(section)
+
 	if section_index == 3:
 		add_rules_tile_examples(vbox)
 		section.custom_minimum_size.y += 4.0 * ((64.0 if wide_typography else 48.0) + line_gap)
+
+
+func add_rules_special_hands_showcase(section: Control) -> void:
+	# Pure 2D assets/tiles mini-diagrams for Ch.5 (特殊牌型). Uses distinct node
+	# names so Ch.4's RulePatternExampleGroup_* smoke contract stays isolated.
+	var wide_rules := effective_viewport_size().x >= 1600.0
+	var tile_sz := Vector2(40, 56) if wide_rules else Vector2(28, 40)
+	var card := make_layout_host(rect_full(0.545, 0.065, 0.978, 0.925))
+	card.name = "RuleSpecialHandShowcase"
+	section.add_child(card)
+	var card_key := "guofeng_card_frame_gpt" if optional_gpt_illustration_texture("guofeng_card_frame_gpt") != null else "button_face_jiangnan_gpt"
+	var card_rim := add_optional_gpt_illustration_texture(card, card_key, rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+	if card_rim != null:
+		card_rim.name = "RuleSpecialHandRim"
+		card_rim.self_modulate = Color(0.99, 0.97, 0.92) if not high_contrast_enabled else guofeng_high_contrast_card_tint()
+		configure_guofeng_button_slice(card_rim, true, 104 if card_key == "guofeng_card_frame_gpt" else 96, 0.22 if card_key == "guofeng_card_frame_gpt" else 0.125)
+	var showcase_box := VBoxContainer.new()
+	showcase_box.name = "RuleSpecialHandBox"
+	configure_passive_container(showcase_box)
+	apply_rect(showcase_box, rect_full(0.05, 0.06, 0.95, 0.94))
+	showcase_box.add_theme_constant_override("separation", 12 if wide_rules else 8)
+	showcase_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	card.add_child(showcase_box)
+	var heading := make_label(showcase_box, "高番特殊牌型示意", 18 if wide_rules else 15, Color.WHITE, true)
+	heading.name = "RuleSpecialHandTitle"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_override("font", ui_heading_font())
+	style_guofeng_label(heading)
+	for group in [
+		{"key": "qiduizi", "caption": "七对 +3番", "tiles": ["1W", "1W", "3T", "3T", "5B", "5B", "E", "E"]},
+		{"key": "qingyise", "caption": "清一色 +3番", "tiles": ["1W", "2W", "3W", "4W", "5W", "6W", "9W", "9W"]},
+		{"key": "shisanyao", "caption": "十三幺 +7番", "tiles": ["1W", "9W", "1T", "9T", "1B", "9B", "E", "Z"]},
+	]:
+		var block := VBoxContainer.new()
+		block.name = "RuleSpecialHandGroup_" + str(group["key"])
+		configure_passive_container(block)
+		block.add_theme_constant_override("separation", 4 if wide_rules else 2)
+		showcase_box.add_child(block)
+		var cap := make_label(block, str(group["caption"]), 15 if wide_rules else 13, Color(0.54, 0.13, 0.10), true)
+		cap.name = "RuleSpecialHandCaption_" + str(group["key"])
+		cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cap.add_theme_font_override("font", ui_heading_font())
+		style_guofeng_label(cap)
+		cap.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
+		var row := HBoxContainer.new()
+		row.name = "RuleSpecialHandRow_" + str(group["key"])
+		configure_passive_container(row)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 4 if wide_rules else 3)
+		block.add_child(row)
+		var group_tiles: Array = group["tiles"] as Array
+		for t_idx in range(group_tiles.size()):
+			var tile := make_tile_view(str(group_tiles[t_idx]), tile_sz, false, Callable(), false)
+			tile.name = "RuleSpecialHandTile_%s_%d" % [str(group["key"]), t_idx]
+			row.add_child(tile)
+	var summary := make_label(showcase_box, "示意展示核心牌组结构；实际需满足 14 张成和", 13 if wide_rules else 11, Color.WHITE, false)
+	summary.name = "RuleSpecialHandSummary"
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	style_guofeng_label(summary)
 
 
 func add_rules_goal_hand_showcase(section: Control) -> void:
@@ -12061,8 +12248,8 @@ func seat_discard_rect(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 	for zone in DISCARD_ZONES:
 		if int(zone[0]) == seat:
 			var bounds: Rect2 = zone[1]
+			var resolved_size := table_size if table_size.y > 1.0 else game_table_pixel_size()
 			if seat == 0:
-				var resolved_size := table_size if table_size.y > 1.0 else game_table_pixel_size()
 				if resolved_size.x >= 1150.0 and not has_pending_danger_discard():
 					# On 1920x1080 wide tables, expand the bottom river's right bound
 					# so 8-tile rows center symmetrically on x=50% in both normal and
@@ -12072,6 +12259,10 @@ func seat_discard_rect(seat: int, table_size: Vector2 = Vector2.ZERO) -> Rect2:
 				# Include the 1.5px frame, an 8px gutter and container pixel rounding.
 				var clearance := WALL_BACK_TILE_SIZE.y * 0.5 + 8.0 + 1.5 + 2.0
 				bounds.size.y = minf(bounds.size.y, wall_center_y - clearance / maxf(1.0, resolved_size.y))
+			elif (seat == 1 or seat == 3) and resolved_size.x >= 1150.0:
+				# Reserve >=10px vertical corner clearance below the top river on wide tables.
+				var top_corner_gap_px := 12.0 if resolved_size.y >= 620.0 else 8.0
+				bounds.position.y += top_corner_gap_px / maxf(1.0, resolved_size.y)
 			return bounds
 	return Rect2(Vector2(0.4, 0.4), Vector2(0.2, 0.2))
 
@@ -12098,8 +12289,10 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 			var lower_wall := battle_table_anchor_root_rect(Rect2(WALL_LAYOUTS[1][0], WALL_LAYOUTS[1][1]), viewport_size)
 			var wall_bottom := (lower_wall.position.y + lower_wall.size.y) * 0.5 * content_size.y + WALL_BACK_TILE_SIZE.y * 0.5
 			var hand_tiles_top := (HAND_TRAY_RECT.position.y + (HAND_TRAY_RECT.size.y - HAND_TRAY_RECT.position.y) * HAND_TRAY_TILES_RECT.position.y) * content_size.y
-			var tutorial_gap_px := 12.0 if viewport_size.y >= 650.0 else 10.0
-			var tutorial_top := hand_tiles_top - tutorial_gap_px - UI_MIN_TOUCH_TARGET
+			var has_self_melds := not get_melds(0).is_empty()
+			var tutorial_gap_px := (34.0 if viewport_size.y >= 900.0 else 28.0) if (viewport_size.y >= 650.0 and not has_self_melds) else (22.0 if viewport_size.y >= 900.0 else (18.0 if viewport_size.y >= 650.0 else 14.0))
+			var tutorial_height_px := (56.0 if viewport_size.y >= 900.0 else 50.0) if (viewport_size.y >= 650.0 and not has_self_melds) else (48.0 if viewport_size.y >= 900.0 else float(UI_MIN_TOUCH_TARGET))
+			var tutorial_top := hand_tiles_top - tutorial_gap_px - tutorial_height_px
 			var lane_top := wall_bottom + 8.0
 			var lane_bottom := HAND_TRAY_RECT.position.y * content_size.y - 8.0
 			var wide_meld_table := viewport_size.x >= 1600.0 and viewport_size.y >= 900.0
