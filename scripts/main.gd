@@ -43531,7 +43531,7 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 		var day_label = make_label(indicator, "第%d天" % day_num, 14, text_color, true)
 		day_label.name = "DailyLoginDayLabel_%d" % day_num
 		if is_claimed:
-			apply_rect(day_label, rect_full(0.095, 0.060, 0.680, 0.320))
+			apply_rect(day_label, rect_full(0.095, 0.040, 0.680, 0.310))
 			day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		else:
 			apply_rect(day_label, rect_full(0.070, 0.040, 0.930, 0.310))
@@ -44488,7 +44488,7 @@ func sync_diagnostic_scroll_status(content_scroll: ScrollContainer, status_label
 	# The measured prefix index contains complete row bounds, so scrolling uses
 	# two logarithmic lookups instead of reading every Label geometry.
 	var first_index := archive_lower_bound(row_starts, viewport_top - 0.5)
-	var last_index := archive_upper_bound(row_ends, viewport_bottom - 1.0) - 1
+	var last_index := archive_upper_bound(row_ends, viewport_bottom + 0.5) - 1
 	# Native scrollbars can leave the last row exactly on the clip edge. Once the
 	# user is at the actual end, the end state is authoritative even if that edge
 	# loses a fractional pixel during layout; the row remains the scroll target.
