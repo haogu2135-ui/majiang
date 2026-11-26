@@ -2702,7 +2702,7 @@ func discard_grid_horizontal_inset_px(seat: int, zone_rect: Rect2, columns: int,
 	var content_w: float = float(used_cols) * tile_size.x + float(maxi(0, used_cols - 1) * DISCARD_GRID_SEPARATION)
 	var zone_w: float = maxf(0.0, (zone_rect.size.x - zone_rect.position.x) * table_size.x)
 	if seat == 3:
-		if archive_reserved_start >= 0 or content_w >= zone_w - 0.5:
+		if (archive_reserved_start >= 0 and archive_reserved_start < columns) or content_w >= zone_w - 0.5:
 			return 0.0
 		# Right-align Seat 3's river toward the center compass so left/right
 		# rivers frame the compass symmetrically (mirroring Seat 1).

@@ -1068,6 +1068,8 @@ func draw_actions(parent: Control) -> void:
 		mark_ui_optimization(recovery_state, "F-897")
 		var reconnect_button := make_action_button(str(recovery_model.get("button_text", "立即重连")), Color(0.36, 0.62, 0.72), Callable(self, "reconnect_online_game"))
 		reconnect_button.name = "OnlineReconnectGameButton"
+		if action_viewport_size.x >= 1600.0:
+			reconnect_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(14, action_viewport_size, 1.22))
 		reconnect_button.disabled = reconnecting
 		reconnect_button.tooltip_text = str(recovery_model.get("detail", ""))
 		reconnect_button.set_meta("focus_fallback_name", "OnlineDisconnectedLobbyButton")
@@ -1095,6 +1097,8 @@ func draw_actions(parent: Control) -> void:
 		reconnect_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
 		lobby_button.name = "OnlineDisconnectedLobbyButton"
+		if action_viewport_size.x >= 1600.0:
+			lobby_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(14, action_viewport_size, 1.22))
 		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
 		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅")
 		lobby_button.set_meta("recovery_route", true)
@@ -15959,41 +15963,61 @@ func round_summary_body_text() -> String:
 
 func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	# These rectangles use local pixels (ordinary Rect2 sizes), not anchor endpoints.
-	var title_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(26)))
-	var small_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(13)))
-	var row_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(15))) + 12.0
-	var content_top := 12.0 + title_height + 12.0
-	var left_width := floorf((panel_size.x - 72.0) * 0.50)
-	var right_left := 20.0 + left_width + 32.0
-	var right_width := panel_size.x - right_left - 20.0
-	var winner_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(18)), ui_heading_font().get_height(accessibility_font_size(18))))
-	var score_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(22)), ui_heading_font().get_height(accessibility_font_size(22))))
-	var yaku_top := maxf(62.0, winner_height + score_height + 8.0)
-	var yaku_row_h := ceilf(ui_cjk_font().get_height(accessibility_font_size(13))) + (0.0 if large_text_enabled else 2.0)
-	var yaku_v_sep := 2.0 if large_text_enabled else 4.0
-	var yaku_height := yaku_row_h * 2.0 + yaku_v_sep + 1.0
+	var wide_paper := panel_size.x >= 1120.0
+	var title_fs := 30 if wide_paper else 26
+	var small_fs := 15 if wide_paper else 13
+	var row_fs := 18 if wide_paper else 15
+	var winner_fs := 22 if wide_paper else 18
+	var score_fs := 27 if wide_paper else 22
+	var yaku_fs := 15 if wide_paper else 13
+	var header_fs := 14 if wide_paper else 12
+	var body_fs := 17 if wide_paper else 14
+	var pad_x := 28.0 if wide_paper else 20.0
+	var pad_top := 16.0 if wide_paper else 12.0
+	var title_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(title_fs)))
+	var small_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(small_fs)))
+	var row_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(row_fs))) + (16.0 if wide_paper else 12.0)
+	var content_top := pad_top + title_height + (14.0 if wide_paper else 10.0)
+	var col_gap := 38.0 if wide_paper else 32.0
+	var left_width := floorf((panel_size.x - pad_x * 2.0 - col_gap) * 0.50)
+	var right_left := pad_x + left_width + col_gap
+	var right_width := panel_size.x - right_left - pad_x
+	var winner_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(winner_fs)), ui_heading_font().get_height(accessibility_font_size(winner_fs))))
+	var score_height := ceilf(maxf(ui_cjk_font().get_height(accessibility_font_size(score_fs)), ui_heading_font().get_height(accessibility_font_size(score_fs))))
+	var showcase_w := 54.0 if wide_paper else 42.0
+	var showcase_h := 76.0 if wide_paper else 58.0
+	var yaku_top := maxf(showcase_h + 6.0, winner_height + score_height + 10.0)
+	var yaku_row_h := ceilf(ui_cjk_font().get_height(accessibility_font_size(yaku_fs))) + (2.0 if large_text_enabled else 6.0)
+	var yaku_v_sep := 2.0 if large_text_enabled else 5.0
+	var yaku_height := yaku_row_h * 2.0 + yaku_v_sep + 2.0
 	var show_hand_strip := not large_text_enabled and panel_size.x >= 720.0 and panel_size.y >= 300.0
-	var hand_strip_height := (112.0 if panel_size.y >= 500.0 else (86.0 if panel_size.y >= 415.0 else (78.0 if panel_size.y >= 340.0 else 72.0))) if show_hand_strip else 0.0
+	var hand_strip_height := (114.0 if wide_paper else (98.0 if panel_size.y >= 500.0 else (84.0 if panel_size.y >= 415.0 else (76.0 if panel_size.y >= 340.0 else 70.0)))) if show_hand_strip else 0.0
 	var hand_strip_top := yaku_top + yaku_height + small_height + 14.0
-	var detail_height := (hand_strip_top + hand_strip_height + 4.0) if show_hand_strip else (yaku_top + yaku_height + small_height + 10.0)
+	var detail_height := (hand_strip_top + hand_strip_height + 6.0) if show_hand_strip else (yaku_top + yaku_height + small_height + 10.0)
 	var body_top := content_top + detail_height + 8.0
-	var status_top := panel_size.y - 24.0 - small_height
-	var header_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(12))) + 8.0
-	var body_line_step := ceilf(ui_cjk_font().get_height(accessibility_font_size(14))) + 4.0
+	var status_top := panel_size.y - (22.0 if wide_paper else 18.0) - small_height
+	var header_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(header_fs))) + 8.0
+	var body_line_step := ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs))) + 4.0
 	var body_min_lane := body_line_step * 2.0
-	var raw_body_h := maxf(body_min_lane, status_top - body_top - 6.0)
+	var raw_body_h := maxf(body_min_lane, status_top - body_top - 12.0)
 	var snapped_body_h := maxf(body_min_lane, floorf(raw_body_h / maxf(1.0, body_line_step)) * body_line_step)
 	return {
-		"title": Rect2(20.0, 12.0, panel_size.x - 40.0, title_height),
-		"detail": Rect2(20.0, content_top, left_width, detail_height),
-		"body": Rect2(20.0, body_top, left_width, snapped_body_h),
-		"status": Rect2(20.0, status_top, left_width, small_height),
+		"wide_paper": wide_paper,
+		"title_fs": title_fs, "small_fs": small_fs, "row_fs": row_fs,
+		"winner_fs": winner_fs, "score_fs": score_fs, "yaku_fs": yaku_fs,
+		"header_fs": header_fs, "body_fs": body_fs,
+		"showcase_size": Vector2(showcase_w, showcase_h),
+		"winner_x": showcase_w + (14.0 if wide_paper else 12.0),
+		"title": Rect2(pad_x, pad_top, panel_size.x - pad_x * 2.0, title_height),
+		"detail": Rect2(pad_x, content_top, left_width, detail_height),
+		"body": Rect2(pad_x, body_top, left_width, snapped_body_h),
+		"status": Rect2(pad_x, status_top, left_width, small_height),
 		"rank_header": Rect2(right_left, content_top, right_width, header_height),
 		"rank_top": content_top + header_height + 6.0,
 		"rank_row_height": row_height,
-		"divider_x": 20.0 + left_width + 15.0,
+		"divider_x": pad_x + left_width + col_gap * 0.5 - 1.0,
 		"content_top": content_top,
-		"next": Rect2(right_left, content_top + header_height + 6.0 + 4.0 * (row_height + 4.0) + 10.0, right_width, ceilf(ui_cjk_font().get_height(accessibility_font_size(13))) * 2.0 + 4.0),
+		"next": Rect2(right_left, content_top + header_height + 6.0 + 4.0 * (row_height + 5.0) + 12.0, right_width, ceilf(ui_cjk_font().get_height(accessibility_font_size(small_fs))) * 2.0 + 6.0),
 		"winner_height": winner_height, "score_height": score_height,
 		"yaku_top": yaku_top, "yaku_height": yaku_height, "small_height": small_height,
 		"hand_strip_top": hand_strip_top, "hand_strip_height": hand_strip_height,
@@ -16053,21 +16077,23 @@ func draw_round_summary(parent: Control) -> void:
 	var content_size := summary_content_size_snapshot
 	var panel_width_px := round_summary_panel_width_px(content_size)
 	var panel_bottom_px := action_bar_dock_layout_rect(summary_viewport_snapshot, content_size).position.y * content_size.y - 12.0
-	var minimum_layout := round_summary_paper_layout(Vector2(panel_width_px, 360.0))
-	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 16.0
-	var body_min_height := (ceilf(ui_cjk_font().get_height(accessibility_font_size(14))) + 4.0) * 2.0
-	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 32.0)
+	var minimum_layout := round_summary_paper_layout(Vector2(panel_width_px, 400.0 if content_size.x >= 1600.0 else 360.0))
+	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 18.0
+	var body_fs_min := int(minimum_layout.get("body_fs", 14))
+	var body_min_height := (ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs_min))) + 4.0) * 2.0
+	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 38.0)
 	var wide_summary := content_size.x >= 1600.0 and content_size.y >= 900.0
-	var preferred_height := (568.0 if wide_summary else (432.0 if content_size.y >= 640.0 else 356.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
+	var preferred_height := (520.0 if wide_summary else (436.0 if content_size.y >= 640.0 else 372.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
 	var top_clear_px := 10.0
 	if content_size.y >= 640.0:
-		top_clear_px = maxf(top_clear_px, battle_top_hud_layout_rect().size.y * content_size.y + 6.0)
-	var max_panel_height := minf(600.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
+		top_clear_px = maxf(top_clear_px, battle_top_hud_layout_rect().size.y * content_size.y + 8.0)
+	var max_panel_height := minf(580.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
 	var panel_height_px := minf(maxf(maxf(312.0, minimum_height), preferred_height), maxf(312.0, max_panel_height))
 	var panel_left := (content_size.x - panel_width_px) * 0.5 / content_size.x
-	var panel_top := (panel_bottom_px - panel_height_px) / content_size.y
+	var panel_top_px := top_clear_px + maxf(0.0, (panel_bottom_px - top_clear_px - panel_height_px) * 0.5)
+	var panel_top := panel_top_px / content_size.y
 	var panel_right := 1.0 - panel_left
-	var panel_bottom := panel_bottom_px / content_size.y
+	var panel_bottom := (panel_top_px + panel_height_px) / content_size.y
 	var modal_input_shield := Control.new()
 	modal_input_shield.name = "RoundSummaryModalInputShield"
 	modal_input_shield.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -16106,7 +16132,7 @@ func draw_round_summary(parent: Control) -> void:
 	var layout := round_summary_paper_layout(Vector2(panel_width_px, panel_height_px))
 	panel.set_meta("guofeng_summary_layout", layout)
 	var summary_title := "荒庄结算" if round_result_kind == "wall_draw" else ("全场结算" if is_offline_match_finished() else "本局结算")
-	var title := make_heading(panel, summary_title, 26, Color.WHITE, true)
+	var title := make_heading(panel, summary_title, int(layout.get("title_fs", 26)), Color.WHITE, true)
 	title.name = "RoundSummaryTitle"
 	style_guofeng_label(title)
 	place_round_summary_control(title, layout["title"])
@@ -16147,7 +16173,7 @@ func draw_round_summary(parent: Control) -> void:
 	# Native scrolling uses integer pixel offsets; an integral viewport height
 	# keeps the final line inside the clip rectangle at End.
 	body_scroll.size = body_scroll.size.floor()
-	var body := make_label(body_scroll, full_summary_text, 14, Color.WHITE, false)
+	var body := make_label(body_scroll, full_summary_text, int(layout.get("body_fs", 14)), Color.WHITE, false)
 	body.name = "RoundSummaryBody"
 	set_ui_full_text(body, full_summary_text if full_summary_text == round_summary else round_summary + "\n" + "\n".join(package_lines), "完整结算记录")
 	style_guofeng_label(body)
@@ -16191,7 +16217,7 @@ func draw_round_summary(parent: Control) -> void:
 	if is_offline_match_finished():
 		var champion := int(ranked_seats_by_score()[0])
 		next_text = "全场结束 · 第一名 %s\n%d 分" % [str(players[champion]["name"]), int(players[champion].get("score", 0))]
-	var next := make_label(panel, next_text, 13, Color.WHITE, false)
+	var next := make_label(panel, next_text, int(layout.get("small_fs", 13)), Color.WHITE, false)
 	next.name = "RoundSummaryNextDealer"
 	style_guofeng_label(next)
 	place_round_summary_control(next, layout["next"])
@@ -16304,8 +16330,9 @@ func draw_round_summary_rank_header(parent: Control, _compact_summary: bool) -> 
 		["本局", 0.620, 0.835, HORIZONTAL_ALIGNMENT_RIGHT],
 		["花数", 0.855, 0.980, HORIZONTAL_ALIGNMENT_RIGHT],
 	]
+	var hdr_fs := int(layout.get("header_fs", 12))
 	for column in columns:
-		var label := make_label(header, str(column[0]), 12, Color.WHITE, false)
+		var label := make_label(header, str(column[0]), hdr_fs, Color.WHITE, false)
 		label.name = "RoundSummaryRankHeader_%s" % str(column[0])
 		style_guofeng_label(label)
 		apply_rect(label, rect_full(float(column[1]), 0.0, float(column[2]), 1.0))
@@ -16326,7 +16353,8 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	row.name = "RoundSummaryRankRow_%d" % seat
 	row.set_meta("round_summary_seat", seat)
 	parent.add_child(row)
-	place_round_summary_control(row, Rect2(header_rect.position.x, float(layout["rank_top"]) + float(rank - 1) * (row_height + 4.0), header_rect.size.x, row_height))
+	var row_gap := 5.0 if bool(layout.get("wide_paper", false)) else 4.0
+	place_round_summary_control(row, Rect2(header_rect.position.x, float(layout["rank_top"]) + float(rank - 1) * (row_height + row_gap), header_rect.size.x, row_height))
 	var is_winner_row := seat == offline_last_winner and round_result_kind != "wall_draw"
 	if is_winner_row:
 		var winner_bg := add_optional_gpt_illustration_texture(row, "quiet_gold_accent", rect_full(0.0, 0.0, 1.0, 1.0), 0.34, false)
@@ -16345,12 +16373,13 @@ func draw_round_summary_rank_row(parent: Control, seat: int, rank: int) -> void:
 	var delta := round_summary_score_delta(seat)
 	var seat_tag := "%s%s" % [seat_wind_label(seat), "庄" if seat == dealer_seat else ""]
 	var player_display := "%s · %s" % [seat_tag, str(players[seat]["name"])]
+	var row_base_fs := int(layout.get("row_fs", 15))
 	var columns := [
-		["RoundSummaryRankLabel", str(rank), 0.022, 0.115, HORIZONTAL_ALIGNMENT_LEFT, 15],
-		["RoundSummaryPlayerLabel", player_display, 0.125, 0.410, HORIZONTAL_ALIGNMENT_LEFT, 14],
-		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.420, 0.605, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryDeltaLabel", "%+d" % delta, 0.620, 0.835, HORIZONTAL_ALIGNMENT_RIGHT, 15],
-		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.855, 0.980, HORIZONTAL_ALIGNMENT_RIGHT, 13],
+		["RoundSummaryRankLabel", str(rank), 0.022, 0.115, HORIZONTAL_ALIGNMENT_LEFT, row_base_fs],
+		["RoundSummaryPlayerLabel", player_display, 0.125, 0.410, HORIZONTAL_ALIGNMENT_LEFT, maxi(14, row_base_fs - 1)],
+		["RoundSummaryScoreLabel", str(int(players[seat].get("score", 0))), 0.420, 0.605, HORIZONTAL_ALIGNMENT_RIGHT, row_base_fs],
+		["RoundSummaryDeltaLabel", "%+d" % delta, 0.620, 0.835, HORIZONTAL_ALIGNMENT_RIGHT, row_base_fs],
+		["RoundSummaryFlowersLabel", str(int(players[seat].get("flowers", 0))), 0.855, 0.980, HORIZONTAL_ALIGNMENT_RIGHT, maxi(13, row_base_fs - 2)],
 	]
 	for column in columns:
 		var label := make_label(row, str(column[1]), int(column[5]), Color.WHITE, false)
@@ -17574,40 +17603,79 @@ func draw_settings_close_button_art(button: Control) -> Control:
 	return art
 
 
+func settings_panel_rect_for_section(section_name: String, settings_viewport: Vector2) -> Rect2:
+	var compact_settings := settings_viewport.y <= 560.0 or settings_viewport.x <= 960.0
+	var wide_settings := settings_viewport.x >= 1600.0 and settings_viewport.y >= 900.0
+	var settings_content_size := safe_content_pixel_size()
+	if compact_settings and large_text_enabled:
+		return SETTINGS_PANEL_RECT
+	var modal_scale := guofeng_1080p_modal_scale(settings_viewport)
+	var target_panel_w: float
+	var target_panel_h: float
+	if compact_settings:
+		target_panel_w = minf(760.0, settings_content_size.x * 0.86)
+		if section_name == "声音":
+			target_panel_h = minf(336.0, settings_content_size.y * 0.88)
+		elif section_name == "体验":
+			target_panel_h = minf(402.0, settings_content_size.y * 0.88)
+		else:
+			target_panel_h = minf(412.0, settings_content_size.y * 0.88)
+	elif large_text_enabled:
+		target_panel_w = minf(920.0 * modal_scale, settings_content_size.x * 0.86)
+		target_panel_h = minf(580.0 * modal_scale, settings_content_size.y * 0.86)
+	else:
+		target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
+		if wide_settings:
+			if section_name == "声音":
+				target_panel_h = minf(406.0, settings_content_size.y * 0.84)
+			elif section_name == "体验":
+				target_panel_h = minf(498.0, settings_content_size.y * 0.84)
+			else:
+				target_panel_h = minf(512.0, settings_content_size.y * 0.84)
+		else:
+			if section_name == "声音":
+				target_panel_h = minf(356.0, settings_content_size.y * 0.86)
+			elif section_name == "体验":
+				target_panel_h = minf(430.0, settings_content_size.y * 0.86)
+			else:
+				target_panel_h = minf(448.0, settings_content_size.y * 0.86)
+	var panel_fraction := Vector2(target_panel_w / maxf(1.0, settings_content_size.x), target_panel_h / maxf(1.0, settings_content_size.y))
+	var panel_origin := (Vector2.ONE - panel_fraction) * 0.5
+	return rect_full(panel_origin.x, panel_origin.y, panel_origin.x + panel_fraction.x, panel_origin.y + panel_fraction.y)
+
+
 func draw_settings_overlay(parent: Control) -> void:
 	# r210: GPT chrome conversion
 	if not settings_panel_open:
 		return
 	var settings_viewport := effective_viewport_size()
 	var compact_settings := settings_viewport.y <= 560.0 or settings_viewport.x <= 960.0
-	var panel_rect = SETTINGS_PANEL_RECT
-	if not compact_settings:
-		# Bound the reading surface to its content in both normal and large-text
-		# profiles so 1280/1920 modals never leave empty parchment below 2-row tabs.
-		var settings_content_size := safe_content_pixel_size()
-		var target_panel_w := minf(920.0 if large_text_enabled else 800.0, settings_content_size.x * 0.86)
-		var target_panel_h := minf(580.0 if large_text_enabled else 446.0, settings_content_size.y * 0.86)
-		var panel_fraction := Vector2(target_panel_w / settings_content_size.x, target_panel_h / settings_content_size.y)
-		var panel_origin := (Vector2.ONE - panel_fraction) * 0.5
-		panel_rect = rect_full(panel_origin.x, panel_origin.y, panel_origin.x + panel_fraction.x, panel_origin.y + panel_fraction.y)
-	# Every category owns the same reading area. Hidden categories retain their
-	# native controls, while focus and input only visit the selected category.
-	var audio_section_rect = rect_full(0.040, 0.295, 0.965, 0.890)
-	var play_section_rect = audio_section_rect
-	if not compact_settings and not large_text_enabled:
-		audio_section_rect = rect_full(0.040, 0.305, 0.965, 0.935)
-		play_section_rect = rect_full(0.040, 0.305, 0.965, 0.935)
-	var maint_section_rect = play_section_rect
-	var settings_content_parent: Control = null
-	var settings_grid_compact := compact_settings or large_text_enabled
-	var settings_large_text_scroll: ScrollContainer = null
-	var settings_large_text_status: Label = null
+	var wide_settings := settings_viewport.x >= 1600.0 and settings_viewport.y >= 900.0
 	var category_rows := {"声音": ["背景音乐", "音效反馈", "语音报牌", "播放测试"], "体验": ["AI 节奏", "AI 难度", "桌面特效", "阅读辅助", "出牌辅助", "播放曲目"], "系统": ["画面质量", "本地进度", "隐私诊断"]}
 	if settings_focus_restore_name != "":
 		for category in category_rows:
 			for setting_title in category_rows[category]:
 				if settings_focus_restore_name == "SettingRowButton_" + str(setting_title):
 					settings_active_section = str(category)
+	var panel_rect := settings_panel_rect_for_section(settings_active_section, settings_viewport)
+	var rail_pad := 24.0 if compact_settings else (38.0 if wide_settings else 30.0)
+	var top_pad := 18.0 if compact_settings else (26.0 if wide_settings else 22.0)
+	var header_btn_px := 46.0 if wide_settings else 44.0
+	var rule_status_top_px := top_pad + header_btn_px + 6.0
+	var rule_status_h_px := 24.0 if (wide_settings or large_text_enabled) else 22.0
+	var nav_top_px := rule_status_top_px + rule_status_h_px + 6.0
+	var nav_h_px := 46.0 if wide_settings else 44.0
+	var content_top_px := nav_top_px + nav_h_px + 12.0
+	var bottom_pad_px := 18.0 if compact_settings else (28.0 if wide_settings else 22.0)
+	# Every category owns the same aligned reading area. Hidden categories retain their
+	# native controls, while focus and input only visit the selected category.
+	var audio_section_rect = rect_full(0.0, 0.0, 1.0, 1.0)
+	var play_section_rect = audio_section_rect
+	var maint_section_rect = play_section_rect
+	var settings_content_parent: Control = null
+	var settings_grid_compact := compact_settings or large_text_enabled
+	var settings_large_text_scroll: ScrollContainer = null
+	var settings_large_text_status: Label = null
 	var overlay = Control.new()
 	overlay.name = "SettingsOverlay"
 	overlay.z_index = UI_MODAL_Z_INDEX
@@ -17707,64 +17775,86 @@ func draw_settings_overlay(parent: Control) -> void:
 		stw.tween_property(overlay, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		stw.tween_property(panel, "offset_right", 0.0, 0.2).from(20.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
-	var title = make_heading(panel, "设置", 28, Color(0.10, 0.22, 0.16), true)
+	var title = make_heading(panel, "设置", 32 if wide_settings else 28, Color(0.10, 0.22, 0.16), true)
 	title.name = "SettingsTitleLabel"
-	apply_rect(title, SETTINGS_TITLE_RECT)
+	apply_rect(title, rect_full(0.0, 0.0, 0.38, 0.0))
+	title.offset_left = rail_pad
+	title.offset_top = top_pad
+	title.offset_bottom = top_pad + header_btn_px
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", Color(0.08, 0.20, 0.14, 1.0))
 	title.add_theme_color_override("font_outline_color", Color(1.0, 0.92, 0.72, 0.92))
 	title.add_theme_constant_override("outline_size", 0)
 	title.add_theme_constant_override("shadow_offset_x", 0)
 	title.add_theme_constant_override("shadow_offset_y", 0)
 	configure_clipped_label(title)
-	draw_settings_overview_art(panel)
+	var nav_right_anchor := 0.545 if (compact_settings and large_text_enabled) else 0.520
+	var panel_w_px := (panel_rect.size.x - panel_rect.position.x) * safe_content_pixel_size().x
+	draw_settings_overview_art(panel, nav_right_anchor + 0.012, nav_top_px, nav_h_px, rail_pad, wide_settings, panel_w_px)
 
 	var close = make_small_button("关闭", Color(0.98, 0.92, 0.72), func() -> void:
 		close_settings_panel()
 	)
-	close.custom_minimum_size = Vector2(88, UI_MIN_TOUCH_TARGET)
+	var close_w_px := 104.0 if wide_settings else 88.0
+	var rule_btn_w_px := 104.0 if wide_settings else 86.0
+	var header_btn_gap := 12.0 if wide_settings else 10.0
+	close.custom_minimum_size = Vector2(close_w_px, header_btn_px)
 	close.name = "SettingsCloseButton"
 	close.tooltip_text = "关闭设置（Esc）"
 	close.set_meta("accessible_name", "关闭设置")
 	close.set_meta("ui_navigation_role", "page_back")
 	close.focus_mode = Control.FOCUS_ALL
-	var header_btn_top := 0.038 if (not compact_settings and large_text_enabled) else (0.028 if compact_settings else 0.024)
-	var header_btn_px := 44.0
 	style_guofeng_secondary_action(close, false)
+	if wide_settings:
+		close.add_theme_font_size_override("font_size", guofeng_modal_font_size(15, settings_viewport, 1.20))
 	panel.add_child(close)
-	apply_rect(close, rect_full(SETTINGS_CLOSE_RECT.position.x, header_btn_top, SETTINGS_CLOSE_RECT.size.x, header_btn_top))
-	close.offset_bottom = header_btn_px
+	apply_rect(close, rect_full(1.0, 0.0, 1.0, 0.0))
+	close.offset_left = -(rail_pad + close_w_px)
+	close.offset_right = -rail_pad
+	close.offset_top = top_pad
+	close.offset_bottom = top_pad + header_btn_px
 	close.grab_focus()
-	var rule_setting_label = make_label(panel, "地方规则", 12, Color(0.16, 0.27, 0.20), true)
+	var rule_setting_label = make_label(panel, "地方规则", 15 if wide_settings else 13, Color(0.16, 0.27, 0.20), true)
 	rule_setting_label.name = "SettingsRuleVariantLabel"
 	rule_setting_label.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	rule_setting_label.add_theme_constant_override("outline_size", 0)
 	rule_setting_label.add_theme_constant_override("shadow_offset_x", 0)
 	rule_setting_label.add_theme_constant_override("shadow_offset_y", 0)
-	apply_rect(rule_setting_label, rect_full(0.550, header_btn_top, 0.675, header_btn_top))
-	rule_setting_label.offset_bottom = header_btn_px
+	apply_rect(rule_setting_label, rect_full(0.42, 0.0, 1.0, 0.0))
+	rule_setting_label.offset_right = -(rail_pad + close_w_px + header_btn_gap + rule_btn_w_px + 10.0)
+	rule_setting_label.offset_top = top_pad
+	rule_setting_label.offset_bottom = top_pad + header_btn_px
 	rule_setting_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rule_setting_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	configure_clipped_label(rule_setting_label)
 	var rule_setting_button = make_setting_selector_button(rule_variant_short_label(), "地方规则", func() -> void:
 		cycle_rule_variant_setting()
 	)
 	rule_setting_button.name = "SettingsRuleVariantButton"
-	rule_setting_button.custom_minimum_size = Vector2(80, UI_MIN_TOUCH_TARGET)
+	rule_setting_button.custom_minimum_size = Vector2(rule_btn_w_px, header_btn_px)
 	style_guofeng_secondary_action(rule_setting_button, false)
+	if wide_settings:
+		rule_setting_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(15, settings_viewport, 1.20))
 	rule_setting_button.tooltip_text = rule_variant_summary(rule_variant)
-	apply_rect(rule_setting_button, rect_full(0.685, header_btn_top, 0.815, header_btn_top))
-	rule_setting_button.offset_bottom = header_btn_px
+	apply_rect(rule_setting_button, rect_full(1.0, 0.0, 1.0, 0.0))
+	rule_setting_button.offset_left = -(rail_pad + close_w_px + header_btn_gap + rule_btn_w_px)
+	rule_setting_button.offset_right = -(rail_pad + close_w_px + header_btn_gap)
+	rule_setting_button.offset_top = top_pad
+	rule_setting_button.offset_bottom = top_pad + header_btn_px
 	panel.add_child(rule_setting_button)
-	var rule_variant_status = make_label(panel, "", 13, Color(0.13, 0.17, 0.12, 0.98), true)
+	var rule_variant_status = make_label(panel, "", 15 if wide_settings else 13, Color(0.13, 0.17, 0.12, 0.98), true)
 	rule_variant_status.name = "SettingsRuleVariantStatus"
 	style_guofeng_label(rule_variant_status)
-	apply_rect(rule_variant_status, rect_full(0.350, header_btn_top, 0.965, header_btn_top))
-	rule_variant_status.offset_top = header_btn_px + 2.0
-	rule_variant_status.offset_bottom = header_btn_px + (24.0 if large_text_enabled else 22.0)
+	apply_rect(rule_variant_status, rect_full(0.320, 0.0, 1.0, 0.0))
+	rule_variant_status.offset_right = -rail_pad
+	rule_variant_status.offset_top = rule_status_top_px
+	rule_variant_status.offset_bottom = rule_status_top_px + rule_status_h_px
 	rule_variant_status.set_meta("overview_art_gap_policy", "minimum_6px_compact")
 	mark_ui_optimization(rule_variant_status, "F-080")
 	rule_variant_status.set_meta("status_summary_contract", "当前档案 · 关键规则差异")
 	rule_variant_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	rule_variant_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	update_settings_rule_status(rule_variant_status)
 
 	# Large text needs a real scroll viewport: the three authored sections cannot
@@ -17781,7 +17871,10 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.set_meta("section_count_contract", "one_visible_category_of_three_native_sections")
 		mark_ui_optimization(settings_scroll, "F-557")
 		mark_ui_optimization(settings_scroll, "F-563")
-		apply_rect(settings_scroll, rect_full(0.035, 0.240, 0.965, 0.895))
+		apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.895))
+		settings_scroll.offset_left = rail_pad
+		settings_scroll.offset_right = -rail_pad
+		settings_scroll.offset_top = content_top_px
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
 		settings_content.name = "SettingsLargeTextContent"
@@ -17790,11 +17883,12 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
 		settings_large_text_scroll = settings_scroll
-		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 11, Color(0.10, 0.22, 0.16, 1.0), false)
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 13 if wide_settings else 11, Color(0.10, 0.22, 0.16, 1.0), false)
 		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
 		style_guofeng_label(settings_large_text_status, false)
 		settings_large_text_status.add_theme_color_override("font_color", Color(0.05, 0.12, 0.09, 1.0) if high_contrast_enabled else Color(0.14, 0.25, 0.19, 1.0))
-		apply_rect(settings_large_text_status, rect_full(0.040, 0.900, 0.790, 0.952))
+		apply_rect(settings_large_text_status, rect_full(0.0, 0.902, 0.840, 0.962))
+		settings_large_text_status.offset_left = rail_pad
 		# Keep a stable status slot visible during the first measurement pass. The
 		# copy is replaced with the measured section range as soon as geometry lands.
 		settings_large_text_status.visible = true
@@ -17818,7 +17912,7 @@ func draw_settings_overlay(parent: Control) -> void:
 			sync_settings_large_text_scroll_status(settings_scroll, settings_large_text_status)
 		)
 		call_deferred("sync_settings_large_text_scroll_status", settings_scroll, settings_large_text_status)
-		audio_section_rect = rect_full(0.025, 0.000, 0.975, 0.995)
+		audio_section_rect = rect_full(0.0, 0.000, 1.0, 0.995)
 		play_section_rect = audio_section_rect
 		maint_section_rect = audio_section_rect
 	else:
@@ -17826,6 +17920,12 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 声音设置
 	var audio_grid = make_settings_section(settings_content_parent, audio_section_rect, "声音", settings_grid_compact)
+	if not large_text_enabled:
+		var audio_sec := audio_grid.get_parent() as Control
+		audio_sec.offset_left = rail_pad
+		audio_sec.offset_right = -rail_pad
+		audio_sec.offset_top = content_top_px
+		audio_sec.offset_bottom = -bottom_pad_px
 	audio_grid.columns = 1 if large_text_enabled else 2
 	make_setting_row(audio_grid, "背景音乐", "当前：%s" % ("开启" if music_enabled else "关闭"), make_setting_button("音乐", music_enabled, func() -> void:
 		toggle_music_setting()
@@ -17851,12 +17951,18 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 体验设置
 	var play_grid = make_settings_section(settings_content_parent, play_section_rect, "体验", settings_grid_compact)
+	if not large_text_enabled:
+		var play_sec := play_grid.get_parent() as Control
+		play_sec.offset_left = rail_pad
+		play_sec.offset_right = -rail_pad
+		play_sec.offset_top = content_top_px
+		play_sec.offset_bottom = -bottom_pad_px
 	# Six compact controls need two rows to preserve the 48px row target.
 	play_grid.columns = 2
 	make_setting_row(play_grid, "AI 节奏", "当前：%s" % ("快速" if fast_mode_enabled else "标准"), make_setting_selector_button("快速" if fast_mode_enabled else "标准", "AI 节奏", func() -> void:
 		toggle_fast_mode_setting()
 	))
-	make_setting_row(play_grid, "AI 难度", "对手强度：%s" % ai_difficulty_label(), make_setting_selector_button(ai_difficulty_label(), "AI 难度", func() -> void:
+	make_setting_row(play_grid, "AI 难度", "当前：%s" % ai_difficulty_label(), make_setting_selector_button(ai_difficulty_label(), "AI 难度", func() -> void:
 		cycle_ai_difficulty_setting()
 	))
 	make_setting_row(play_grid, "桌面特效", "当前：%s" % ("开启" if fx_enabled else "关闭"), make_setting_button("特效", fx_enabled, func() -> void:
@@ -17880,6 +17986,12 @@ func draw_settings_overlay(parent: Control) -> void:
 
 	# 系统设置
 	var system_grid = make_settings_section(settings_content_parent, maint_section_rect, "系统", settings_grid_compact)
+	if not large_text_enabled:
+		var sys_sec := system_grid.get_parent() as Control
+		sys_sec.offset_left = rail_pad
+		sys_sec.offset_right = -rail_pad
+		sys_sec.offset_top = content_top_px
+		sys_sec.offset_bottom = -bottom_pad_px
 	system_grid.columns = 1
 	system_grid.set_meta("large_text_columns", system_grid.columns)
 	system_grid.set_meta("large_text_bottom_padding_px", 18.0 if large_text_enabled else 8.0)
@@ -17907,7 +18019,10 @@ func draw_settings_overlay(parent: Control) -> void:
 	var active_settings_section := settings_active_section
 	settings_section_navigation.set_meta("active_section", active_settings_section)
 	settings_section_navigation.set_meta("active_marker_contract", "exactly_one_visible_authored_marker")
-	apply_rect(settings_section_navigation, rect_full(0.040, 0.186, 0.520, 0.248))
+	apply_rect(settings_section_navigation, rect_full(0.0, 0.0, nav_right_anchor, 0.0))
+	settings_section_navigation.offset_left = rail_pad
+	settings_section_navigation.offset_top = nav_top_px
+	settings_section_navigation.offset_bottom = nav_top_px + nav_h_px
 	panel.add_child(settings_section_navigation)
 	var compact_nav := compact_settings
 	for settings_section_name in ["声音", "体验", "系统"]:
@@ -17919,7 +18034,11 @@ func draw_settings_overlay(parent: Control) -> void:
 		ensure_button_gpt_face_plate(section_nav_button, Color(0.98, 0.92, 0.72, 0.88), "action_gpt_dock_banner_bright")
 		section_nav_button.name = "SettingsSectionNavButton_%s" % section_name
 		apply_guofeng_button_face(section_nav_button, section_name == active_settings_section)
-		section_nav_button.custom_minimum_size = Vector2(82, UI_MIN_TOUCH_TARGET)
+		if wide_settings:
+			section_nav_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(15, settings_viewport, 1.18))
+		elif compact_settings and large_text_enabled:
+			section_nav_button.add_theme_font_size_override("font_size", 15)
+		section_nav_button.custom_minimum_size = Vector2(90 if (compact_settings and large_text_enabled) else 82, nav_h_px)
 		section_nav_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		section_nav_button.tooltip_text = "显示%s设置" % section_name
 		set_ui_full_text(section_nav_button, section_nav_button.tooltip_text, "设置分区入口：" + section_name)
@@ -17943,10 +18062,10 @@ func draw_settings_overlay(parent: Control) -> void:
 		# The compact navigation expands to its native touch height. Reserve that
 		# resolved minimum before the scroll viewport so its first heading cannot
 		# slide behind the fixed tabs in large text mode.
-		var navigation_height := maxf(settings_section_navigation.get_combined_minimum_size().y, panel.size.y * (settings_section_navigation.anchor_bottom - settings_section_navigation.anchor_top))
-		settings_large_text_scroll.anchor_top = settings_section_navigation.anchor_top
-		settings_large_text_scroll.offset_top = navigation_height + 10.0
-		settings_large_text_scroll.set_meta("fixed_navigation_gap_px", 10.0)
+		var navigation_height := maxf(settings_section_navigation.get_combined_minimum_size().y, nav_h_px)
+		settings_large_text_scroll.anchor_top = 0.0
+		settings_large_text_scroll.offset_top = nav_top_px + navigation_height + 12.0
+		settings_large_text_scroll.set_meta("fixed_navigation_gap_px", 12.0)
 	# Select before building the focus graph so hidden controls are excluded.
 	focus_settings_section(settings_content_parent, settings_large_text_scroll, active_settings_section)
 	var settings_default_focus := settings_focus_restore_name if settings_focus_restore_name != "" else "SettingsCloseButton"
@@ -18013,6 +18132,12 @@ func focus_settings_section(settings_content_parent: Control, settings_scroll: S
 	sync_settings_section_navigation(section_name)
 	var panel := root_layer.find_child("SettingsPanel", true, false) as Control
 	if panel != null:
+		if not large_text_enabled:
+			var resized_rect := settings_panel_rect_for_section(section_name, effective_viewport_size())
+			apply_rect(panel, resized_rect)
+			var hc_frame := root_layer.find_child("SettingsHighContrastFrame", true, false) as Control
+			if hc_frame != null:
+				apply_rect(hc_frame, resized_rect)
 		configure_button_focus_navigation(panel, "SettingsSectionNavButton_%s" % section_name)
 	if settings_scroll != null and is_instance_valid(settings_scroll):
 		var grid := selected.find_child("SettingsSectionGrid_%s" % section_name, true, false) as Control
@@ -18053,23 +18178,32 @@ func sync_settings_large_text_scroll_status(settings_scroll: ScrollContainer, st
 
 func settings_overview_text() -> String:
 	var enabled_audio := int(music_enabled) + int(sfx_enabled) + int(tts_enabled)
+	if reduce_motion_enabled:
+		return "声音%d项 · 辅助%s · 减动效" % [enabled_audio, "开" if ai_assist_enabled else "关"]
 	return "声音已启用 %d 项 · 出牌辅助%s" % [enabled_audio, "开启" if ai_assist_enabled else "关闭"]
 
 
-func draw_settings_overview_art(parent: Control) -> Control:
+func draw_settings_overview_art(parent: Control, left_anchor: float = 0.532, top_px: float = 96.0, height_px: float = 44.0, rail_pad: float = 30.0, wide_settings: bool = false, panel_w_px: float = 800.0) -> Control:
 	var art = Control.new()
 	art.name = "SettingsOverviewArt"
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	apply_rect(art, rect_full(0.540, 0.188, 0.965, 0.252))
+	apply_rect(art, rect_full(left_anchor, 0.0, 1.0, 0.0))
+	art.offset_right = -rail_pad
+	art.offset_top = top_px
+	art.offset_bottom = top_px + height_px
 	parent.add_child(art)
-	var summary = make_label(art, settings_overview_text(), 12, Color(0.11, 0.23, 0.18), true)
+	var summary_base_fs := 14 if wide_settings else 12
+	var summary = make_label(art, settings_overview_text(), summary_base_fs, Color(0.11, 0.23, 0.18), true)
 	summary.name = "SettingsOverviewSummary"
 	summary.add_theme_color_override("font_color", Color(0.11, 0.23, 0.18))
 	apply_rect(summary, rect_full(0.0, 0.0, 1.0, 1.0))
 	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	summary.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	summary.add_theme_constant_override("outline_size", 0)
 	summary.add_theme_constant_override("shadow_offset_x", 0)
 	summary.add_theme_constant_override("shadow_offset_y", 0)
+	var overview_lane_px := maxf(120.0, panel_w_px * (1.0 - left_anchor) - rail_pad - 8.0)
+	fit_label_font_size(summary, overview_lane_px, accessibility_font_size(summary_base_fs), 10)
 	configure_clipped_label(summary)
 	set_ui_full_text(summary, summary.text, "设置总览")
 	return art
@@ -20398,19 +20532,22 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 	var self_draw := bool(score_data.get("self_draw", false))
 	var limit_name_header: String = str(score_data.get("limit_name", ""))
 	var cap_stamp_tex := guofeng_cinnabar_seal_texture("cap") if limit_name_header != "" else null
-	var header_right_reserve := 48.0 if cap_stamp_tex != null else 0.0
+	var wide_paper := bool(layout.get("wide_paper", false))
+	var winner_x := float(layout.get("winner_x", 54.0))
+	var cap_sz := 50.0 if wide_paper else 42.0
+	var header_right_reserve := (cap_sz + 8.0) if cap_stamp_tex != null else 0.0
 	var winner_text := "%s %s%s" % [str(players[winner]["name"]), "自摸" if self_draw else "胡", (" " + tile_label(win_tile)) if win_tile != "" else ""]
-	var winner_label := make_label(detail_panel, winner_text, 18, Color.WHITE, true)
+	var winner_label := make_label(detail_panel, winner_text, int(layout.get("winner_fs", 18)), Color.WHITE, true)
 	winner_label.name = "WinDetailWinnerLabel"
 	style_guofeng_label(winner_label)
 	winner_label.add_theme_font_override("font", ui_heading_font())
-	place_round_summary_control(winner_label, Rect2(54.0, 0.0, maxf(120.0, detail_rect.size.x - 54.0 - header_right_reserve), float(layout["winner_height"])))
+	place_round_summary_control(winner_label, Rect2(winner_x, 0.0, maxf(120.0, detail_rect.size.x - winner_x - header_right_reserve), float(layout["winner_height"])))
 	winner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var fan := int(score_data.get("fan", 0))
 	var points := int(score_data.get("points", 0))
 	var delta := round_summary_score_delta(0) if not last_score_deltas.is_empty() else 0
 	var score_text := ("本局 %+d分" % delta) if not last_score_deltas.is_empty() else ("%d番  %d分" % [fan, points])
-	var score_label := make_label(detail_panel, score_text, 22, Color.WHITE, true)
+	var score_label := make_label(detail_panel, score_text, int(layout.get("score_fs", 22)), Color.WHITE, true)
 	score_label.name = "WinDetailScoreLabel"
 	style_guofeng_label(score_label)
 	score_label.add_theme_font_override("font", ui_heading_font())
@@ -20418,7 +20555,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		score_label.add_theme_color_override("font_color", Color(0.08, 0.27, 0.18, 1.0))
 	elif delta < 0:
 		score_label.add_theme_color_override("font_color", Color(0.52, 0.12, 0.09, 1.0))
-	place_round_summary_control(score_label, Rect2(54.0, float(layout["winner_height"]) + 4.0, maxf(120.0, detail_rect.size.x - 54.0 - header_right_reserve), float(layout["score_height"])))
+	place_round_summary_control(score_label, Rect2(winner_x, float(layout["winner_height"]) + 4.0, maxf(120.0, detail_rect.size.x - winner_x - header_right_reserve), float(layout["score_height"])))
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	if cap_stamp_tex != null:
 		var cap_stamp := TextureRect.new()
@@ -20429,7 +20566,7 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		cap_stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cap_stamp.self_modulate = Color(1.0, 1.0, 1.0, 0.94)
 		detail_panel.add_child(cap_stamp)
-		place_round_summary_control(cap_stamp, Rect2(detail_rect.size.x - 44.0, 2.0, 42.0, 42.0))
+		place_round_summary_control(cap_stamp, Rect2(detail_rect.size.x - cap_sz - 2.0, 2.0, cap_sz, cap_sz))
 	draw_win_detail_showcase(detail_panel, win_tile, self_draw, fan, points, win_detail_viewport)
 	var reasons: Array = score_data.get("reasons", [])
 	var yaku_scroll := ScrollContainer.new()
@@ -20447,8 +20584,10 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 	badges.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	badges.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	badges.add_theme_constant_override("h_separation", 6 if compact_yaku_list else 8)
-	badges.add_theme_constant_override("v_separation", 2 if compact_yaku_list else 4)
+	badges.add_theme_constant_override("v_separation", 2 if compact_yaku_list else 5)
 	yaku_scroll.add_child(badges)
+	var yaku_plaque_tex := guofeng_yaku_chip_plaque_texture()
+	var yaku_fs := int(layout.get("yaku_fs", 13))
 	var reason_items: Array = score_data.get("reason_items", [])
 	for i in range(reasons.size()):
 		var raw_name := str(reasons[i])
@@ -20459,29 +20598,36 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		if item_fan <= 0:
 			item_fan = yaku_default_fan_points(raw_name)
 		var badge_text := raw_name if compact_yaku_list else (("%s +%d番" % [raw_name, item_fan]) if item_fan > 0 else raw_name)
-		var reason := make_label(badges, badge_text, 13, Color.WHITE, false)
+		var reason := make_label(badges, badge_text, yaku_fs, Color.WHITE, false)
 		reason.name = "WinDetailYakuBadge_%d" % i
 		reason.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		style_guofeng_label(reason)
 		if item_fan >= 3:
-			reason.add_theme_color_override("font_color", Color(0.52, 0.14, 0.10, 1.0))
+			reason.add_theme_color_override("font_color", Color(0.50, 0.11, 0.08, 1.0))
+		else:
+			reason.add_theme_color_override("font_color", Color(0.08, 0.18, 0.13, 1.0))
 		if not compact_yaku_list:
 			var chip_pad := StyleBoxEmpty.new()
-			chip_pad.content_margin_left = 7.0
-			chip_pad.content_margin_right = 7.0
-			chip_pad.content_margin_top = 1.0
-			chip_pad.content_margin_bottom = 1.0
+			chip_pad.content_margin_left = 10.0 if wide_paper else 8.0
+			chip_pad.content_margin_right = 10.0 if wide_paper else 8.0
+			chip_pad.content_margin_top = 2.0
+			chip_pad.content_margin_bottom = 2.0
 			reason.add_theme_stylebox_override("normal", chip_pad)
-		var chip_bg := add_optional_gpt_illustration_texture(reason, "quiet_gold_accent", rect_full(0.0, 0.0, 1.0, 1.0), 0.30 if item_fan >= 3 else 0.20, false)
+		var chip_key := "yaku_chip_plaque_gpt" if yaku_plaque_tex != null else "quiet_gold_accent"
+		var chip_alpha := 0.98 if yaku_plaque_tex != null else (0.30 if item_fan >= 3 else 0.20)
+		var chip_bg := add_optional_gpt_illustration_texture(reason, chip_key, rect_full(0.0, 0.0, 1.0, 1.0), chip_alpha, false)
 		if chip_bg != null:
 			chip_bg.name = "WinDetailYakuChipBg_%d" % i
 			chip_bg.show_behind_parent = true
+			if yaku_plaque_tex != null:
+				configure_guofeng_button_slice(chip_bg, true, 28, 0.20, yaku_plaque_tex, false)
+				chip_bg.self_modulate = Color(1.0, 0.94, 0.84, 0.98) if item_fan >= 3 else Color.WHITE
 		reason.clip_text = false
 		reason.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 		reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		set_ui_full_text(reason, badge_text, badge_text)
 	var score_basis := "%d番 · 基础分%d分 · 番种%d项" % [fan, points, reasons.size()]
-	var status := make_label(detail_panel, score_basis + " · 可滚动", 13, Color.WHITE, false)
+	var status := make_label(detail_panel, score_basis + " · 可滚动", int(layout.get("small_fs", 13)), Color.WHITE, false)
 	status.name = "WinDetailYakuStatus"
 	style_guofeng_label(status)
 	place_round_summary_control(status, Rect2(0.0, float(layout["yaku_top"]) + float(layout["yaku_height"]) + 6.0, detail_rect.size.x - 78.0, float(layout["small_height"])))
@@ -20656,9 +20802,10 @@ func draw_win_detail_showcase(parent: Control, win_tile: String, self_draw: bool
 	showcase.set_meta("viewport_snapshot", showcase_viewport)
 	showcase.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(showcase)
-	place_round_summary_control(showcase, Rect2(0.0, 0.0, 42.0, 58.0))
+	var showcase_sz := Vector2(54.0, 76.0) if showcase_viewport.x >= 1600.0 and showcase_viewport.y >= 900.0 else Vector2(42.0, 58.0)
+	place_round_summary_control(showcase, Rect2(Vector2.ZERO, showcase_sz))
 	if win_tile != "":
-		var tile := make_tile_view(win_tile, Vector2(42.0, 58.0), false, Callable(), true)
+		var tile := make_tile_view(win_tile, showcase_sz, false, Callable(), true)
 		tile.name = "WinDetailTile"
 		var tile_tag := "决胜牌 · %s%s" % [tile_label(win_tile), "（自摸）" if self_draw else "（胡牌）"]
 		tile.tooltip_text = tile_tag
@@ -21643,6 +21790,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	# r214: bulk GPT chrome sweep
 	var setting_viewport := effective_viewport_size()
 	var compact_settings := setting_viewport.y <= 560.0 or setting_viewport.x <= 960.0
+	var wide_settings := setting_viewport.x >= 1600.0 and setting_viewport.y >= 900.0
 	var large_text_settings := large_text_enabled
 	var row = Control.new()
 	row.name = "SettingRow_%s" % title
@@ -21651,8 +21799,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (82.0 if large_text_settings else (78.0 if title == "本地进度" else 64.0)))
-	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (72.0 if large_text_enabled else (58.0 if compact_settings else 64.0))))
+	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (88.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
+	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (80.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
 	row.set_meta("status_lane_contract", "title_then_status_then_action")
@@ -21676,8 +21824,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	if single_line_reset:
 		text_right = 0.615
 		button_left = 0.645
-	var row_title_size := 14 if compact_settings and large_text_settings else (15 if compact_settings or large_text_settings else guofeng_card_title_font_size(17))
-	var row_status_size := 12 if compact_settings and large_text_settings else (13 if compact_settings or large_text_settings else 14)
+	var row_title_size := 14 if compact_settings and large_text_settings else (15 if compact_settings or large_text_settings else (20 if wide_settings else guofeng_card_title_font_size(17)))
+	var row_status_size := 12 if compact_settings and large_text_settings else (13 if compact_settings or large_text_settings else (16 if wide_settings else 14))
 	var title_label = make_label(row, title, row_title_size, Color(0.10, 0.24, 0.17, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	title_label.add_theme_font_override("font", ui_heading_font())
@@ -21765,7 +21913,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(17 if wide_settings else 15))
 	button.set_meta("ui_full_text", status)
 	button.set_meta("accessible_name", title + "：" + status)
 	var button_full_text := button.tooltip_text if title == "本地进度" else title + "：" + status
@@ -21848,8 +21996,9 @@ func make_settings_section(parent: Control, rect: Rect2, title_text: String, com
 	configure_passive_container(grid)
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 8)
+	var wide_grid := effective_viewport_size().x >= 1600.0 and effective_viewport_size().y >= 900.0
+	grid.add_theme_constant_override("h_separation", 20 if wide_grid else 16)
+	grid.add_theme_constant_override("v_separation", 14 if wide_grid else 10)
 	section.add_child(grid)
 	apply_rect(grid, rect_full(0.0, 0.0, 1.0, 0.0))
 

@@ -7676,19 +7676,6 @@ func show_exit_confirm() -> void:
 	# 遮罩层 — crisp 0.72 dark scrim framing the modal cleanly above table felt.
 	var mask = make_fullrect_overlay(Color(0.02, 0.04, 0.03, 0.72), "ui_dark_scrim")
 	mask.mouse_filter = Control.MOUSE_FILTER_STOP
-	mask.gui_input.connect(func(event: InputEvent) -> void:
-		if exit_confirm_decision_locked:
-			return
-		var dismiss := false
-		if event is InputEventScreenTouch:
-			dismiss = (event as InputEventScreenTouch).pressed
-		elif event is InputEventMouseButton:
-			var mouse_event := event as InputEventMouseButton
-			dismiss = mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed
-		if dismiss:
-			mask.accept_event()
-			hide_exit_confirm()
-	)
 	overlay.add_child(mask)
 
 	# 对话框面板 — responsive footprint across 960/1280/1920 with Guofeng card frame.
