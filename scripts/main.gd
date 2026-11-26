@@ -1674,6 +1674,18 @@ func ai_open_claim_pressure_report(seat: int, claim: String, tile: String, befor
 			decline = after_shanten > 1 and pressure >= pressure_limit and not terminal_or_honor
 		elif forced_safety != "安":
 			decline = forced_risk >= risk_limit or pressure >= pressure_limit
+	if not decline and claim == "gang" and after_shanten >= 1:
+		var gang_diff_now: int = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
+		if gang_diff_now == AI_DIFFICULTY_HARD:
+			var gang_wall: int = int(eval_context.get("discard_report_wall_count", -1))
+			if gang_wall < 0:
+				gang_wall = get_wall_count()
+			var gang_readiness: float = float(pressure_context.get("readiness_pressure", 0.0))
+			var gang_multi: bool = bool(pressure_context.get("multi_threat", false))
+			var gang_threat_rank: int = int(pressure_context.get("threat_rank", 0))
+			# 困难档残墙（<=18张）且未成听时，面对近听/多威胁高压拒绝明杠（防缩手失安张与盲摸岭上点炮）。
+			if gang_wall <= wall_phase_threshold(18) and (gang_multi or gang_threat_rank >= 2 or gang_readiness >= 10.5):
+				decline = true
 	if not decline and claim != "gang" and after_shanten >= 1:
 		var claim_diff_now: int = clampi(ai_difficulty, AI_DIFFICULTY_EASY, AI_DIFFICULTY_HARD)
 		if claim_diff_now == AI_DIFFICULTY_HARD:
@@ -3164,8 +3176,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if diff == AI_DIFFICULTY_HARD:
 				if risk >= AI_DANGER_RISK_SOFT:
 					cheap -= (risk - 12.0) * 1.35
-				if fast_max_opp_risk >= 22.0:
-					cheap -= (fast_max_opp_risk - 19.0) * 1.35
+				if fast_max_opp_risk >= 24.0:
+					cheap -= (fast_max_opp_risk - 20.0) * 1.45
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
 			var fast_safety_value := 0.0
@@ -3378,14 +3390,15 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		best["hard_guard_catastrophe_tenpai"] = catastrophe_tenpai
 		best["hard_guard_human_exposure_tenpai"] = human_exposure_tenpai
 		best["hard_guard_extreme_one_away"] = extreme_one_away
-	if best_shanten > 1 and not two_away_emergency:
-		return
-	if best_shanten <= 0 and not catastrophe_tenpai and not human_exposure_tenpai and not focused_tenpai_bomb:
-		return
-	if best_risk < AI_DANGER_RISK_HIGH + 6.0 \
-		and best_feed < AI_DANGER_FEED_SOFT + 24.0 \
-		and best_human_pressure < 30.0 \
-		and best_max_opp_risk < 26.0:
+	var standard_guard_active: bool = (best_shanten <= 1 or two_away_emergency) \
+		and (best_shanten > 0 or catastrophe_tenpai or human_exposure_tenpai or focused_tenpai_bomb) \
+		and (best_risk >= AI_DANGER_RISK_HIGH + 6.0 \
+			or best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
+			or best_human_pressure >= 30.0 \
+			or best_max_opp_risk >= 26.0)
+	# 同向听可避高危守卫：未听牌且首选弃牌已达高危（>=31）时，若存在同向听且明显低危（<26）的替代张，直接切安全替代张而不损向听。
+	var same_shanten_hd_only: bool = (not standard_guard_active) and best_shanten >= 1 and best_risk >= AI_DANGER_RISK_HIGH
+	if not standard_guard_active and not same_shanten_hd_only:
 		return
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
@@ -3403,6 +3416,13 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		var score_gap = best_score - float(candidate.get("score", 0.0))
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
 		pressure_gain += (hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))) * 0.5
+		if same_shanten_hd_only and rejection_reason.is_empty():
+			if shanten_delta > 0:
+				rejection_reason = "same_shanten_only"
+			elif float(candidate.get("risk", 0.0)) >= AI_DANGER_RISK_HIGH - 5.0:
+				rejection_reason = "still_high_danger"
+			elif score_gap > 220.0:
+				rejection_reason = "score_gap"
 		if ai_sim_trace_enabled and shanten_delta == 0:
 			var candidate_rank = hard_danger_push_rank(candidate)
 			if trace_safest.is_empty() or candidate_rank < trace_safest_rank:
@@ -3997,6 +4017,9 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 		# 困难档残墙末盘（低起胡番规则）：安全张前提下适度淡化慢路线，果断转向速听。
 		effective_route_focus *= 0.72
 	var ruleset_shape_adj: float = 0.0
+	if rule_min_fan() >= 3 and shanten <= 0 and wait_best_fan > 0 and wait_best_fan < rule_min_fan() and diff_idx != AI_DIFFICULTY_EASY:
+		# 广东等高起胡番规则：未满起胡番的死听（连自摸都不足）重罚，仅自摸达标轻罚，促使转向真实可胡路线。
+		ruleset_shape_adj -= 90.0 if (wait_best_fan + 1 < rule_min_fan()) else 32.0
 	if not rule_allows_chi() and shanten >= 1:
 		# 四川等无吃牌规则：对子与刻子是唯一提速途径，提高留对/留刻牌形权重；同时早中盘优先清掉最弱单门杂张（定缺思路）。
 		ruleset_shape_adj = (float(int(shape_report.get("pairs", 0))) * 5.0 + float(int(shape_report.get("triplets", 0))) * 10.0) * attack
@@ -4085,10 +4108,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				if is_term_or_hon:
 					danger_pen = maxf(0.0, danger_pen - 5.0)
 		score -= danger_pen * defense
-	# R8b: 困难档单家定点重危加罚（仅针对>=21的真正染手/多副露定点炮弹，平衡放炮防线与局速）。
-	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 21.0:
-		var focused_opp_pen: float = (max_opp_risk - 19.0) * 1.40
-		if max_opp_risk >= 26.0 and safety == "":
+	# R8b: 困难档单家定点重危加罚（仅针对>=23的真正染手/多副露定点炮弹，兼顾局速与放炮防线）。
+	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 23.0:
+		var focused_opp_pen: float = (max_opp_risk - 20.0) * 1.45
+		if max_opp_risk >= 28.0 and safety == "":
 			focused_opp_pen += 16.0
 		score -= focused_opp_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
@@ -4555,9 +4578,17 @@ func annotate_human_advisor_reports(reports: Array, pressure_context: Dictionary
 			advisor_wall = get_wall_count()
 		if advisor_wall <= wall_phase_threshold(16):
 			clauses.append("末局保听" if best_risk < AI_DANGER_RISK_SOFT else ("末局慎推" if best_risk >= AI_DANGER_RISK_HIGH else "残墙守听"))
+		elif best_risk >= AI_DANGER_RISK_HIGH and wait_rem <= 2:
+			clauses.append("薄听慎冲")
 	else:
 		var added_offense_clause: bool = false
-		if reports.size() >= 2 and typeof(reports[1]) == TYPE_DICTIONARY:
+		var non_tenpai_wall: int = int(eval_context.get("discard_report_wall_count", -1))
+		if non_tenpai_wall < 0:
+			non_tenpai_wall = get_wall_count()
+		if best_shanten >= 2 and non_tenpai_wall <= wall_phase_threshold(14) and (best_safety == "安" or best_safety == "现" or best_safety == "熟"):
+			clauses.append("末局弃攻保安全")
+			added_offense_clause = true
+		if not added_offense_clause and reports.size() >= 2 and typeof(reports[1]) == TYPE_DICTIONARY:
 			var second: Dictionary = reports[1]
 			var second_tile := str(second.get("tile", ""))
 			var second_shanten := int(second.get("shanten", 8))
@@ -7347,6 +7378,14 @@ func build_ai_self_gang_report(seat: int, tile: String, gang_kind: String, eval_
 	if bool(report.get("allow", false)) and pressure >= 6.8 and after_shanten >= 2 and not bool(report.get("is_terminal_or_honor", false)):
 		report["allow"] = false
 		report["reason"] = "高压防守"
+	if bool(report.get("allow", false)) and difficulty == AI_DIFFICULTY_HARD and after_shanten >= 1 and gang_wall_count <= wall_phase_threshold(18):
+		var self_gang_pctx: Dictionary = pressure_context if not pressure_context.is_empty() else ai_pressure_context(seat, eval_context)
+		var self_gang_readiness: float = float(self_gang_pctx.get("readiness_pressure", 0.0))
+		var self_gang_threat_rank: int = int(self_gang_pctx.get("threat_rank", 0))
+		var self_gang_multi: bool = gang_multi_threat or bool(self_gang_pctx.get("multi_threat", false))
+		if self_gang_multi or self_gang_threat_rank >= 2 or self_gang_readiness >= 10.5:
+			report["allow"] = false
+			report["reason"] = "残墙高压留安" if gang_kind == "concealed" else "残墙防抢杠"
 	var wall_draw_discipline = wall_draw_self_gang_discipline_report(seat, gang_kind, before_shanten, after_shanten, gang_wall_count)
 	# 残墙查听拒因独立记录，即使其他门槛已拒也要暴露商用原因。
 	var declined_by_wall_draw = bool(wall_draw_discipline.get("decline", false))
