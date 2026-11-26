@@ -13786,13 +13786,14 @@ func draw_action_button_art(button: Button, _text: String, _color: Color) -> Con
 func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var group := str(button.get_meta("normal_action_group", ""))
 	var role := str(button.get_meta("action_role", ""))
+	var is_champagne_cta := button.name == "NextHandPrimaryButton" or button.name == "OnlineReconnectGameButton"
 	var is_utility := button.has_meta("pending_utility_button") and bool(button.get_meta("pending_utility_button"))
 	var is_danger := role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false))
 	var face_key_meta := str(button.get_meta("guofeng_button_face_key", ""))
 	var has_cinnabar_face := face_key_meta == "button_face_danger_cinnabar_gpt" and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face := face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt", "battle_ink_plaque_20261112"] or has_cinnabar_face or is_utility
-	var on_ink := (not focused and group == "tools") if group != "" else (focused or ink_face)
-	var text_color := Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18)
+	var ink_face := (not is_champagne_cta) and (face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt", "battle_ink_plaque_20261112"] or has_cinnabar_face or is_utility)
+	var on_ink := false if is_champagne_cta else ((not focused and group == "tools") if group != "" else (focused or ink_face))
+	var text_color := Color(0.08, 0.16, 0.10) if is_champagne_cta else (Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18))
 	if is_danger or (role == "win" and has_cinnabar_face):
 		if has_cinnabar_face:
 			text_color = Color(0.99, 0.95, 0.84)
@@ -13810,6 +13811,10 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		on_ink = false
 	elif is_utility and focused:
 		button.modulate = Color.WHITE
+	elif role in ["gang", "peng"] and not focused:
+		text_color = Color(0.09, 0.19, 0.13)
+		button.add_theme_font_override("font", ui_heading_font())
+		on_ink = false
 	elif role == "chi" and not focused:
 		text_color = Color(0.46, 0.17, 0.04)
 		button.add_theme_font_override("font", ui_heading_font())
@@ -13824,7 +13829,7 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		text_color = Color(0.06, 0.18, 0.12) if button.name == "RecommendedDiscardButton" else Color(0.12, 0.24, 0.19)
 	var focus_plate := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if focus_plate != null:
-		var focus_key := "button_face_jiangnan_gpt" if group != "" else ("button_face_danger_cinnabar_gpt" if (is_danger or role == "win") and has_cinnabar_face else "button_face_jiangnan_active_gpt")
+		var focus_key := "button_face_jiangnan_gpt" if (group != "" or is_champagne_cta) else ("button_face_danger_cinnabar_gpt" if (is_danger or role == "win") and has_cinnabar_face else "button_face_jiangnan_active_gpt")
 		var source := optional_gpt_illustration_texture(focus_key)
 		if source == null and focus_key == "button_face_jiangnan_active_gpt":
 			focus_key = "battle_ink_plaque_20261112"
@@ -13840,6 +13845,11 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 			var fallback_source := optional_gpt_illustration_texture(fallback_key)
 			focus_plate.texture = gpt_center_crop_texture(fallback_source, fallback_key, 0.65) if fallback_source != null else null
 			configure_guofeng_button_slice(focus_plate, false)
+		var cta_gold := Color(1.0, 0.91, 0.60, 1.0)
+		var focus_edges := focus_plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if focus_edges != null:
+			focus_edges.self_modulate = cta_gold if is_champagne_cta else Color.WHITE
+		focus_plate.self_modulate = cta_gold if (is_champagne_cta and focus_edges == null) else Color.WHITE
 		focus_plate.modulate = Color(1.0, 1.0, 1.0, 1.0 if focused else 0.0)
 	var focus_marker := button.find_child("ActionButtonFocusMarker", true, false) as Label
 	if focus_marker != null:
@@ -14344,10 +14354,10 @@ func draw_actions(parent: Control) -> void:
 		lobby_button.name = "OnlineDisconnectedLobbyButton"
 		var lobby_face := lobby_button.get_node_or_null("GptButtonFacePlate") as TextureRect
 		if lobby_face != null:
-			lobby_face.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
+			lobby_face.self_modulate = Color(0.76, 0.78, 0.74, 0.92)
 			var lobby_edges := lobby_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 			if lobby_edges != null:
-				lobby_edges.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
+				lobby_edges.self_modulate = Color(0.76, 0.78, 0.74, 0.92)
 		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
 		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅")
 		lobby_button.set_meta("recovery_route", true)
@@ -26218,7 +26228,7 @@ func draw_hand(parent: Control) -> void:
 	var deck_right_anchor := HAND_TRAY_WOOD_DECK_RIGHT if wood_deck_tex != null else 1.0
 	var paper_rect := rect_full(0.0, deck_top_anchor, deck_right_anchor, deck_bottom_anchor) if wood_deck_tex != null else rect_full(0.0, minf(0.0, header_top), 1.0, 1.0)
 	var tray_paper := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "hand_tray_jiangnan_gpt", 1.0)
-	tray_paper.self_modulate = Color(0.84, 0.86, 0.90, 0.96) if (mode == "online_game" and online_game_disconnected()) else Color.WHITE
+	tray_paper.self_modulate = Color(0.56, 0.64, 0.72, 0.95) if (mode == "online_game" and online_game_disconnected()) else Color.WHITE
 	tray_paper.name = "HandTrayPaper"
 	tray.add_child(tray_paper)
 	if wood_deck_tex != null:
@@ -26235,9 +26245,9 @@ func draw_hand(parent: Control) -> void:
 		if mode == "online_game" and online_game_disconnected():
 			var wood_edges := wood_deck.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 			if wood_edges != null:
-				wood_edges.self_modulate = Color(0.84, 0.86, 0.90, 0.96)
+				wood_edges.self_modulate = Color(0.56, 0.64, 0.72, 0.95)
 			else:
-				wood_deck.self_modulate = Color(0.84, 0.86, 0.90, 0.96)
+				wood_deck.self_modulate = Color(0.56, 0.64, 0.72, 0.95)
 	set_ui_full_text(tray, "手牌区：点击或按 Enter 打出选中的牌；当前状态和教学提示位于上方", "玩家手牌区")
 	mark_ui_optimization(tray, "F-483")
 	tray.clip_contents = false
@@ -28726,7 +28736,7 @@ func draw_online_lobby_log_list_panel(parent: Control) -> Control:
 	mark_ui_optimization(range_label, "F-902")
 	var count_value := online_lobby_retained_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
 	var total_count := online_lobby_log_count() if lobby_connection_state_text() == "已连接" or online_waiting_for_server else 0
-	var count_badge = make_guofeng_secondary_badge(list, rect_full(0.755, 0.030, 0.965, 0.175), "%d/%d\n未读%d" % [count_value, total_count, log_unread], 12, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.90, 0.94, 0.76))
+	var count_badge = make_guofeng_secondary_badge(list, rect_full(0.755, 0.030, 0.965, 0.175), "%d/%d\n未读%d" % [count_value, total_count, log_unread], 12, Color(0.036, 0.052, 0.046, 0.92), Color(0.58, 0.70, 0.42, 0.16), Color(0.11, 0.23, 0.18))
 	count_badge.name = "OnlineLobbyLogCountBadge"
 	count_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(count_badge, "房间日志共%d条" % count_value, "房间日志总数")
@@ -34323,7 +34333,7 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 		button.set_meta("ui_danger_action", true)
 	var is_cinnabar_role: bool = role in ["win", "danger_confirm"]
 	var has_cinnabar: bool = is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face: bool = role in ["gang", "peng", "safe", "next"]
+	var ink_face: bool = role in ["safe", "next"]
 	var has_active_ink: bool = ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
@@ -34334,7 +34344,7 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 		if face_source != null:
 			action_face.texture = face_source
 			configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
-			var face_tint := Color(0.84, 0.85, 0.82, 0.94) if role == "pass" else Color.WHITE
+			var face_tint := Color(0.76, 0.78, 0.75, 0.92) if role == "pass" else (Color(1.0, 0.95, 0.78, 1.0) if role in ["gang", "peng"] else Color.WHITE)
 			action_face.modulate = face_tint
 			action_face.self_modulate = face_tint
 			var action_edges := action_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
@@ -37712,7 +37722,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
 	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
-	var achievement_scroll_top := 0.242 if large_text_enabled else 0.228
+	var achievement_scroll_top := 0.246 if large_text_enabled else 0.232
 	var achievement_scroll_max_bottom := 0.935
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
 	var achievement_row_height := achievement_row_height_contract(achievement_viewport_size)
@@ -37806,7 +37816,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.14, 0.23, 0.18), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.560, 0.156, 0.935, 0.198))
+	apply_rect(achievements_browse_status, rect_full(0.560, 0.194, 0.935, 0.224))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(achievements_browse_status)
 	achievements_browse_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
@@ -39238,7 +39248,7 @@ func _show_online_lobby_impl() -> void:
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_left, 0.0, hdr_ep_right, 0.0), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 3), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_left, 0.0, hdr_ep_right, 0.0), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 3), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.11, 0.23, 0.18))  # r415 ink on paper
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.offset_top = hdr_top_px + 19.0
 	server_badge.offset_bottom = hdr_top_px + hdr_h_px
@@ -39274,8 +39284,8 @@ func _show_online_lobby_impl() -> void:
 	panel.add_child(endpoint_copy_button)
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
-	var is_connection_error: bool = connection_state == "异常" or online_feedback_requires_recovery()
-	var connection_state_tint: Color = Color(0.62, 0.12, 0.10, 0.98) if is_connection_error else online_connection_state_tint(connection_state)
+	var is_connection_error: bool = connection_state == "异常" or connection_state == "未连接" or online_feedback_requires_recovery()
+	var connection_state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if is_connection_error else (Color(0.68, 0.96, 0.78, 1.0) if connection_state == "已连接" else Color(1.0, 0.88, 0.54, 1.0))
 	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.offset_top = hdr_top_px
@@ -39288,9 +39298,8 @@ func _show_online_lobby_impl() -> void:
 		apply_rect(state_badge_label, rect_full(0.265, 0.04, 0.965, 0.96))
 		state_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(state_badge_label)
-		if is_connection_error:
-			state_badge_label.set_meta("preserve_semantic_color", true)
-			state_badge_label.add_theme_color_override("font_color", Color(0.62, 0.12, 0.10))
+		state_badge_label.set_meta("preserve_semantic_color", true)
+		state_badge_label.add_theme_color_override("font_color", connection_state_tint)
 		set_ui_full_text(state_badge_label, connection_state, "联机连接状态")
 		state_badge_label.set_meta("summary_contract", "connection_state_with_endpoint_and_room")
 		mark_ui_optimization(state_badge_label, "F-539")
@@ -39576,7 +39585,7 @@ func _show_online_lobby_impl() -> void:
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
 	var room_badge_rect := rect_full(0.625, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.630, 0.022, 0.915, 0.098)
-	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.11, 0.23, 0.18))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -39878,8 +39887,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	online_last_lobby_render_revision = online_lobby_render_revision
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
-	var state_is_error: bool = state == "异常" or online_feedback_requires_recovery()
-	var state_tint: Color = Color(0.62, 0.12, 0.10, 0.98) if state_is_error else online_connection_state_tint(state)
+	var state_is_error: bool = state == "异常" or state == "未连接" or online_feedback_requires_recovery()
+	var state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if state_is_error else (Color(0.68, 0.96, 0.78, 1.0) if connected else Color(1.0, 0.88, 0.54, 1.0))
 	var show_room_snapshot := connected or online_waiting_for_server
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
@@ -39890,6 +39899,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state_label = find_control.call("OnlineLobbyConnectionStateLabel") as Label
 	if state_label != null:
 		state_label.text = state
+		state_label.set_meta("preserve_semantic_color", true)
+		state_label.add_theme_color_override("font_color", state_tint)
 		state_label.tooltip_text = "服务器连接状态：%s" % state
 		set_ui_full_text(state_label, "服务器连接状态：" + state, "联机连接状态")
 		state_label.set_meta("summary_contract", "endpoint_room_connection_state")
@@ -39898,6 +39909,10 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state_badge = find_control.call("OnlineLobbyConnectionStateBadge") as CanvasItem
 	if state_badge != null:
 		state_badge.modulate = Color.WHITE
+		var state_icon := state_badge.find_child("OnlineLobbyConnectionStateIcon", true, false) as CanvasItem
+		if state_icon != null:
+			state_icon.modulate = Color.WHITE
+			state_icon.self_modulate = state_tint
 	var retry_connection_button := find_control.call("OnlineLobbyConnectionRetryButton") as Button
 	if retry_connection_button != null:
 		var retry_available := state == "异常" or online_retry_available or online_feedback_requires_recovery()

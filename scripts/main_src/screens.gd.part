@@ -161,7 +161,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_viewport_size := effective_viewport_size()
 	var content_size = safe_content_pixel_size()
 	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
-	var achievement_scroll_top := 0.242 if large_text_enabled else 0.228
+	var achievement_scroll_top := 0.246 if large_text_enabled else 0.232
 	var achievement_scroll_max_bottom := 0.935
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
 	var achievement_row_height := achievement_row_height_contract(achievement_viewport_size)
@@ -255,7 +255,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.14, 0.23, 0.18), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.560, 0.156, 0.935, 0.198))
+	apply_rect(achievements_browse_status, rect_full(0.560, 0.194, 0.935, 0.224))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(achievements_browse_status)
 	achievements_browse_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
@@ -1687,7 +1687,7 @@ func _show_online_lobby_impl() -> void:
 	server_caption.tooltip_text = "当前服务器地址"
 	server_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_ui_full_text(server_caption, "服务器", "服务器地址标题")
-	var server_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_left, 0.0, hdr_ep_right, 0.0), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 3), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.94, 0.88, 0.70))  # r415 warm
+	var server_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_left, 0.0, hdr_ep_right, 0.0), online_endpoint_summary(endpoint_text), commercial_ui_font_size(12, 3), Color(0.16, 0.12, 0.08, 0.78), Color(0.78, 0.62, 0.34, 0.28), Color(0.11, 0.23, 0.18))  # r415 ink on paper
 	server_badge.name = "OnlineLobbyServerEndpointBadge"
 	server_badge.offset_top = hdr_top_px + 19.0
 	server_badge.offset_bottom = hdr_top_px + hdr_h_px
@@ -1723,8 +1723,8 @@ func _show_online_lobby_impl() -> void:
 	panel.add_child(endpoint_copy_button)
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
-	var is_connection_error: bool = connection_state == "异常" or online_feedback_requires_recovery()
-	var connection_state_tint: Color = Color(0.62, 0.12, 0.10, 0.98) if is_connection_error else online_connection_state_tint(connection_state)
+	var is_connection_error: bool = connection_state == "异常" or connection_state == "未连接" or online_feedback_requires_recovery()
+	var connection_state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if is_connection_error else (Color(0.68, 0.96, 0.78, 1.0) if connection_state == "已连接" else Color(1.0, 0.88, 0.54, 1.0))
 	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.offset_top = hdr_top_px
@@ -1737,9 +1737,8 @@ func _show_online_lobby_impl() -> void:
 		apply_rect(state_badge_label, rect_full(0.265, 0.04, 0.965, 0.96))
 		state_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(state_badge_label)
-		if is_connection_error:
-			state_badge_label.set_meta("preserve_semantic_color", true)
-			state_badge_label.add_theme_color_override("font_color", Color(0.62, 0.12, 0.10))
+		state_badge_label.set_meta("preserve_semantic_color", true)
+		state_badge_label.add_theme_color_override("font_color", connection_state_tint)
 		set_ui_full_text(state_badge_label, connection_state, "联机连接状态")
 		state_badge_label.set_meta("summary_contract", "connection_state_with_endpoint_and_room")
 		mark_ui_optimization(state_badge_label, "F-539")
@@ -2025,7 +2024,7 @@ func _show_online_lobby_impl() -> void:
 	var room_badge_full_text: String = "房间号 " + (selected_room if room_snapshot_visible and selected_room != "" else "连接后显示")
 	var room_badge_text: String = online_room_badge_display_text(selected_room) if room_snapshot_visible and selected_room != "" else "房间号 连接后显示"
 	var room_badge_rect := rect_full(0.625, 0.022, 0.950, 0.098) if compact_room_badge else rect_full(0.630, 0.022, 0.915, 0.098)
-	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.88, 0.90, 0.76))
+	var room_badge = make_guofeng_secondary_badge(log_panel, room_badge_rect, room_badge_text, commercial_ui_font_size(12, 2), Color(0.026, 0.054, 0.060, 0.94), Color(0.62, 0.58, 0.36, 0.26), Color(0.11, 0.23, 0.18))
 	room_badge.name = "OnlineLobbyRoomBadge"
 	room_badge.visible = room_snapshot_visible
 	room_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2327,8 +2326,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	online_last_lobby_render_revision = online_lobby_render_revision
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
-	var state_is_error: bool = state == "异常" or online_feedback_requires_recovery()
-	var state_tint: Color = Color(0.62, 0.12, 0.10, 0.98) if state_is_error else online_connection_state_tint(state)
+	var state_is_error: bool = state == "异常" or state == "未连接" or online_feedback_requires_recovery()
+	var state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if state_is_error else (Color(0.68, 0.96, 0.78, 1.0) if connected else Color(1.0, 0.88, 0.54, 1.0))
 	var show_room_snapshot := connected or online_waiting_for_server
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
@@ -2339,6 +2338,8 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state_label = find_control.call("OnlineLobbyConnectionStateLabel") as Label
 	if state_label != null:
 		state_label.text = state
+		state_label.set_meta("preserve_semantic_color", true)
+		state_label.add_theme_color_override("font_color", state_tint)
 		state_label.tooltip_text = "服务器连接状态：%s" % state
 		set_ui_full_text(state_label, "服务器连接状态：" + state, "联机连接状态")
 		state_label.set_meta("summary_contract", "endpoint_room_connection_state")
@@ -2347,6 +2348,10 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state_badge = find_control.call("OnlineLobbyConnectionStateBadge") as CanvasItem
 	if state_badge != null:
 		state_badge.modulate = Color.WHITE
+		var state_icon := state_badge.find_child("OnlineLobbyConnectionStateIcon", true, false) as CanvasItem
+		if state_icon != null:
+			state_icon.modulate = Color.WHITE
+			state_icon.self_modulate = state_tint
 	var retry_connection_button := find_control.call("OnlineLobbyConnectionRetryButton") as Button
 	if retry_connection_button != null:
 		var retry_available := state == "异常" or online_retry_available or online_feedback_requires_recovery()
@@ -2385,12 +2390,9 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		else:
 			state_icon.modulate = state_tint
 	if state_label != null:
-		style_guofeng_label(state_label)
-		if state_is_error:
-			state_label.set_meta("preserve_semantic_color", true)
-			state_label.add_theme_color_override("font_color", Color(0.62, 0.12, 0.10))
-		else:
-			state_label.set_meta("preserve_semantic_color", false)
+		style_guofeng_label(state_label, true)
+		state_label.set_meta("preserve_semantic_color", true)
+		state_label.add_theme_color_override("font_color", state_tint)
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
 	var lobby_chat_button := find_control.call("ChatLobbyButton") as Button
 	if lobby_chat_button != null:
