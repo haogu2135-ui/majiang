@@ -53932,15 +53932,16 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane or top HUD.
-		context_height_px = 56.0 if large_text_enabled else 48.0
+		context_height_px = 55.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.
 		context_height_px = 56.0 if large_text_enabled else 48.0
 	# Keep every viewport in the same upper-left reading lane strictly below Top HUD
-	# (>=4px clearance) and left of the transformed top wall.
+	# (>=2px on compact large-text to clear left wall gutter, >=4px elsewhere).
 	var header_left := 0.020
-	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + 4.0 / safe_height)
+	var header_gap_px := 2.0 if (narrow_context and large_text_enabled) else 4.0
+	var header_top := maxf(0.108, battle_top_hud_layout_rect().size.y + header_gap_px / safe_height)
 	var header_right := 0.285
 	var header_candidate := rect_full(header_left, header_top, header_right, header_top + context_height_px / safe_height)
 	if pending_claim_context_candidate_is_clear(header_candidate, table_left, table_top, table_width, table_height, occupancy_snapshot):
