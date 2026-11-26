@@ -28797,7 +28797,7 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var content_height := countdown_height + line_gap + warning_height
 		var countdown_top := maxf(2.0, floorf((resolved_timer_h - gauge_reserve - content_height) * 0.5))
 		var warning_top := countdown_top + countdown_height + line_gap
-		var h_pad := 6.0 if (large_text_enabled and effective_viewport_size().x <= 960.0) else 8.0
+		var h_pad := 3.0 if (large_text_enabled and effective_viewport_size().x <= 960.0) else 8.0
 		apply_rect(timer_label, rect_full(0.0, 0.0, 1.0, 0.0))
 		timer_label.offset_left = h_pad
 		timer_label.offset_right = -h_pad
