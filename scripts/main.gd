@@ -24801,7 +24801,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 			# The right history control shares the corner with the top pager and
 			# response dock. A compact target leaves a horizontal gap beside the
 			# top pager instead of pushing the whole control into the action rows.
-			var gutter_width := UI_MIN_TOUCH_TARGET if seat == 1 else (64.0 if overlay.size.x < 105.0 else maxf(68.0, minf(overlay.size.x, float(mini(columns, visible_count)) * tile_size.x + float(maxi(0, mini(columns, visible_count) - 1) * DISCARD_GRID_SEPARATION))))
+			var gutter_width := UI_MIN_TOUCH_TARGET if seat == 1 else (68.0 if overlay.size.x < 105.0 else maxf(68.0, minf(overlay.size.x, float(mini(columns, visible_count)) * tile_size.x + float(maxi(0, mini(columns, visible_count) - 1) * DISCARD_GRID_SEPARATION))))
 			var gutter_left := maxf(0.0, overlay.size.x - gutter_width)
 			if seat == 1:
 				var bottom_archive := parent.find_child("DiscardRiverArchiveButton_0", true, false) as Control
@@ -24840,7 +24840,7 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 				target_x = bottom_river_left_px - 6.0 - 50.0
 				if archive_viewport.x <= 960.0 and large_text_enabled:
 					var left_river_right_px := battle_table_anchor_root_rect(seat_discard_rect(3), archive_viewport).size.x * archive_content.x
-					target_x = minf(target_x, left_river_right_px - 64.0 - 8.0 - 50.0)
+					target_x = minf(target_x, left_river_right_px - 68.0 - 8.0 - 50.0)
 			else:
 				target_x = bottom_river_right_px + 6.0
 				var dock_left_px := action_bar_dock_layout_rect(archive_viewport, archive_content).position.x * archive_content.x
