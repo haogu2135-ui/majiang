@@ -2364,8 +2364,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			or best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
 			or best_human_pressure >= 30.0 \
 			or best_max_opp_risk >= 26.0)
-	# 同向听可避高危守卫：首选弃牌达全桌高危（>=31）或对玩家高危（>=28）时，若存在不降向听、保牌质且显著低危的替代张，直接切换而不损向听。
-	var same_shanten_hd_only: bool = (not standard_guard_active) and (best_risk >= AI_DANGER_RISK_HIGH or best_human_pressure >= 28.0)
+	# 同向听可避高危守卫：首选弃牌达全桌高危（>=31）或对玩家高压（>=30）时，若存在不降向听、保牌质且显著低危的替代张，直接切换而不损向听。
+	var same_shanten_hd_only: bool = (not standard_guard_active) and (best_risk >= AI_DANGER_RISK_HIGH or best_human_pressure >= 30.0)
 	if not standard_guard_active and not same_shanten_hd_only:
 		return
 	var best_ukeire: int = int(best.get("ukeire", 0))
@@ -2404,7 +2404,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			and cand_human_p_ss <= best_human_pressure + 4.0 \
 			and score_gap <= (210.0 if best_shanten <= 0 else 260.0)
 		var same_shanten_human_relief: bool = shanten_delta <= 0 \
-			and best_human_pressure >= 28.0 \
+			and best_human_pressure >= 30.0 \
 			and same_shanten_quality_ok \
 			and cand_human_p_ss <= best_human_pressure - maxf(8.0, best_human_pressure * 0.35) \
 			and cand_risk_ss <= best_risk + 4.0 \
