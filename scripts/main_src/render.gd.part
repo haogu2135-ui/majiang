@@ -13512,7 +13512,8 @@ func draw_loading_progress_feedback(parent: Control, progress_ratio: float = -1.
 	fill.name = "LoadingProgressFill"
 	if route is TextureRect:
 		if loading_rail_tex != null:
-			_skin_guofeng_meter_bar(route as TextureRect, fill as TextureRect if fill is TextureRect else null, loading_rail_tex, loading_fill_tex, Color.WHITE)
+			var loading_fill_tex_rect: TextureRect = (fill as TextureRect) if fill is TextureRect else null
+			_skin_guofeng_meter_bar(route as TextureRect, loading_fill_tex_rect, loading_rail_tex, loading_fill_tex, Color.WHITE)
 		else:
 			configure_guofeng_button_slice(route as TextureRect, true, 32, 0.125)
 			fill.self_modulate = Color(0.90, 0.97, 0.92)
