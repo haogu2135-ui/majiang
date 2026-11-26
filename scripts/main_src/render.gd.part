@@ -17624,8 +17624,8 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 		target_panel_w = minf(920.0 * modal_scale, settings_content_size.x * 0.86)
 		target_panel_h = minf(580.0 * modal_scale, settings_content_size.y * 0.86)
 	else:
-		target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
 		if wide_settings:
+			target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
 			if section_name == "声音":
 				target_panel_h = minf(406.0, settings_content_size.y * 0.84)
 			elif section_name == "体验":
@@ -17633,12 +17633,13 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 			else:
 				target_panel_h = minf(512.0, settings_content_size.y * 0.84)
 		else:
+			target_panel_w = minf(800.0, settings_content_size.x * 0.86)
 			if section_name == "声音":
-				target_panel_h = minf(356.0, settings_content_size.y * 0.86)
+				target_panel_h = minf(442.0, settings_content_size.y * 0.86)
 			elif section_name == "体验":
-				target_panel_h = minf(430.0, settings_content_size.y * 0.86)
-			else:
 				target_panel_h = minf(448.0, settings_content_size.y * 0.86)
+			else:
+				target_panel_h = minf(456.0, settings_content_size.y * 0.86)
 	var panel_fraction := Vector2(target_panel_w / maxf(1.0, settings_content_size.x), target_panel_h / maxf(1.0, settings_content_size.y))
 	var panel_origin := (Vector2.ONE - panel_fraction) * 0.5
 	return rect_full(panel_origin.x, panel_origin.y, panel_origin.x + panel_fraction.x, panel_origin.y + panel_fraction.y)
@@ -19857,7 +19858,7 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	map.name = "UpdateDialogStageMap"
 	parent.add_child(map)
 	var stage_vp := effective_viewport_size()
-	var stage_fs := guofeng_modal_font_size(13, stage_vp, 1.20)
+	var stage_fs := 16 if stage_vp.x >= 1600.0 else 13
 	var stage_line := add_optional_gpt_illustration_texture(map, "quiet_gold_accent", rect_full(0.11, 0.445, 0.89, 0.495), 0.48, false)
 	if stage_line != null:
 		stage_line.name = "UpdateStageLine"
@@ -21913,7 +21914,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", accessibility_font_size(17 if wide_settings else 15))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.set_meta("ui_full_text", status)
 	button.set_meta("accessible_name", title + "：" + status)
 	var button_full_text := button.tooltip_text if title == "本地进度" else title + "：" + status

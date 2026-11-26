@@ -3398,8 +3398,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			or best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
 			or best_human_pressure >= 30.0 \
 			or best_max_opp_risk >= 26.0)
-	# 同向听可避高危守卫：首选弃牌达全桌高危（>=31）或对玩家高危（>=28）时，若存在不降向听、保牌质且显著低危的替代张，直接切换而不损向听。
-	var same_shanten_hd_only: bool = (not standard_guard_active) and (best_risk >= AI_DANGER_RISK_HIGH or best_human_pressure >= 28.0)
+	# 同向听可避高危守卫：首选弃牌达全桌高危（>=31）或对玩家高压（>=30）时，若存在不降向听、保牌质且显著低危的替代张，直接切换而不损向听。
+	var same_shanten_hd_only: bool = (not standard_guard_active) and (best_risk >= AI_DANGER_RISK_HIGH or best_human_pressure >= 30.0)
 	if not standard_guard_active and not same_shanten_hd_only:
 		return
 	var best_ukeire: int = int(best.get("ukeire", 0))
@@ -3438,7 +3438,7 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			and cand_human_p_ss <= best_human_pressure + 4.0 \
 			and score_gap <= (210.0 if best_shanten <= 0 else 260.0)
 		var same_shanten_human_relief: bool = shanten_delta <= 0 \
-			and best_human_pressure >= 28.0 \
+			and best_human_pressure >= 30.0 \
 			and same_shanten_quality_ok \
 			and cand_human_p_ss <= best_human_pressure - maxf(8.0, best_human_pressure * 0.35) \
 			and cand_risk_ss <= best_risk + 4.0 \
@@ -30856,8 +30856,8 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 		target_panel_w = minf(920.0 * modal_scale, settings_content_size.x * 0.86)
 		target_panel_h = minf(580.0 * modal_scale, settings_content_size.y * 0.86)
 	else:
-		target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
 		if wide_settings:
+			target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
 			if section_name == "声音":
 				target_panel_h = minf(406.0, settings_content_size.y * 0.84)
 			elif section_name == "体验":
@@ -30865,12 +30865,13 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 			else:
 				target_panel_h = minf(512.0, settings_content_size.y * 0.84)
 		else:
+			target_panel_w = minf(800.0, settings_content_size.x * 0.86)
 			if section_name == "声音":
-				target_panel_h = minf(356.0, settings_content_size.y * 0.86)
+				target_panel_h = minf(442.0, settings_content_size.y * 0.86)
 			elif section_name == "体验":
-				target_panel_h = minf(430.0, settings_content_size.y * 0.86)
-			else:
 				target_panel_h = minf(448.0, settings_content_size.y * 0.86)
+			else:
+				target_panel_h = minf(456.0, settings_content_size.y * 0.86)
 	var panel_fraction := Vector2(target_panel_w / maxf(1.0, settings_content_size.x), target_panel_h / maxf(1.0, settings_content_size.y))
 	var panel_origin := (Vector2.ONE - panel_fraction) * 0.5
 	return rect_full(panel_origin.x, panel_origin.y, panel_origin.x + panel_fraction.x, panel_origin.y + panel_fraction.y)
@@ -33089,7 +33090,7 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	map.name = "UpdateDialogStageMap"
 	parent.add_child(map)
 	var stage_vp := effective_viewport_size()
-	var stage_fs := guofeng_modal_font_size(13, stage_vp, 1.20)
+	var stage_fs := 16 if stage_vp.x >= 1600.0 else 13
 	var stage_line := add_optional_gpt_illustration_texture(map, "quiet_gold_accent", rect_full(0.11, 0.445, 0.89, 0.495), 0.48, false)
 	if stage_line != null:
 		stage_line.name = "UpdateStageLine"
@@ -35145,7 +35146,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	button.name = "SettingRowButton_%s" % title
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.add_theme_font_size_override("font_size", accessibility_font_size(17 if wide_settings else 15))
+	button.add_theme_font_size_override("font_size", accessibility_font_size(15))
 	button.set_meta("ui_full_text", status)
 	button.set_meta("accessible_name", title + "：" + status)
 	var button_full_text := button.tooltip_text if title == "本地进度" else title + "：" + status
@@ -55583,7 +55584,7 @@ func ensure_update_dialog() -> void:
 		entry_tw.set_parallel(true)
 		entry_tw.tween_property(update_dialog, "modulate:a", 1.0, 0.2).from(0.0).set_ease(Tween.EASE_OUT)
 		entry_tw.tween_property(panel, "scale", Vector2.ONE, 0.3).from(Vector2(0.8, 0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	var title_fs := guofeng_modal_font_size(22, update_vp, 1.25)
+	var title_fs := 26 if update_vp.x >= 1600.0 else 22
 	var title = make_label(panel, "游戏更新 · 当前 v%s" % app_version_short(), title_fs, Color(0.10, 0.22, 0.16), true)
 	title.name = "UpdateDialogTitle"
 	title.add_theme_font_override("font", ui_heading_font())
@@ -55591,17 +55592,17 @@ func ensure_update_dialog() -> void:
 	title.set_meta("installed_version", app_version())
 	title.set_meta("available_version_owner", "UpdateStatusLabel")
 	title.set_meta("version_semantics", "当前版本与远端版本分列；远端版本不得替代当前版本")
-	apply_rect(title, rect_full(0.07, 0.048, 0.93, 0.135))
+	apply_rect(title, rect_full(0.07, 0.042, 0.93, 0.124))
 	draw_update_dialog_stage_map(panel)
-	var status_fs := guofeng_modal_font_size(18, update_vp, 1.22)
+	var status_fs := 21 if update_vp.x >= 1600.0 else 18
 	update_status_label = make_label(panel, "", status_fs, Color(0.10, 0.22, 0.16), false)
 	update_status_label.name = "UpdateStatusLabel"
 	update_status_label.set_meta("status_hierarchy", "primary_fixed_line")
 	update_status_label.set_meta("error_is_self_describing", true)
-	# Reserve a second compact line for network/error states. Vertically center
-	# inside the status band so single-line copy sits cleanly above the meter rail.
-	apply_rect(update_status_label, rect_full(0.07, 0.165, 0.93, 0.295))
-	update_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# Reserve a second compact line for network/error states. Keep top-aligned in
+	# large-text mode so wrapped lines always clear the progress rail below.
+	apply_rect(update_status_label, rect_full(0.07, 0.148, 0.93, 0.295))
+	update_status_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP if large_text_enabled else VERTICAL_ALIGNMENT_CENTER
 	update_status_label.tooltip_text = update_message
 	configure_wrapped_label(update_status_label, paper_width * 0.86, 0.0, 4.0)
 	update_progress = ProgressBar.new()
@@ -55614,7 +55615,7 @@ func ensure_update_dialog() -> void:
 	update_progress.add_theme_stylebox_override("background", style(Color(0.014, 0.034, 0.038, 0.0), 10, Color(0.22, 0.30, 0.30, 0.0), 0, 0))
 	update_progress.add_theme_stylebox_override("fill", style(Color(0.16, 0.48, 0.36, 0.0), 10, Color(0.54, 0.76, 0.60, 0.0), 0, 0))
 	panel.add_child(update_progress)
-	var progress_track_rect := rect_full(0.072, 0.318, 0.928, 0.362)
+	var progress_track_rect := rect_full(0.072, 0.326 if large_text_enabled else 0.322, 0.928, 0.362 if large_text_enabled else 0.360)
 	var progress_fill_rect := rect_full(0.08, 0.330, 0.92, 0.350)
 	apply_rect(update_progress, progress_track_rect)
 	var meter_rail_tex := guofeng_meter_rail_texture()
@@ -55633,7 +55634,7 @@ func ensure_update_dialog() -> void:
 		panel.move_child(update_fill_face, update_progress.get_index() + 1)
 	if meter_rail_tex != null and meter_fill_tex != null and update_track != null and update_fill_face != null:
 		_skin_guofeng_meter_bar(update_track, update_fill_face, meter_rail_tex, meter_fill_tex)
-	var progress_fs := guofeng_modal_font_size(15, update_vp, 1.20)
+	var progress_fs := 18 if update_vp.x >= 1600.0 else 15
 	update_progress_label = make_label(panel, "", progress_fs, Color(0.10, 0.22, 0.16), false)
 	update_progress_label.name = "UpdateProgressLabel"
 	update_progress_label.set_meta("status_hierarchy", "progress_percent_line")
