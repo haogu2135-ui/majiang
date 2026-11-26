@@ -4731,7 +4731,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane or top HUD.
-		context_height_px = 50.0 if large_text_enabled else 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.

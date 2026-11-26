@@ -4684,10 +4684,10 @@ func _polish_stats_detail_rows_wave5(content: Control, stats_source: Dictionary,
 	var safe_games: int = maxi(1, games)
 	var context_notes := {
 		"总场次": "%s · 已结算" % stats_filter_label(stats_selected_rule),
-		"累计净分": "场均 %+d分" % int(round(float(total_score) / float(safe_games))),
+		"累计净分": "场均 %+d 分" % int(round(float(total_score) / float(safe_games))),
 		"单局最佳": "历史单局最高分" if best_score > 0 else "暂无正分纪录",
-		"总手牌数": "场均 %.1f手" % (float(total_hands) / float(safe_games)),
-		"累计番数": "场均 %.1f番" % (float(fan_total) / float(safe_games)),
+		"总手牌数": "场均 %.1f 手" % (float(total_hands) / float(safe_games)),
+		"累计番数": "场均 %.1f 番" % (float(fan_total) / float(safe_games)),
 		"自摸局": ("占胜场 %d%%" % int(round(100.0 * float(self_draws) / float(maxi(1, wins))))) if wins > 0 else "暂无自摸记录",
 	}
 	for child in content.get_children():
@@ -4905,16 +4905,16 @@ func _show_stats_screen_impl() -> void:
 		style_guofeng_secondary_action(start_first_game, true)
 		configure_ordered_focus_navigation(panel, [back, start_first_game], "StatsBackButton")
 	else:
-		add_stat_row(content, "总场次", "%d局" % stats_games_played, stats_row_height)
-		add_stat_row(content, "胜场", "%d局" % stats_games_won, stats_row_height)
+		add_stat_row(content, "总场次", "%d 局" % stats_games_played, stats_row_height)
+		add_stat_row(content, "胜场", "%d 局" % stats_games_won, stats_row_height)
 		add_stat_row(content, "胜率", "%.1f%%" % (stats_win_rate_display * 100.0), stats_row_height)
-		add_stat_row(content, "累计净分", "%d分" % int(stats_source.get("score", stats_source.get("total_score", 0))), stats_row_height)
+		add_stat_row(content, "累计净分", "%d 分" % int(stats_source.get("score", stats_source.get("total_score", 0))), stats_row_height)
 		if stats_selected_rule == "":
-			add_stat_row(content, "单局最佳", "%d分" % int(stats_source.get("best_score", 0)), stats_row_height)
-			add_stat_row(content, "总手牌数", "%d手" % int(stats_source.get("total_hands", 0)), stats_row_height)
+			add_stat_row(content, "单局最佳", "%d 分" % int(stats_source.get("best_score", 0)), stats_row_height)
+			add_stat_row(content, "总手牌数", "%d 手" % int(stats_source.get("total_hands", 0)), stats_row_height)
 		else:
-			add_stat_row(content, "累计番数", "%d番" % int(stats_source.get("fan_total", 0)), stats_row_height)
-			add_stat_row(content, "自摸局", "%d局" % int(stats_source.get("self_draws", 0)), stats_row_height)
+			add_stat_row(content, "累计番数", "%d 番" % int(stats_source.get("fan_total", 0)), stats_row_height)
+			add_stat_row(content, "自摸局", "%d 局" % int(stats_source.get("self_draws", 0)), stats_row_height)
 		_polish_stats_detail_rows_wave5(content, stats_source, stats_games_played, stats_games_won)
 		mark_ui_optimization(filter_button, "F-401")
 		mark_ui_optimization(latest_button, "F-401")

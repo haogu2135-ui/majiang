@@ -3164,8 +3164,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if diff == AI_DIFFICULTY_HARD:
 				if risk >= AI_DANGER_RISK_SOFT:
 					cheap -= (risk - 12.0) * 1.35
-				if fast_max_opp_risk >= 24.0:
-					cheap -= (fast_max_opp_risk - 20.0) * 1.45
+				if fast_max_opp_risk >= 22.0:
+					cheap -= (fast_max_opp_risk - 19.0) * 1.35
 			item["cheap_score"] = cheap
 			item["fast_risk"] = risk
 			var fast_safety_value := 0.0
@@ -3969,9 +3969,6 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 	if shanten == 1 and ukeire >= 10 and risk < AI_DANGER_RISK_HIGH:
 		# 宽一向听（>=10有效进张）且非高危张时保持进攻节奏，避免中盘过早保守折返拖慢和牌速度。
 		tenpai_bonus = 60.0 + minf(60.0, float(ukeire - 10) * 6.0)
-	elif diff_idx == AI_DIFFICULTY_HARD and shanten == 1 and ukeire >= 8 and risk < AI_DANGER_RISK_SOFT and max_opp_risk < 12.0:
-		# 困难档安全局面下的厚一向听提速，避免在对手自摸前过度慢打。
-		tenpai_bonus = 42.0
 	var fold_push = tenpai_fold_adjustment(seat, shanten, ukeire, wait_best_points, wait_total_remaining, safety, risk, feed_risk, pressure_context, eval_context, kabe_strength, max_opp_risk)
 	# 静默模式下 2/3 向听未做 34 张进张扫描时，用搭子质量估算厚度，避免误判所有中盘手牌为 0 进张极薄牌。
 	var midgame_ukeire_arg: int = ukeire
@@ -4088,10 +4085,10 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				if is_term_or_hon:
 					danger_pen = maxf(0.0, danger_pen - 5.0)
 		score -= danger_pen * defense
-	# R8b: 困难档单家定点重危加罚（仅针对>=23的真正染手/多副露定点炮弹，避免中盘过度弃攻拖慢局速）。
-	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 23.0:
-		var focused_opp_pen: float = (max_opp_risk - 20.0) * 1.45
-		if max_opp_risk >= 28.0 and safety == "":
+	# R8b: 困难档单家定点重危加罚（仅针对>=21的真正染手/多副露定点炮弹，平衡放炮防线与局速）。
+	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 21.0:
+		var focused_opp_pen: float = (max_opp_risk - 19.0) * 1.40
+		if max_opp_risk >= 26.0 and safety == "":
 			focused_opp_pen += 16.0
 		score -= focused_opp_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
@@ -28678,9 +28675,9 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
 		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
-		var context_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
+		var context_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
 		var timer_top := context_rect.size.y + context_gap_px / content_size.y
-		var seat_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
+		var seat_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
 		var est_countdown_h := ceilf(ui_heading_font().get_height(accessibility_font_size(12)))
 		var est_warning_h := ceilf(ui_cjk_font().get_height(accessibility_font_size(10)))
 		var desired_timer_h := maxf(50.0, est_countdown_h + est_warning_h + 18.0)
@@ -30919,7 +30916,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var compact_nav := compact_settings
 	for settings_section_name in ["声音", "体验", "系统"]:
 		var section_name := str(settings_section_name)
-		var active_section_copy := section_name if (compact_nav or large_text_enabled) else ("当前 · " + section_name)
+		var active_section_copy := ("当前" + section_name) if (compact_nav or large_text_enabled) else ("当前 · " + section_name)
 		var section_nav_button := make_small_button(active_section_copy if section_name == active_settings_section else section_name, Color(0.98, 0.92, 0.72), func() -> void:
 			focus_settings_section(settings_content_parent, settings_large_text_scroll, section_name)
 		)
@@ -30994,7 +30991,7 @@ func sync_settings_section_navigation(section_name: String) -> void:
 			nav_button.set_meta("section_active", is_active)
 			var nav_section := str(nav_button.get_meta("section_name", ""))
 			var compact_nav_sync := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 960.0
-			nav_button.text = (nav_section if (compact_nav_sync or large_text_enabled) else ("当前 · " + nav_section)) if is_active else nav_section
+			nav_button.text = (("当前" + nav_section) if (compact_nav_sync or large_text_enabled) else ("当前 · " + nav_section)) if is_active else nav_section
 			apply_guofeng_button_face(nav_button, is_active)
 			set_ui_full_text(nav_button, "当前设置分区：" + nav_section if is_active else "显示" + nav_section + "设置", "设置分区入口：" + nav_section)
 			if is_active and active_marker != null and active_marker.get_parent() != nav_button:
@@ -41772,10 +41769,10 @@ func _polish_stats_detail_rows_wave5(content: Control, stats_source: Dictionary,
 	var safe_games: int = maxi(1, games)
 	var context_notes := {
 		"总场次": "%s · 已结算" % stats_filter_label(stats_selected_rule),
-		"累计净分": "场均 %+d分" % int(round(float(total_score) / float(safe_games))),
+		"累计净分": "场均 %+d 分" % int(round(float(total_score) / float(safe_games))),
 		"单局最佳": "历史单局最高分" if best_score > 0 else "暂无正分纪录",
-		"总手牌数": "场均 %.1f手" % (float(total_hands) / float(safe_games)),
-		"累计番数": "场均 %.1f番" % (float(fan_total) / float(safe_games)),
+		"总手牌数": "场均 %.1f 手" % (float(total_hands) / float(safe_games)),
+		"累计番数": "场均 %.1f 番" % (float(fan_total) / float(safe_games)),
 		"自摸局": ("占胜场 %d%%" % int(round(100.0 * float(self_draws) / float(maxi(1, wins))))) if wins > 0 else "暂无自摸记录",
 	}
 	for child in content.get_children():
@@ -41993,16 +41990,16 @@ func _show_stats_screen_impl() -> void:
 		style_guofeng_secondary_action(start_first_game, true)
 		configure_ordered_focus_navigation(panel, [back, start_first_game], "StatsBackButton")
 	else:
-		add_stat_row(content, "总场次", "%d局" % stats_games_played, stats_row_height)
-		add_stat_row(content, "胜场", "%d局" % stats_games_won, stats_row_height)
+		add_stat_row(content, "总场次", "%d 局" % stats_games_played, stats_row_height)
+		add_stat_row(content, "胜场", "%d 局" % stats_games_won, stats_row_height)
 		add_stat_row(content, "胜率", "%.1f%%" % (stats_win_rate_display * 100.0), stats_row_height)
-		add_stat_row(content, "累计净分", "%d分" % int(stats_source.get("score", stats_source.get("total_score", 0))), stats_row_height)
+		add_stat_row(content, "累计净分", "%d 分" % int(stats_source.get("score", stats_source.get("total_score", 0))), stats_row_height)
 		if stats_selected_rule == "":
-			add_stat_row(content, "单局最佳", "%d分" % int(stats_source.get("best_score", 0)), stats_row_height)
-			add_stat_row(content, "总手牌数", "%d手" % int(stats_source.get("total_hands", 0)), stats_row_height)
+			add_stat_row(content, "单局最佳", "%d 分" % int(stats_source.get("best_score", 0)), stats_row_height)
+			add_stat_row(content, "总手牌数", "%d 手" % int(stats_source.get("total_hands", 0)), stats_row_height)
 		else:
-			add_stat_row(content, "累计番数", "%d番" % int(stats_source.get("fan_total", 0)), stats_row_height)
-			add_stat_row(content, "自摸局", "%d局" % int(stats_source.get("self_draws", 0)), stats_row_height)
+			add_stat_row(content, "累计番数", "%d 番" % int(stats_source.get("fan_total", 0)), stats_row_height)
+			add_stat_row(content, "自摸局", "%d 局" % int(stats_source.get("self_draws", 0)), stats_row_height)
 		_polish_stats_detail_rows_wave5(content, stats_source, stats_games_played, stats_games_won)
 		mark_ui_optimization(filter_button, "F-401")
 		mark_ui_optimization(latest_button, "F-401")
@@ -53935,7 +53932,7 @@ func pending_claim_context_layout_rect(content_size: Vector2 = Vector2.ZERO, vie
 	if narrow_context:
 		# Use the independent left-top slot so the panel can keep readable source
 		# and tile labels without covering the right-seat meld lane or top HUD.
-		context_height_px = 50.0 if large_text_enabled else 48.0
+		context_height_px = 56.0 if large_text_enabled else 48.0
 	if not narrow_context:
 		# The wide/medium channel sits between the top river and the right-side
 		# meld lane, ending beside the action dock instead of floating at the HUD.

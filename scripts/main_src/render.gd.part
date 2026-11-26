@@ -15509,9 +15509,9 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
 		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
-		var context_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
+		var context_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
 		var timer_top := context_rect.size.y + context_gap_px / content_size.y
-		var seat_gap_px := 4.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
+		var seat_gap_px := 3.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
 		var est_countdown_h := ceilf(ui_heading_font().get_height(accessibility_font_size(12)))
 		var est_warning_h := ceilf(ui_cjk_font().get_height(accessibility_font_size(10)))
 		var desired_timer_h := maxf(50.0, est_countdown_h + est_warning_h + 18.0)
@@ -17750,7 +17750,7 @@ func draw_settings_overlay(parent: Control) -> void:
 	var compact_nav := compact_settings
 	for settings_section_name in ["声音", "体验", "系统"]:
 		var section_name := str(settings_section_name)
-		var active_section_copy := section_name if (compact_nav or large_text_enabled) else ("当前 · " + section_name)
+		var active_section_copy := ("当前" + section_name) if (compact_nav or large_text_enabled) else ("当前 · " + section_name)
 		var section_nav_button := make_small_button(active_section_copy if section_name == active_settings_section else section_name, Color(0.98, 0.92, 0.72), func() -> void:
 			focus_settings_section(settings_content_parent, settings_large_text_scroll, section_name)
 		)
@@ -17825,7 +17825,7 @@ func sync_settings_section_navigation(section_name: String) -> void:
 			nav_button.set_meta("section_active", is_active)
 			var nav_section := str(nav_button.get_meta("section_name", ""))
 			var compact_nav_sync := effective_viewport_size().y <= 560.0 or effective_viewport_size().x <= 960.0
-			nav_button.text = (nav_section if (compact_nav_sync or large_text_enabled) else ("当前 · " + nav_section)) if is_active else nav_section
+			nav_button.text = (("当前" + nav_section) if (compact_nav_sync or large_text_enabled) else ("当前 · " + nav_section)) if is_active else nav_section
 			apply_guofeng_button_face(nav_button, is_active)
 			set_ui_full_text(nav_button, "当前设置分区：" + nav_section if is_active else "显示" + nav_section + "设置", "设置分区入口：" + nav_section)
 			if is_active and active_marker != null and active_marker.get_parent() != nav_button:
