@@ -588,9 +588,9 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
 	elif role == "pass" and not focused:
-		text_color = Color(0.30, 0.35, 0.33)
+		text_color = Color(0.96, 0.93, 0.80)
 		button.add_theme_font_override("font", ui_cjk_font())
-		on_ink = false
+		on_ink = true
 	elif group == "tools" and not focused:
 		text_color = Color(0.99, 0.95, 0.82)
 	elif group == "advice" and not focused:
@@ -11660,7 +11660,12 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		var archive_viewport_size := viewport_snapshot if viewport_snapshot != Vector2.ZERO else effective_viewport_size()
 		var detached_top_archive := seat == 2 and top_discard_archive_uses_side_gutter(archive_viewport_size)
 		var side_gutter := discard_side_archive_uses_gutter(seat, zone_rect, columns, rows, parent.size)
+		var visible_action := "查看更早" if visible_start > 0 else "回到最新"
 		var visible_summary := "查看\n更早" if visible_start > 0 else "回到\n最新"
+		if detached_top_archive:
+			visible_summary = "对家\n" + visible_summary
+		elif side_gutter and seat != 1:
+			visible_summary = visible_action
 		archive_button.set_meta("visible_summary", visible_summary)
 		archive_button.set_meta("window_label", page_text)
 		archive_button.set_meta("latest_discard_page_hint", latest_page_hint != "")
@@ -12702,11 +12707,11 @@ func draw_game_top_hud(parent: Control) -> void:
 		status_rect = Rect2(Vector2(0.274, 0.090), Vector2(0.584, 0.515))
 		wall_rect = Rect2(Vector2(0.596, 0.120), Vector2(0.766, 0.875))
 	else:
-		# Keep room code + copy on left, center status near mid-axis, compact score strip, and wall count on right.
-		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.272, 0.535))
-		status_rect = Rect2(Vector2(0.284, 0.140), Vector2(0.478, 0.860))
-		score_strip_rect = Rect2(Vector2(0.488, 0.150), Vector2(0.678, 0.850))
-		wall_rect = Rect2(Vector2(0.688, 0.120), Vector2(0.790, 0.875))
+		# Keep room code + copy on left, center status near mid-axis, compact score strip, and full wall count on right.
+		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.252, 0.535))
+		status_rect = Rect2(Vector2(0.260, 0.140), Vector2(0.450, 0.860))
+		score_strip_rect = Rect2(Vector2(0.456, 0.150), Vector2(0.654, 0.850))
+		wall_rect = Rect2(Vector2(0.662, 0.120), Vector2(0.806, 0.875))
 	hud.set_meta("header_lane_clearance_px", 8.0)
 	hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
 	hud.set_meta("header_lane_rects", [score_strip_rect, wall_rect, TOP_HUD_SETTINGS_BUTTON_RECT, TOP_HUD_BACK_BUTTON_RECT, TOP_HUD_UPDATE_BUTTON_RECT])
@@ -12827,7 +12832,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var hud_last_discard := get_last_discard()
 	var hud_last_discard_text := tile_label(hud_last_discard) if hud_last_discard != "" else "无"
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 16 if wide_top_hud else 14, Color(0.08, 0.20, 0.14, 1.0), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 16 if wide_top_hud else (12 if compact_top_hud else 13), Color(0.08, 0.20, 0.14, 1.0), true)
 	wall.name = "TopHudWallText"
 	wall.add_theme_font_override("font", ui_heading_font())
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
@@ -12996,7 +13001,7 @@ func draw_hand(parent: Control) -> void:
 	var deck_right_anchor := HAND_TRAY_WOOD_DECK_RIGHT if wood_deck_tex != null else 1.0
 	var paper_rect := rect_full(0.0, deck_top_anchor, deck_right_anchor, deck_bottom_anchor) if wood_deck_tex != null else rect_full(0.0, minf(0.0, header_top), 1.0, 1.0)
 	var tray_paper := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "hand_tray_jiangnan_gpt", 1.0)
-	tray_paper.self_modulate = Color(0.56, 0.64, 0.72, 0.95) if (mode == "online_game" and online_game_disconnected()) else Color.WHITE
+	tray_paper.self_modulate = Color.WHITE
 	tray_paper.name = "HandTrayPaper"
 	tray.add_child(tray_paper)
 	if wood_deck_tex != null:
@@ -13286,7 +13291,7 @@ func draw_hand(parent: Control) -> void:
 	# Keep the 46px compact hit target clear of the tray's bottom lip while
 	# retaining a visible separation from the tutorial lane above it.
 	hand_box.offset_top = -2.0 if tutorial_hint_visible else (-9.0 if hand_viewport_size.y >= 900.0 else -7.5)
-	hand_box.offset_bottom = -22.0 if hand_viewport_size.y >= 900.0 else -15.0
+	hand_box.offset_bottom = -22.0 if hand_viewport_size.y >= 900.0 else (-18.0 if hand_viewport_size.y >= 700.0 else -15.0)
 	tray.add_child(hand_box)
 
 	# 手牌滑入动画
@@ -21101,23 +21106,24 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 		button.set_meta("ui_danger_action", true)
 	var is_cinnabar_role: bool = role in ["win", "danger_confirm"]
 	var has_cinnabar: bool = is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face: bool = role in ["safe", "next"]
+	var ink_face: bool = role in ["pass", "safe", "next"]
 	var has_active_ink: bool = ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
 	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))
+	var use_raw_pending_face: bool = role in ["chi", "peng", "gang", "win", "pass"]
 	var action_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if action_face != null:
 		var face_source := optional_gpt_illustration_texture(face_key)
 		if face_source != null:
-			action_face.texture = face_source
-			configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
-			var face_tint := Color(0.87, 0.88, 0.85, 0.96) if role == "pass" else (Color(1.0, 0.95, 0.78, 1.0) if role in ["gang", "peng"] else Color.WHITE)
-			action_face.modulate = face_tint
-			action_face.self_modulate = face_tint
-			var action_edges := action_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
-			if action_edges != null:
-				action_edges.self_modulate = face_tint
+			if use_raw_pending_face:
+				configure_guofeng_button_slice(action_face, false)
+				action_face.texture = face_source
+			else:
+				action_face.texture = face_source
+				configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
+			action_face.modulate = Color.WHITE
+			action_face.self_modulate = Color.WHITE
 			button.set_meta("guofeng_button_face_key", face_key)
 	if is_cinnabar_role:
 		var danger_text_color := Color(0.99, 0.95, 0.84) if has_cinnabar else Color(0.62, 0.16, 0.13)

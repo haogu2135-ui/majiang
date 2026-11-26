@@ -12382,7 +12382,7 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 		return rect_full(wall_right, 0.545, river.position.x - 8.0 / content_size.x, 0.615)
 	if viewport_size.x <= 960.0 or viewport_size.y <= 560.0:
 		if seat == 2:
-			return rect_full(0.668, 0.136, 0.954, 0.203)
+			return rect_full(0.668, 0.136, 0.980, 0.203)
 		if seat == 3:
 			return rect_full(0.125, 0.240, 0.185, 0.660)
 		if seat == 1:

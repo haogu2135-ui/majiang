@@ -13824,9 +13824,9 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
 	elif role == "pass" and not focused:
-		text_color = Color(0.30, 0.35, 0.33)
+		text_color = Color(0.96, 0.93, 0.80)
 		button.add_theme_font_override("font", ui_cjk_font())
-		on_ink = false
+		on_ink = true
 	elif group == "tools" and not focused:
 		text_color = Color(0.99, 0.95, 0.82)
 	elif group == "advice" and not focused:
@@ -24896,7 +24896,12 @@ func draw_discard_river_owner_overlay(parent: Control, seat: int, zone_rect: Rec
 		var archive_viewport_size := viewport_snapshot if viewport_snapshot != Vector2.ZERO else effective_viewport_size()
 		var detached_top_archive := seat == 2 and top_discard_archive_uses_side_gutter(archive_viewport_size)
 		var side_gutter := discard_side_archive_uses_gutter(seat, zone_rect, columns, rows, parent.size)
+		var visible_action := "查看更早" if visible_start > 0 else "回到最新"
 		var visible_summary := "查看\n更早" if visible_start > 0 else "回到\n最新"
+		if detached_top_archive:
+			visible_summary = "对家\n" + visible_summary
+		elif side_gutter and seat != 1:
+			visible_summary = visible_action
 		archive_button.set_meta("visible_summary", visible_summary)
 		archive_button.set_meta("window_label", page_text)
 		archive_button.set_meta("latest_discard_page_hint", latest_page_hint != "")
@@ -25938,11 +25943,11 @@ func draw_game_top_hud(parent: Control) -> void:
 		status_rect = Rect2(Vector2(0.274, 0.090), Vector2(0.584, 0.515))
 		wall_rect = Rect2(Vector2(0.596, 0.120), Vector2(0.766, 0.875))
 	else:
-		# Keep room code + copy on left, center status near mid-axis, compact score strip, and wall count on right.
-		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.272, 0.535))
-		status_rect = Rect2(Vector2(0.284, 0.140), Vector2(0.478, 0.860))
-		score_strip_rect = Rect2(Vector2(0.488, 0.150), Vector2(0.678, 0.850))
-		wall_rect = Rect2(Vector2(0.688, 0.120), Vector2(0.790, 0.875))
+		# Keep room code + copy on left, center status near mid-axis, compact score strip, and full wall count on right.
+		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.252, 0.535))
+		status_rect = Rect2(Vector2(0.260, 0.140), Vector2(0.450, 0.860))
+		score_strip_rect = Rect2(Vector2(0.456, 0.150), Vector2(0.654, 0.850))
+		wall_rect = Rect2(Vector2(0.662, 0.120), Vector2(0.806, 0.875))
 	hud.set_meta("header_lane_clearance_px", 8.0)
 	hud.set_meta("header_lane_policy", "score_wall_actions_have_explicit_gutters")
 	hud.set_meta("header_lane_rects", [score_strip_rect, wall_rect, TOP_HUD_SETTINGS_BUTTON_RECT, TOP_HUD_BACK_BUTTON_RECT, TOP_HUD_UPDATE_BUTTON_RECT])
@@ -26063,7 +26068,7 @@ func draw_game_top_hud(parent: Control) -> void:
 	var hud_last_discard := get_last_discard()
 	var hud_last_discard_text := tile_label(hud_last_discard) if hud_last_discard != "" else "无"
 	var wall_detail := "牌墙剩余 %d/%d 张 · %s · 上张%s" % [hud_wall_count, hud_wall_total, hud_wall_state, hud_last_discard_text]
-	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 16 if wide_top_hud else 14, Color(0.08, 0.20, 0.14, 1.0), true)
+	var wall = make_label(hud, "余牌 %d/%d" % [hud_wall_count, hud_wall_total], 16 if wide_top_hud else (12 if compact_top_hud else 13), Color(0.08, 0.20, 0.14, 1.0), true)
 	wall.name = "TopHudWallText"
 	wall.add_theme_font_override("font", ui_heading_font())
 	apply_rect(wall, rect_full(wall_rect.position.x + 0.010, wall_rect.position.y + 0.070, wall_rect.size.x - 0.010, wall_rect.position.y + 0.460))
@@ -26232,7 +26237,7 @@ func draw_hand(parent: Control) -> void:
 	var deck_right_anchor := HAND_TRAY_WOOD_DECK_RIGHT if wood_deck_tex != null else 1.0
 	var paper_rect := rect_full(0.0, deck_top_anchor, deck_right_anchor, deck_bottom_anchor) if wood_deck_tex != null else rect_full(0.0, minf(0.0, header_top), 1.0, 1.0)
 	var tray_paper := make_gpt_center_crop_plate_rect(paper_rect, Color.WHITE, "hand_tray_jiangnan_gpt", 1.0)
-	tray_paper.self_modulate = Color(0.56, 0.64, 0.72, 0.95) if (mode == "online_game" and online_game_disconnected()) else Color.WHITE
+	tray_paper.self_modulate = Color.WHITE
 	tray_paper.name = "HandTrayPaper"
 	tray.add_child(tray_paper)
 	if wood_deck_tex != null:
@@ -26522,7 +26527,7 @@ func draw_hand(parent: Control) -> void:
 	# Keep the 46px compact hit target clear of the tray's bottom lip while
 	# retaining a visible separation from the tutorial lane above it.
 	hand_box.offset_top = -2.0 if tutorial_hint_visible else (-9.0 if hand_viewport_size.y >= 900.0 else -7.5)
-	hand_box.offset_bottom = -22.0 if hand_viewport_size.y >= 900.0 else -15.0
+	hand_box.offset_bottom = -22.0 if hand_viewport_size.y >= 900.0 else (-18.0 if hand_viewport_size.y >= 700.0 else -15.0)
 	tray.add_child(hand_box)
 
 	# 手牌滑入动画
@@ -34337,23 +34342,24 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 		button.set_meta("ui_danger_action", true)
 	var is_cinnabar_role: bool = role in ["win", "danger_confirm"]
 	var has_cinnabar: bool = is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face: bool = role in ["safe", "next"]
+	var ink_face: bool = role in ["pass", "safe", "next"]
 	var has_active_ink: bool = ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
 	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))
+	var use_raw_pending_face: bool = role in ["chi", "peng", "gang", "win", "pass"]
 	var action_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if action_face != null:
 		var face_source := optional_gpt_illustration_texture(face_key)
 		if face_source != null:
-			action_face.texture = face_source
-			configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
-			var face_tint := Color(0.87, 0.88, 0.85, 0.96) if role == "pass" else (Color(1.0, 0.95, 0.78, 1.0) if role in ["gang", "peng"] else Color.WHITE)
-			action_face.modulate = face_tint
-			action_face.self_modulate = face_tint
-			var action_edges := action_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
-			if action_edges != null:
-				action_edges.self_modulate = face_tint
+			if use_raw_pending_face:
+				configure_guofeng_button_slice(action_face, false)
+				action_face.texture = face_source
+			else:
+				action_face.texture = face_source
+				configure_guofeng_button_slice(action_face, true, 96, 0.125, face_source, false)
+			action_face.modulate = Color.WHITE
+			action_face.self_modulate = Color.WHITE
 			button.set_meta("guofeng_button_face_key", face_key)
 	if is_cinnabar_role:
 		var danger_text_color := Color(0.99, 0.95, 0.84) if has_cinnabar else Color(0.62, 0.16, 0.13)
@@ -39289,19 +39295,26 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
 	var is_connection_error: bool = connection_state == "异常" or connection_state == "未连接" or online_feedback_requires_recovery()
-	var connection_state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if is_connection_error else (Color(0.68, 0.96, 0.78, 1.0) if connection_state == "已连接" else Color(1.0, 0.88, 0.54, 1.0))
-	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
+	var connection_state_tint: Color = Color(0.58, 0.12, 0.10, 1.0) if is_connection_error else (Color(0.08, 0.26, 0.17, 1.0) if connection_state == "已连接" else Color(0.38, 0.24, 0.06, 1.0))
+	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color.WHITE, Color(0.58, 0.52, 0.34, 0.45), connection_state_tint, "button_face_jiangnan_gpt")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.offset_top = hdr_top_px
 	state_badge.offset_bottom = hdr_top_px + hdr_h_px
 	state_badge.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var state_badge_plate := state_badge.get_node_or_null("GuofengSecondaryBadgePlate") as TextureRect
+	if state_badge_plate != null:
+		configure_guofeng_button_slice(state_badge_plate, true, 96, 0.125)
+		var state_edges := state_badge_plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if state_edges != null:
+			state_edges.self_modulate = Color(0.98, 0.95, 0.88, 1.0)
 	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
 	if state_badge_label != null:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
 		apply_rect(state_badge_label, rect_full(0.265, 0.04, 0.965, 0.96))
 		state_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(state_badge_label)
+		style_guofeng_label(state_badge_label, false)
 		state_badge_label.set_meta("preserve_semantic_color", true)
 		state_badge_label.add_theme_color_override("font_color", connection_state_tint)
 		set_ui_full_text(state_badge_label, connection_state, "联机连接状态")
@@ -39892,7 +39905,7 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
 	var state_is_error: bool = state == "异常" or state == "未连接" or online_feedback_requires_recovery()
-	var state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if state_is_error else (Color(0.68, 0.96, 0.78, 1.0) if connected else Color(1.0, 0.88, 0.54, 1.0))
+	var state_tint: Color = Color(0.58, 0.12, 0.10, 1.0) if state_is_error else (Color(0.08, 0.26, 0.17, 1.0) if connected else Color(0.38, 0.24, 0.06, 1.0))
 	var show_room_snapshot := connected or online_waiting_for_server
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
@@ -39955,7 +39968,7 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		else:
 			state_icon.modulate = state_tint
 	if state_label != null:
-		style_guofeng_label(state_label, true)
+		style_guofeng_label(state_label, false)
 		state_label.set_meta("preserve_semantic_color", true)
 		state_label.add_theme_color_override("font_color", state_tint)
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
@@ -43661,7 +43674,7 @@ func show_chat_panel() -> void:
 					var obs_box := toast_obstacle_rect(left_obs)
 					var obs_bottom_f: float = (obs_box.end.y - root_box.position.y) / root_box.size.y
 					left_clear_y = maxf(left_clear_y, obs_bottom_f + 0.008)
-		var bottom_cap: float = 0.774
+		var bottom_cap: float = 0.739
 		var chat_btn_rect := battle_chat_action_button_rect(chat_vp, chat_content_sz)
 		if chat_btn_rect.position.y > 0.65:
 			bottom_cap = minf(bottom_cap, chat_btn_rect.position.y - 0.006)
@@ -62532,7 +62545,7 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 		return rect_full(wall_right, 0.545, river.position.x - 8.0 / content_size.x, 0.615)
 	if viewport_size.x <= 960.0 or viewport_size.y <= 560.0:
 		if seat == 2:
-			return rect_full(0.668, 0.136, 0.954, 0.203)
+			return rect_full(0.668, 0.136, 0.980, 0.203)
 		if seat == 3:
 			return rect_full(0.125, 0.240, 0.185, 0.660)
 		if seat == 1:

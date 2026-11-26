@@ -1724,19 +1724,26 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(endpoint_copy_button, "F-110")
 	var connection_state := lobby_connection_state_text()
 	var is_connection_error: bool = connection_state == "异常" or connection_state == "未连接" or online_feedback_requires_recovery()
-	var connection_state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if is_connection_error else (Color(0.68, 0.96, 0.78, 1.0) if connection_state == "已连接" else Color(1.0, 0.88, 0.54, 1.0))
-	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color(0.020, 0.038, 0.034, 0.92), Color(0.22, 0.42, 0.30, 0.30), connection_state_tint, "ui_dark_scrim")
+	var connection_state_tint: Color = Color(0.58, 0.12, 0.10, 1.0) if is_connection_error else (Color(0.08, 0.26, 0.17, 1.0) if connection_state == "已连接" else Color(0.38, 0.24, 0.06, 1.0))
+	var state_badge = make_guofeng_secondary_badge(panel, rect_full(hdr_state_left, 0.0, hdr_right, 0.0), connection_state, commercial_ui_font_size(12, 3), Color.WHITE, Color(0.58, 0.52, 0.34, 0.45), connection_state_tint, "button_face_jiangnan_gpt")
 	state_badge.name = "OnlineLobbyConnectionStateBadge"
 	state_badge.offset_top = hdr_top_px
 	state_badge.offset_bottom = hdr_top_px + hdr_h_px
 	state_badge.custom_minimum_size.y = UI_MIN_TOUCH_TARGET
 	state_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var state_badge_plate := state_badge.get_node_or_null("GuofengSecondaryBadgePlate") as TextureRect
+	if state_badge_plate != null:
+		configure_guofeng_button_slice(state_badge_plate, true, 96, 0.125)
+		var state_edges := state_badge_plate.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+		if state_edges != null:
+			state_edges.self_modulate = Color(0.98, 0.95, 0.88, 1.0)
 	var state_badge_label = state_badge.get_child(state_badge.get_child_count() - 1) as Label if state_badge.get_child_count() > 0 else null
 	if state_badge_label != null:
 		state_badge_label.name = "OnlineLobbyConnectionStateLabel"
 		apply_rect(state_badge_label, rect_full(0.265, 0.04, 0.965, 0.96))
 		state_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		configure_clipped_label(state_badge_label)
+		style_guofeng_label(state_badge_label, false)
 		state_badge_label.set_meta("preserve_semantic_color", true)
 		state_badge_label.add_theme_color_override("font_color", connection_state_tint)
 		set_ui_full_text(state_badge_label, connection_state, "联机连接状态")
@@ -2327,7 +2334,7 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 	var state := lobby_connection_state_text()
 	var connected := state == "已连接"
 	var state_is_error: bool = state == "异常" or state == "未连接" or online_feedback_requires_recovery()
-	var state_tint: Color = Color(0.99, 0.66, 0.60, 1.0) if state_is_error else (Color(0.68, 0.96, 0.78, 1.0) if connected else Color(1.0, 0.88, 0.54, 1.0))
+	var state_tint: Color = Color(0.58, 0.12, 0.10, 1.0) if state_is_error else (Color(0.08, 0.26, 0.17, 1.0) if connected else Color(0.38, 0.24, 0.06, 1.0))
 	var show_room_snapshot := connected or online_waiting_for_server
 	if state != "已连接" and online_waiting_for_server:
 		var connection_feedback := "正在连接服务器，请稍候" if state == "连接中" else ("连接异常，请重试" if state == "异常" else "请先连接服务器。")
@@ -2390,7 +2397,7 @@ func refresh_online_lobby_state(viewport_snapshot: Vector2 = Vector2.ZERO) -> vo
 		else:
 			state_icon.modulate = state_tint
 	if state_label != null:
-		style_guofeng_label(state_label, true)
+		style_guofeng_label(state_label, false)
 		state_label.set_meta("preserve_semantic_color", true)
 		state_label.add_theme_color_override("font_color", state_tint)
 	var room_badge = find_control.call("OnlineLobbyRoomBadge")
@@ -6096,7 +6103,7 @@ func show_chat_panel() -> void:
 					var obs_box := toast_obstacle_rect(left_obs)
 					var obs_bottom_f: float = (obs_box.end.y - root_box.position.y) / root_box.size.y
 					left_clear_y = maxf(left_clear_y, obs_bottom_f + 0.008)
-		var bottom_cap: float = 0.774
+		var bottom_cap: float = 0.739
 		var chat_btn_rect := battle_chat_action_button_rect(chat_vp, chat_content_sz)
 		if chat_btn_rect.position.y > 0.65:
 			bottom_cap = minf(bottom_cap, chat_btn_rect.position.y - 0.006)
