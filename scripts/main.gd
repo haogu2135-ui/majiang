@@ -14329,8 +14329,12 @@ func draw_actions(parent: Control) -> void:
 		reconnect_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
 		lobby_button.name = "OnlineDisconnectedLobbyButton"
-		if action_viewport_size.x >= 1600.0:
-			lobby_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(14, action_viewport_size, 1.22))
+		var lobby_face := lobby_button.get_node_or_null("GptButtonFacePlate") as TextureRect
+		if lobby_face != null:
+			lobby_face.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
+			var lobby_edges := lobby_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if lobby_edges != null:
+				lobby_edges.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
 		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
 		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅")
 		lobby_button.set_meta("recovery_route", true)
@@ -15848,7 +15852,7 @@ func draw_center(parent: Control) -> void:
 	var center_shell_w_px := center_shell_table_px.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x)
 	fit_label_font_size(wall_label, maxf(68.0, center_shell_w_px * 0.62), wall_label.get_theme_font_size("font_size"), 9)
 	var wide_center_empty_last := wide_center and get_last_discard() == ""
-	apply_rect(wall_label, rect_full(0.20, 0.275, 0.80, 0.365) if compact_center else (rect_full(0.22, 0.378 if wide_center_empty_last else 0.246, 0.78, 0.455 if wide_center_empty_last else 0.326) if wide_center else rect_full(0.18, 0.250, 0.82, 0.345)))
+	apply_rect(wall_label, rect_full(0.20, 0.275, 0.80, 0.365) if compact_center else (rect_full(0.22, 0.378 if wide_center_empty_last else 0.308, 0.78, 0.455 if wide_center_empty_last else 0.388) if wide_center else rect_full(0.18, 0.250, 0.82, 0.345)))
 	wall_label.anchor_bottom = wall_label.anchor_top
 	wall_label.offset_bottom = wall_label.get_combined_minimum_size().y
 	var wall_count_font_size := 28 if wide_center else (15 if (compact_center and large_text_enabled) else (16 if compact_center else (19 if large_text_enabled else 22)))
@@ -25974,7 +25978,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	status_label = status
 	if mode == "online_game":
 		var connection_status := online_connection_status_text()
-		var connection_color := Color(0.40, 0.78, 0.60) if connection_status == "已连接" else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
+		var connection_synced := connection_status in ["已连接", "已同步"]
+		var connection_color := Color(0.40, 0.78, 0.60) if connection_synced else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
 		var connection_surface := make_layout_host(rect_full(0.106, 0.620, 0.268, 0.960))
 		connection_surface.name = "TopHudOnlineConnectionStatus"
 		connection_surface.set_meta("ui_state_source", "tcp_status")
@@ -25982,9 +25987,9 @@ func draw_game_top_hud(parent: Control) -> void:
 		connection_surface.set_meta("ui_full_text", online_connection_status_detail())
 		connection_surface.tooltip_text = online_connection_status_detail()
 		hud.add_child(connection_surface)
-		var connection_icon_name := "zap" if connection_status == "已连接" else "x-circle"
+		var connection_icon_name := "zap" if connection_synced else "x-circle"
 		var conn_icon_px := 14.0 if wide_top_hud else 12.0
-		var connection_icon := add_lucide_icon(connection_surface, connection_icon_name, rect_full(0.0, 0.5, 0.0, 0.5), Color(0.11, 0.23, 0.18) if connection_status == "已连接" else Color(0.55, 0.17, 0.10))
+		var connection_icon := add_lucide_icon(connection_surface, connection_icon_name, rect_full(0.0, 0.5, 0.0, 0.5), Color(0.11, 0.32, 0.22) if connection_synced else Color(0.55, 0.17, 0.10))
 		if connection_icon != null:
 			connection_icon.name = "TopHudOnlineConnectionIcon"
 			connection_icon.offset_left = 0.0
@@ -29227,11 +29232,11 @@ func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	var hand_strip_top := yaku_top + yaku_height + small_height + 14.0
 	var detail_height := (hand_strip_top + hand_strip_height + 6.0) if show_hand_strip else (yaku_top + yaku_height + small_height + 10.0)
 	var body_top := content_top + detail_height + 8.0
-	var status_top := panel_size.y - (22.0 if wide_paper else 18.0) - small_height
+	var status_top := panel_size.y - (22.0 if wide_paper else 22.0) - small_height
 	var header_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(header_fs))) + 8.0
 	var body_line_step := ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs))) + 4.0
 	var body_min_lane := body_line_step * 2.0
-	var raw_body_h := maxf(body_min_lane, status_top - body_top - 12.0)
+	var raw_body_h := maxf(body_min_lane, status_top - body_top - 14.0)
 	var snapped_body_h := maxf(body_min_lane, floorf(raw_body_h / maxf(1.0, body_line_step)) * body_line_step)
 	return {
 		"wide_paper": wide_paper,
@@ -29308,21 +29313,21 @@ func draw_round_summary(parent: Control) -> void:
 	lock_round_summary_background_controls(parent)
 	var content_size := summary_content_size_snapshot
 	var panel_width_px := round_summary_panel_width_px(content_size)
-	var panel_bottom_px := action_bar_dock_layout_rect(summary_viewport_snapshot, content_size).position.y * content_size.y - 12.0
+	var panel_bottom_px := action_bar_dock_layout_rect(summary_viewport_snapshot, content_size).position.y * content_size.y - 14.0
 	var minimum_layout := round_summary_paper_layout(Vector2(panel_width_px, 400.0 if content_size.x >= 1600.0 else 360.0))
 	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 18.0
 	var body_fs_min := int(minimum_layout.get("body_fs", 14))
 	var body_min_height := (ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs_min))) + 4.0) * 2.0
-	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 38.0)
+	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 42.0)
 	var wide_summary := content_size.x >= 1600.0 and content_size.y >= 900.0
-	var preferred_height := (520.0 if wide_summary else (436.0 if content_size.y >= 640.0 else 372.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
+	var preferred_height := (496.0 if wide_summary else (436.0 if content_size.y >= 640.0 else 368.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
 	var top_clear_px := 10.0
 	if content_size.y >= 640.0:
 		top_clear_px = maxf(top_clear_px, battle_top_hud_layout_rect().size.y * content_size.y + 8.0)
-	var max_panel_height := minf(580.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
+	var max_panel_height := minf(560.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
 	var panel_height_px := minf(maxf(maxf(312.0, minimum_height), preferred_height), maxf(312.0, max_panel_height))
 	var panel_left := (content_size.x - panel_width_px) * 0.5 / content_size.x
-	var panel_top_px := top_clear_px + maxf(0.0, (panel_bottom_px - top_clear_px - panel_height_px) * 0.5)
+	var panel_top_px := maxf(top_clear_px, panel_bottom_px - panel_height_px)
 	var panel_top := panel_top_px / content_size.y
 	var panel_right := 1.0 - panel_left
 	var panel_bottom := (panel_top_px + panel_height_px) / content_size.y
@@ -30853,8 +30858,12 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 		else:
 			target_panel_h = minf(412.0, settings_content_size.y * 0.88)
 	elif large_text_enabled:
-		target_panel_w = minf(920.0 * modal_scale, settings_content_size.x * 0.86)
-		target_panel_h = minf(580.0 * modal_scale, settings_content_size.y * 0.86)
+		if wide_settings:
+			target_panel_w = minf(1140.0, settings_content_size.x * 0.86)
+			target_panel_h = minf(616.0, settings_content_size.y * 0.84)
+		else:
+			target_panel_w = minf(900.0, settings_content_size.x * 0.86)
+			target_panel_h = minf(488.0, settings_content_size.y * 0.86)
 	else:
 		if wide_settings:
 			target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
@@ -31116,7 +31125,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
 		settings_large_text_scroll = settings_scroll
-		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 13 if wide_settings else 11, Color(0.10, 0.22, 0.16, 1.0), false)
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 16 if wide_settings else 11, Color(0.10, 0.22, 0.16, 1.0), false)
 		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
 		style_guofeng_label(settings_large_text_status, false)
 		settings_large_text_status.add_theme_color_override("font_color", Color(0.05, 0.12, 0.09, 1.0) if high_contrast_enabled else Color(0.14, 0.25, 0.19, 1.0))
@@ -33091,17 +33100,31 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	parent.add_child(map)
 	var stage_vp := effective_viewport_size()
 	var stage_fs := 16 if stage_vp.x >= 1600.0 else 13
-	var stage_line := add_optional_gpt_illustration_texture(map, "quiet_gold_accent", rect_full(0.11, 0.445, 0.89, 0.495), 0.48, false)
+	var active_stage_idx := update_stage_index()
+	var stage_line := add_optional_gpt_illustration_texture(map, "battle_ink_plaque_20261112", rect_full(0.11, 0.445, 0.89, 0.500), 0.30, false)
 	if stage_line != null:
 		stage_line.name = "UpdateStageLine"
+	if active_stage_idx > 0 or update_state == "current":
+		var done_ratio := 1.0 if update_state == "current" else clampf(float(active_stage_idx) / 3.0, 0.0, 1.0)
+		var done_key := "ui_meter_guofeng_fill_jade_gpt" if guofeng_meter_fill_jade_texture() != null else "quiet_gold_accent"
+		var done_line := add_optional_gpt_illustration_texture(map, done_key, rect_full(0.11, 0.445, lerpf(0.11, 0.89, done_ratio), 0.500), 0.94, false)
+		if done_line != null:
+			done_line.name = "UpdateStageDoneLine"
+			if done_key == "quiet_gold_accent":
+				done_line.self_modulate = Color(0.18, 0.62, 0.40, 0.96)
 	var stages := [["checking", "检查"], ["downloading", "下载"], ["ready", "校验"], ["install", "安装"]]
 	for i in range(stages.size()):
+		var is_done := i < active_stage_idx or update_state == "current"
 		var label := make_label(map, str(stages[i][1]), stage_fs, Color.WHITE, true)
 		label.name = "UpdateDialogStageGlyph_%s" % str(stages[i][0])
 		apply_rect(label, rect_full(float(i) * 0.25, 0.0, float(i + 1) * 0.25, 0.44))
 		label.set_meta("update_stage_id", str(stages[i][0]))
 		label.set_meta("update_stage_full_label", str(stages[i][1]))
 		style_guofeng_label(label)
+		if is_done:
+			var check_icon := add_lucide_icon(map, "check", rect_full(float(i) * 0.25 + 0.032, 0.06, float(i) * 0.25 + 0.072, 0.38), Color(0.08, 0.44, 0.24, 1.0))
+			if check_icon != null:
+				check_icon.name = "UpdateStageCheck_%s" % str(stages[i][0])
 	var current_label := make_label(map, "当前阶段", stage_fs, Color.WHITE, true)
 	current_label.name = "UpdateDialogStageCurrentLabel"
 	apply_rect(current_label, rect_full(0.0, 0.52, 1.0, 1.0))
@@ -35032,8 +35055,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (88.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
-	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (80.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
+	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
+	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (96.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
 	row.set_meta("status_lane_contract", "title_then_status_then_action")
@@ -35057,8 +35080,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	if single_line_reset:
 		text_right = 0.615
 		button_left = 0.645
-	var row_title_size := 14 if compact_settings and large_text_settings else (15 if compact_settings or large_text_settings else (20 if wide_settings else guofeng_card_title_font_size(17)))
-	var row_status_size := 12 if compact_settings and large_text_settings else (13 if compact_settings or large_text_settings else (16 if wide_settings else 14))
+	var row_title_size := 14 if compact_settings and large_text_settings else (19 if (wide_settings and large_text_settings) else (15 if compact_settings or large_text_settings else (20 if wide_settings else guofeng_card_title_font_size(17))))
+	var row_status_size := 12 if compact_settings and large_text_settings else (16 if (wide_settings and large_text_settings) else (13 if compact_settings or large_text_settings else (16 if wide_settings else 14)))
 	var title_label = make_label(row, title, row_title_size, Color(0.10, 0.24, 0.17, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	title_label.add_theme_font_override("font", ui_heading_font())
@@ -35163,15 +35186,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	elif large_text_settings:
 		# Keep >=12px vertical and >=12px right inner card padding in large-text
 		# mode so action buttons and their focus halos never touch the card frame.
-		var lc_btn_w := 132.0 if setting_viewport.x >= 1600.0 else 118.0
+		var lc_btn_w := 154.0 if setting_viewport.x >= 1600.0 else 118.0
+		var lc_btn_half_h := 25.0 if setting_viewport.x >= 1600.0 else 23.0
 		apply_rect(button, rect_full(1.0, 0.5, 1.0, 0.5))
-		button.offset_left = -(lc_btn_w + 12.0)
-		button.offset_right = -12.0
-		button.offset_top = -23.0
-		button.offset_bottom = 23.0
+		button.offset_left = -(lc_btn_w + 14.0)
+		button.offset_right = -14.0
+		button.offset_top = -lc_btn_half_h
+		button.offset_bottom = lc_btn_half_h
 		for setting_label: Label in [title_label, status_label]:
 			setting_label.anchor_right = 1.0
-			setting_label.offset_right = -(lc_btn_w + 24.0)
+			setting_label.offset_right = -(lc_btn_w + 26.0)
 	else:
 		apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
 	if not compact_settings and not large_text_settings:
@@ -35374,6 +35398,7 @@ func tile_face_crop_material(tile_key: String) -> ShaderMaterial:
 	# or swaps out res://assets/tiles/*.png Texture2D identity.
 	var crop_table: Dictionary = {
 		"7W": Vector4(0.0856, 0.0780, 0.8239, 0.8582),
+		"6W": Vector4(0.0500, 0.0120, 0.8920, 0.9540),
 		"4W": Vector4(0.0405, 0.0447, 0.9091, 0.9142),
 		"1W": Vector4(0.0234, 0.0261, 0.9432, 0.9478),
 		"7B": Vector4(0.0565, 0.0556, 0.8920, 0.9067),
@@ -43217,10 +43242,11 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		avail_w = maxf(120.0, scroll_parent.size.x - 16.0) if scroll_parent != null else 220.0
 	var lines: PackedStringArray = text_val.split("\n")
 	var cursor_y: float = 0.0
-	var pad_y: float = 0.0 if (compact and large_text_enabled) else (1.5 if compact else (4.0 if wide else 3.0))
+	var pad_y: float = 0.0 if (compact and large_text_enabled) else (1.5 if compact else (3.5 if wide else 2.5))
 	var pad_x_right: float = 12.0 if compact else (18.0 if wide else 14.0)
 	var slice_margin: int = 24 if is_bubble_art else 104
-	var slice_scale: float = (0.24 if compact else (0.38 if wide else 0.32)) if is_bubble_art else 0.14
+	var slice_scale: float = (0.24 if compact else (0.38 if wide else 0.30)) if is_bubble_art else 0.14
+	var label_max_h: float = chat_label.size.y if chat_label.size.y > 1.0 else INF
 	for idx in range(lines.size()):
 		var raw_line: String = lines[idx]
 		var trimmed: String = raw_line.strip_edges()
@@ -43230,6 +43256,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		if trimmed != "":
 			var single_w: float = font.get_string_size(raw_line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fsize).x
 			var bubble_w: float = clampf((avail_w - 4.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 4.0, 92.0), maxf(92.0, avail_w - 4.0))
+			var bubble_top: float = maxf(0.0, cursor_y - pad_y * 0.5)
+			var bubble_bottom: float = minf(label_max_h, cursor_y + block_h + pad_y * 0.85)
 			var bubble := TextureRect.new()
 			bubble.name = "ChatMsgBubbleItem_%d" % idx
 			bubble.texture = bubble_tex
@@ -43237,8 +43265,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 			bubble.stretch_mode = TextureRect.STRETCH_SCALE
 			bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bubble.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			bubble.position = Vector2(0.0, maxf(0.0, cursor_y - pad_y))
-			bubble.size = Vector2(bubble_w, block_h + pad_y * 2.0)
+			bubble.position = Vector2(0.0, bubble_top)
+			bubble.size = Vector2(bubble_w, maxf(single_h, bubble_bottom - bubble_top))
 			host.add_child(bubble)
 			var is_self_msg: bool = trimmed.begins_with("你:") or trimmed.begins_with("你：") or trimmed.contains("  你:") or trimmed.contains("  你：")
 			var bubble_tint: Color = Color(0.90, 0.98, 0.92, 0.96) if is_self_msg else Color(1.0, 0.99, 0.95, 0.96)
@@ -43374,6 +43402,20 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	latest.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	latest.tooltip_text = latest.text
 	latest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var latest_bubble_tex: Texture2D = guofeng_chat_bubble_texture()
+	if latest_bubble_tex != null:
+		var latest_box := StyleBoxTexture.new()
+		latest_box.texture = latest_bubble_tex
+		latest_box.texture_margin_left = 10.0
+		latest_box.texture_margin_right = 10.0
+		latest_box.texture_margin_top = 6.0
+		latest_box.texture_margin_bottom = 6.0
+		latest_box.content_margin_left = 10.0
+		latest_box.content_margin_right = 10.0
+		latest_box.content_margin_top = 4.0
+		latest_box.content_margin_bottom = 4.0
+		latest_box.modulate_color = Color(0.99, 0.97, 0.92, 0.96)
+		latest.add_theme_stylebox_override("normal", latest_box)
 	var input_row := HBoxContainer.new()
 	input_row.name = "ChatPanelInputRow"
 	configure_passive_container(input_row)
@@ -43501,7 +43543,7 @@ func show_chat_panel() -> void:
 		var is_compact_vp: bool = chat_vp.x <= 1000.0 or chat_vp.y <= 580.0
 		var is_wide_vp: bool = chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
 		var modal_w: float = (512.0 if large_text_enabled else 468.0) if is_compact_vp else ((730.0 if large_text_enabled else 660.0) if is_wide_vp else (570.0 if large_text_enabled else 520.0))
-		var modal_h: float = (380.0 if large_text_enabled else 340.0) if is_compact_vp else ((540.0 if large_text_enabled else 484.0) if is_wide_vp else (428.0 if large_text_enabled else 384.0))
+		var modal_h: float = (408.0 if large_text_enabled else 372.0) if is_compact_vp else ((568.0 if large_text_enabled else 512.0) if is_wide_vp else (456.0 if large_text_enabled else 412.0))
 		modal_w = minf(chat_content_sz.x * 0.90, modal_w)
 		modal_h = minf(chat_content_sz.y * 0.88, modal_h)
 		var mw_f: float = modal_w / maxf(1.0, chat_content_sz.x)
@@ -43515,23 +43557,28 @@ func show_chat_panel() -> void:
 		if not left_hand.is_empty():
 			var lh_rect: Rect2 = left_hand["rect"]
 			left_clear_y = maxf(left_clear_y, lh_rect.size.y + 0.008)
-		var left_wall := root_layer.find_child("WallBackStrip_3", true, false) as Control
-		if left_wall != null and left_wall.is_visible_in_tree():
-			var wall_box := toast_obstacle_rect(left_wall)
-			var root_box := root_layer.get_global_rect()
-			if root_box.size.y > 1.0:
-				var wall_bottom_f: float = (wall_box.end.y - root_box.position.y) / root_box.size.y
-				left_clear_y = maxf(left_clear_y, wall_bottom_f + 0.008)
+		var root_box := root_layer.get_global_rect()
+		if root_box.size.y > 1.0:
+			for obstacle_name in ["WallBackStrip_3", "OpponentHand_3"]:
+				var left_obs := root_layer.find_child(obstacle_name, true, false) as Control
+				if left_obs != null and left_obs.is_visible_in_tree():
+					var obs_box := toast_obstacle_rect(left_obs)
+					var obs_bottom_f: float = (obs_box.end.y - root_box.position.y) / root_box.size.y
+					left_clear_y = maxf(left_clear_y, obs_bottom_f + 0.008)
 		var bottom_cap: float = 0.774
 		var chat_btn_rect := battle_chat_action_button_rect(chat_vp, chat_content_sz)
 		if chat_btn_rect.position.y > 0.65:
 			bottom_cap = minf(bottom_cap, chat_btn_rect.position.y - 0.006)
 		var base_h: float = panel_rect.size.y - panel_rect.position.y
-		var min_drawer_h: float = minf(base_h, 0.244)
+		var tight_desktop: bool = chat_vp.y <= 780.0
+		var target_drawer_h: float = minf(base_h, 0.220) if tight_desktop else base_h
+		var min_drawer_h: float = minf(target_drawer_h, 0.212)
 		if left_clear_y > panel_rect.position.y + 0.002 and bottom_cap - left_clear_y >= min_drawer_h:
 			var new_top: float = clampf(left_clear_y, 0.425, bottom_cap - min_drawer_h)
-			var new_bottom: float = minf(bottom_cap, new_top + base_h)
+			var new_bottom: float = minf(bottom_cap, new_top + target_drawer_h)
 			panel_rect = rect_full(panel_rect.position.x, new_top, panel_rect.size.x, new_bottom)
+		elif tight_desktop and base_h > target_drawer_h:
+			panel_rect = rect_full(panel_rect.position.x, panel_rect.position.y, panel_rect.size.x, panel_rect.position.y + target_drawer_h)
 	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
 	var wide_chat_ui: bool = not compact_chat and chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
 	# The drawer is modal for the table: keep a root-level hit target with a soft
@@ -43578,7 +43625,8 @@ func show_chat_panel() -> void:
 		configure_guofeng_button_slice(chat_panel, true, 104, 0.14 if compact_chat else (0.22 if wide_chat_ui else 0.18), chat_frame_tex, true)
 		var chat_frame_edges: NinePatchRect = chat_panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if chat_frame_edges != null:
-			chat_frame_edges.self_modulate = Color(0.62, 0.50, 0.26, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.94)
+			chat_frame_edges.draw_center = false
+			chat_frame_edges.self_modulate = Color(0.96, 0.91, 0.78, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.94)
 	chat_panel.z_index = 85
 	chat_panel.set_meta("layout_role", route_name)
 	chat_panel.set_meta("compact_chat", compact_chat)
@@ -43651,12 +43699,14 @@ func show_chat_panel() -> void:
 		scroll_box.texture_margin_right = 14.0
 		scroll_box.texture_margin_top = 14.0
 		scroll_box.texture_margin_bottom = 14.0
-		scroll_box.content_margin_left = 8.0
-		scroll_box.content_margin_right = 6.0
-		scroll_box.content_margin_top = 0.0
-		scroll_box.content_margin_bottom = 0.0
+		var inset_frame_margins: bool = mode != "online_game"
+		scroll_box.content_margin_left = 14.0 if inset_frame_margins else 10.0
+		scroll_box.content_margin_right = 14.0 if inset_frame_margins else 8.0
+		scroll_box.content_margin_top = 14.0 if inset_frame_margins else 0.0
+		scroll_box.content_margin_bottom = 14.0 if inset_frame_margins else 0.0
 		scroll_box.modulate_color = Color(0.95, 0.91, 0.84, 0.72)
 		chat_scroll.add_theme_stylebox_override("panel", scroll_box)
+		chat_scroll.clip_contents = true
 	apply_rect(chat_scroll, rect_full(0.060, 0.145 if compact_chat else 0.285, 0.940, 0.300 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
 	var chat_label = make_label(chat_scroll, chat_display_text, chat_msg_sz, Color(0.11, 0.21, 0.16), false)
@@ -43677,7 +43727,7 @@ func show_chat_panel() -> void:
 	chat_label.clip_contents = false
 	chat_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.add_theme_constant_override("line_spacing", 0 if compact_chat and large_text_enabled else (4 if compact_chat else (12 if wide_chat_ui else 9)))
+	chat_label.add_theme_constant_override("line_spacing", 0 if compact_chat and large_text_enabled else (4 if compact_chat else (12 if wide_chat_ui else (7 if chat_vp.y <= 580.0 else 9))))
 	chat_label.tooltip_text = chat_text
 	var bubbles_host := Control.new()
 	bubbles_host.name = "ChatMsgBubblesHost"
@@ -45161,8 +45211,8 @@ func show_exit_confirm() -> void:
 	var compact_exit := exit_viewport.y <= 600.0 or exit_viewport.x <= 1000.0
 	var wide_exit := exit_viewport.x >= 1600.0 and exit_viewport.y >= 900.0
 	var content_size := safe_content_pixel_size()
-	var target_w: float = (500.0 if large_text_enabled else 440.0) if compact_exit else ((640.0 if large_text_enabled else 580.0) if wide_exit else (560.0 if large_text_enabled else 490.0))
-	var target_h: float = (300.0 if large_text_enabled else 252.0) if compact_exit else ((368.0 if large_text_enabled else 320.0) if wide_exit else (324.0 if large_text_enabled else 278.0))
+	var target_w: float = (500.0 if large_text_enabled else 432.0) if compact_exit else ((640.0 if large_text_enabled else 580.0) if wide_exit else (560.0 if large_text_enabled else 490.0))
+	var target_h: float = (300.0 if large_text_enabled else 216.0) if compact_exit else ((368.0 if large_text_enabled else 320.0) if wide_exit else (324.0 if large_text_enabled else 278.0))
 	var dialog_width := minf(content_size.x * 0.88, target_w)
 	var dialog_height := minf(content_size.y * 0.86, target_h)
 	var dialog_rect := rect_full(0.5 - dialog_width / content_size.x * 0.5, 0.5 - dialog_height / content_size.y * 0.5, 0.5 + dialog_width / content_size.x * 0.5, 0.5 + dialog_height / content_size.y * 0.5)
@@ -45171,10 +45221,11 @@ func show_exit_confirm() -> void:
 	dialog.self_modulate = Color.WHITE
 	var exit_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if exit_frame_tex != null:
-		configure_guofeng_button_slice(dialog, true, 104, 0.18 if compact_exit else (0.24 if wide_exit else 0.21), exit_frame_tex, true)
+		configure_guofeng_button_slice(dialog, true, 104, 0.16 if compact_exit else (0.24 if wide_exit else 0.21), exit_frame_tex, true)
 		var exit_edges: NinePatchRect = dialog.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if exit_edges != null:
-			exit_edges.self_modulate = Color(0.62, 0.50, 0.26, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.92)
+			exit_edges.draw_center = false
+			exit_edges.self_modulate = Color(0.96, 0.91, 0.78, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.92)
 	dialog.set_meta("viewport_snapshot", exit_viewport)
 	dialog.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	dialog.set_meta("compact_layout", compact_exit)
@@ -45185,23 +45236,24 @@ func show_exit_confirm() -> void:
 	dialog.set_meta("opaque_reading_surface", true)
 
 	# 标题 + 墨韵分隔线
-	var exit_title_size: int = guofeng_modal_font_size(24 if compact_exit else 26, exit_viewport, 1.15)
-	var exit_msg_size: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
+	var compact_tight_exit: bool = compact_exit and not large_text_enabled
+	var exit_title_size: int = guofeng_modal_font_size(22 if compact_tight_exit else (24 if compact_exit else 26), exit_viewport, 1.15)
+	var exit_msg_size: int = guofeng_modal_font_size(14 if compact_tight_exit else (15 if compact_exit else 16), exit_viewport, 1.18)
 	var exit_status_size: int = guofeng_modal_font_size(12 if compact_exit else 13, exit_viewport, 1.18)
 	var title = make_heading(dialog, "确认退出", exit_title_size, Color(0.10, 0.22, 0.16), true)
 	title.name = "ExitConfirmTitle"
-	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.22))
+	apply_rect(title, rect_full(0.08, 0.06 if compact_tight_exit else 0.07, 0.92, 0.22))
 	style_guofeng_label(title)
 	title.add_theme_font_size_override("font_size", exit_title_size)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var exit_divider := make_brush_stroke_divider(dialog, rect_full(0.16, 0.242, 0.84, 0.264))
+	var exit_divider := make_brush_stroke_divider(dialog, rect_full(0.16, 0.235 if compact_tight_exit else 0.242, 0.84, 0.258 if compact_tight_exit else 0.264))
 	if exit_divider != null:
 		exit_divider.modulate = Color(0.76, 0.64, 0.38, 0.72)
 
 	# 提示文本
 	var message = "是否暂离当前牌局？\n下次进入可随时续局。"
 	var msg_label = make_label(dialog, message, exit_msg_size, Color(0.14, 0.24, 0.18), false)
-	apply_rect(msg_label, rect_full(0.09, 0.29, 0.91, 0.50))
+	apply_rect(msg_label, rect_full(0.09, 0.275 if compact_tight_exit else 0.29, 0.91, 0.50))
 	style_guofeng_label(msg_label)
 	msg_label.add_theme_font_size_override("font_size", exit_msg_size)
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -45210,7 +45262,7 @@ func show_exit_confirm() -> void:
 	set_ui_full_text(msg_label, message, "退出后果")
 	var save_status := make_label(dialog, "进度将在退出前自动保存", exit_status_size, Color(0.14, 0.44, 0.28), true)
 	save_status.name = "ExitConfirmSaveStatus"
-	apply_rect(save_status, rect_full(0.09, 0.53, 0.91, 0.63))
+	apply_rect(save_status, rect_full(0.09, 0.525 if compact_tight_exit else 0.53, 0.91, 0.635 if compact_tight_exit else 0.63))
 	style_guofeng_label(save_status)
 	save_status.add_theme_font_size_override("font_size", exit_status_size)
 	save_status.add_theme_color_override("font_color", Color(0.12, 0.42, 0.26))
@@ -45225,9 +45277,9 @@ func show_exit_confirm() -> void:
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	button_row.add_theme_constant_override("separation", 16 if compact_exit else (24 if wide_exit else 18))
-	apply_rect(button_row, rect_full(0.09, 0.70, 0.91, 0.90))
+	apply_rect(button_row, rect_full(0.09, 0.695 if compact_tight_exit else 0.70, 0.91, 0.91 if compact_tight_exit else 0.90))
 	dialog.add_child(button_row)
-	var exit_btn_min := Vector2(132, 48) if compact_exit else (Vector2(172, 56) if wide_exit else Vector2(148, 52))
+	var exit_btn_min := (Vector2(128, 44) if compact_tight_exit else Vector2(132, 48)) if compact_exit else (Vector2(172, 56) if wide_exit else Vector2(148, 52))
 	var exit_btn_font: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
 
 	# 继续游戏按钮
@@ -45641,11 +45693,18 @@ func _show_replay_import_screen_impl() -> void:
 	var compact_replay_large := replay_viewport.y <= 560.0 and large_text_enabled
 	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else commercial_ui_font_size(30, 4), Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
 	mark_ui_optimization(title, "F-503")
+	var replay_content_sz := safe_content_pixel_size()
+	var replay_panel_est_w: float = panel.size.x if panel.size.x > 1.0 else (minf(replay_content_sz.x * 0.88, 1440.0 if wide_replay else 1120.0) if use_jiangnan_secondary_composition(replay_viewport) else maxf(640.0, replay_content_sz.x * 0.96))
+	var title_font: Font = title.get_theme_font("font")
+	var title_fsize: int = title.get_theme_font_size("font_size")
+	var replay_title_w: float = title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_fsize).x if title_font != null else 0.0
+	replay_title_w = maxf(replay_title_w, maxf(title.get_combined_minimum_size().x, float(title.text.length() * title_fsize) * 1.04))
+	var digest_left_frac: float = clampf((0.055 * replay_panel_est_w + replay_title_w + 20.0) / replay_panel_est_w, 0.165, 0.420)
+	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, minf(0.400, digest_left_frac - 0.010), 0.095))
 	var digest_hint := make_label(panel, "回放防篡改校验", commercial_ui_font_size(12, 3), Color(0.20, 0.30, 0.25), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	style_guofeng_label(digest_hint)
@@ -45653,10 +45712,7 @@ func _show_replay_import_screen_impl() -> void:
 	digest_hint.set_meta("preserve_semantic_color", true)
 	digest_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	digest_hint.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	var replay_panel_est_w: float = panel.size.x if panel.size.x > 1.0 else maxf(640.0, replay_viewport.x * 0.96)
-	var replay_title_w: float = title.get_combined_minimum_size().x
-	var digest_left_frac: float = clampf((0.055 * replay_panel_est_w + replay_title_w + 14.0) / replay_panel_est_w, 0.140, 0.235)
-	apply_rect(digest_hint, rect_full(digest_left_frac, 0.036, 0.560, 0.088))
+	apply_rect(digest_hint, rect_full(digest_left_frac, 0.036, 0.620, 0.088))
 	configure_clipped_label(digest_hint)
 	set_ui_full_text(digest_hint, "回放防篡改校验（SHA-256 摘要链）", "回放完整性校验方式")
 	mark_ui_optimization(digest_hint, "F-504")
@@ -45881,7 +45937,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.045, 0.112 if wide_replay else 0.130, 0.955, 0.204 if wide_replay else 0.275))
+	apply_rect(search, rect_full(0.045, 0.112 if wide_replay else (0.130 if compact_replay_layout else 0.122), 0.955, 0.204 if wide_replay else (0.275 if compact_replay_layout else 0.264)))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -45898,7 +45954,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.975, 0.936 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else (0.305 if compact_replay_layout else 0.288), 0.985 if compact_replay_layout else 0.988, 0.936 if wide_replay else (0.935 if compact_replay_layout else 0.916)))
 	archive_pane.add_child(archive_scroll)
 	if compact_replay_layout and not large_text_enabled:
 		var compact_archive_hint := make_label(archive_pane, "上下滑动查看更多归档", 11, Color(0.24, 0.34, 0.28), false)
@@ -45908,9 +45964,10 @@ func _show_replay_import_screen_impl() -> void:
 		compact_archive_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		compact_archive_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		style_guofeng_label(compact_archive_hint)
-		compact_archive_hint.add_theme_color_override("font_color", Color(0.24, 0.34, 0.28))
+		compact_archive_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
 		compact_archive_hint.set_meta("preserve_semantic_color", true)
-		var hint_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+		var hint_bubble_tex: Texture2D = guofeng_chat_bubble_texture()
+		var hint_frame_tex: Texture2D = hint_bubble_tex if hint_bubble_tex != null else optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		if hint_frame_tex != null:
 			var hint_bg := TextureRect.new()
 			hint_bg.name = "ReplayCompactFooterCard"
@@ -45921,10 +45978,11 @@ func _show_replay_import_screen_impl() -> void:
 			hint_bg.show_behind_parent = true
 			apply_rect(hint_bg, rect_full(0.0, 0.0, 1.0, 1.0))
 			compact_archive_hint.add_child(hint_bg)
-			configure_guofeng_button_slice(hint_bg, true, 104, 0.14, hint_frame_tex, false)
+			var is_hint_bubble: bool = hint_frame_tex == hint_bubble_tex
+			configure_guofeng_button_slice(hint_bg, true, 24 if is_hint_bubble else 96, 0.30 if is_hint_bubble else 0.125, hint_frame_tex, false)
 			var hint_edges: NinePatchRect = hint_bg.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 			if hint_edges != null:
-				hint_edges.self_modulate = Color(0.96, 0.93, 0.87, 0.86)
+				hint_edges.self_modulate = Color(0.99, 0.97, 0.92, 0.94)
 		compact_archive_hint.visible = false
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -46555,7 +46613,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	# lane. A changing row height can move the action lane beneath the viewport
 	# edge when the archive list is already at its tail.
 	var compact_archive_actions: bool = archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
-	var base_row_h: int = 122 if compact_archive_actions else 114
+	var base_row_h: int = 122 if compact_archive_actions else 108
 	row.custom_minimum_size = Vector2(0, (148 if large_text_enabled else 132) if delete_confirming else (128 if large_text_enabled else base_row_h))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
@@ -47410,14 +47468,15 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	var toast_vp := effective_viewport_size()
 	var face := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "settings_readable_gpt", 1.0)
 	face.name = "ToastGptFacePlate"
-	face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
+	face.self_modulate = Color(1.0, 0.995, 0.96) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var toast_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if toast_frame_tex != null:
-		configure_guofeng_button_slice(face, true, 104, 0.20, toast_frame_tex, true)
+		configure_guofeng_button_slice(face, true, 104, 0.12, toast_frame_tex, true)
 		var toast_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if toast_edges != null:
-			toast_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
+			toast_edges.draw_center = false
+			toast_edges.self_modulate = Color(0.96, 0.90, 0.74, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
 	toast_bg.add_child(face)
 	var toast_msg_size: int = guofeng_modal_font_size(16, toast_vp, 1.16)
 	var toast_pending_size: int = guofeng_modal_font_size(11, toast_vp, 1.18)
@@ -47426,7 +47485,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(label)
 	label.add_theme_font_size_override("font_size", toast_msg_size)
-	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
+	label.add_theme_color_override("font_color", Color(0.02, 0.06, 0.04) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
 	set_ui_full_text(label, safe_text, "通知：" + safe_text)
 	var pending_label := make_label(toast_bg, "", toast_pending_size, Color.WHITE, false)
 	pending_label.name = "ToastPendingLabel"
@@ -47436,7 +47495,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	pending_label.set_meta("dwell_policy", "oldest_first_with_minimum_dwell")
 	style_guofeng_label(pending_label)
 	pending_label.add_theme_font_size_override("font_size", toast_pending_size)
-	pending_label.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
+	pending_label.add_theme_color_override("font_color", Color(0.06, 0.13, 0.09) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var detail := make_small_button("详情", Color.WHITE, Callable(self, "open_toast_detail"))
 	detail.custom_minimum_size = Vector2(44.0, 44.0)
 	detail.add_theme_font_size_override("font_size", accessibility_font_size(12))
@@ -47469,6 +47528,15 @@ func toast_reading_obstacles() -> Array[Control]:
 	var obstacles: Array[Control] = []
 	if root_layer == null or not is_instance_valid(root_layer):
 		return obstacles
+	# When a full-scrim settings/diagnostic modal owns the screen, background menu/battle
+	# labels sit behind an opaque 0.82-0.86 scrim and must not force the toast into a narrow gutter.
+	var active_scrim_modals: Array[Control] = []
+	for modal_name in ["SettingsPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "UpdateDialogPanel"]:
+		var modal_ctrl := root_layer.find_child(modal_name, true, false) as Control
+		if modal_ctrl != null and modal_ctrl.is_visible_in_tree() and not modal_ctrl.is_queued_for_deletion() and modal_ctrl.size.x > 1.0 and modal_ctrl.size.y > 1.0:
+			active_scrim_modals.append(modal_ctrl)
+	if not active_scrim_modals.is_empty():
+		return active_scrim_modals
 	var names := ["MenuTitleLabel", "MenuTutorialEntryBanner", "TopHud3DShell", "TableLogLedgerPanel", "CenterConsole3DShell", "ActionButtonDock", "ActionIntentDock", "HandTray", "AdvisorPanel", "RoundSummaryPanel", "SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel", "DailyLoginProgressPanel"]
 	for control in root_layer.find_children("*", "Control", true, false):
 		var candidate := control as Control
@@ -47506,13 +47574,15 @@ func toast_safe_rect(height: float, obstacles: Array[Control], content_width: fl
 		preferred = Vector2(container_rect.get_center().x, container_rect.position.y + container_rect.size.y * 0.13)
 		slot_name = "battle_measured_clearance"
 	for obstacle in obstacles:
-		if str(obstacle.name) in ["SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel"]:
-			preferred = bounds.position
-			max_width = minf(max_width, container_rect.size.x * 0.36)
+		var obs_name := str(obstacle.name)
+		if obs_name in ["SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel"]:
+			var center_above_modal := obs_name in ["SettingsPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "UpdateDialogPanel"]
+			preferred = Vector2(container_rect.get_center().x, bounds.position.y) if center_above_modal else bounds.position
+			max_width = minf(max_width, container_rect.size.x * (0.46 if center_above_modal else 0.36))
 			toast_current.set_meta("modal_safe_route", "measured_clear_of_reading_owner")
-			toast_current.set_meta("modal_safe_owner", str(obstacle.name))
-			slot_name = "modal_override_top_left"
-			align_mode = "left"
+			toast_current.set_meta("modal_safe_owner", obs_name)
+			slot_name = "modal_override_top_center" if center_above_modal else "modal_override_top_left"
+			align_mode = "center" if center_above_modal else "left"
 			break
 	var desired_width := max_width
 	if content_width > 0.0:
@@ -47574,19 +47644,21 @@ func reflow_active_toast() -> void:
 	var detail := toast_current.get_node("ToastDetailButton") as Button
 	var face := toast_current.get_node("ToastGptFacePlate") as Control
 	if face != null:
-		face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
+		face.self_modulate = Color(1.0, 0.995, 0.96) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
 		var reflow_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if reflow_edges != null:
-			reflow_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
-	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
-	pending.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
+			reflow_edges.draw_center = false
+			reflow_edges.self_modulate = Color(0.96, 0.90, 0.74, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
+	label.add_theme_color_override("font_color", Color(0.02, 0.06, 0.04) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
+	pending.add_theme_color_override("font_color", Color(0.06, 0.13, 0.09) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var height := maxf(float(UI_MIN_TOUCH_TARGET), label.get_minimum_size().y + 12.0)
 	var slot := Rect2()
 	var shop_body := root_layer.find_child("ShopCabinetFooterBody", true, false) as Control if mode == "shop" and root_layer != null else null
 	var footer := root_layer.find_child("ShopCabinetFooterPanel", true, false) as Control if shop_body != null else null
 	var inline_shop := shop_body != null and footer != null and shop_body.size.x > 1.0
+	var compact_modal_toast: bool = not inline_shop and settings_panel_open and effective_viewport_size().y <= 720.0
 	if not inline_shop:
-		height = maxf(50.0, label.get_minimum_size().y + 20.0)
+		height = maxf(44.0, label.get_minimum_size().y + 14.0) if compact_modal_toast else maxf(50.0, label.get_minimum_size().y + 20.0)
 	var pending_width := ceilf(pending.get_theme_font("font").get_string_size(pending.text, HORIZONTAL_ALIGNMENT_LEFT, -1, pending.get_theme_font_size("font_size")).x) if pending.visible else 0.0
 	var text_width := label.get_theme_font("font").get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.get_theme_font_size("font_size")).x
 	var full_text := str(toast_current.get_meta("toast_text", ""))
@@ -47624,7 +47696,7 @@ func reflow_active_toast() -> void:
 	toast_current.position = slot.position - toast_container.get_global_rect().position
 	toast_current.size = slot.size
 	var inset_x: float = 6.0 if inline_shop else 18.0
-	var inset_y: float = 6.0 if inline_shop else 9.0
+	var inset_y: float = 6.0 if inline_shop else (7.0 if compact_modal_toast else 9.0)
 	message_width = slot.size.x - inset_x * 2.0 - (pending_width + 10.0 if pending_width > 0.0 and not stacked else 0.0)
 	overflow = full_text.contains("\n") or text_width > message_width
 	detail.visible = overflow
@@ -54271,8 +54343,23 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 		width = minf(width, 100.0)
 	var disconnected_online: bool = mode == "online_game" and online_game_disconnected()
 	var dock_pixels: float = 0.0
+	var dock_right_edge: float = dock_rect.size.x
 	if ended_action_mode:
-		dock_pixels = ended_action_bar_required_width(count) + 24.0
+		dock_pixels = ended_action_bar_required_width(count) + 28.0
+	elif disconnected_online:
+		var disc_fs: int = 18 if resolved_viewport.x >= 1600.0 else (15 if resolved_viewport.x >= 1150.0 else 13)
+		var disc_buttons: Array[Button] = action_bar_buttons()
+		var disc_total: float = 0.0
+		for disc_btn in disc_buttons:
+			var d_font: Font = disc_btn.get_theme_font("font")
+			var d_text: String = disc_btn.text.strip_edges()
+			var d_tw: float = d_font.get_string_size(d_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, disc_fs).x if d_font != null else float(d_text.length()) * float(disc_fs) * 0.98
+			disc_total += maxf(width, ceilf(d_tw) + 36.0)
+		disc_total += float(maxi(0, disc_buttons.size() - 1) * separation)
+		var disc_side_pad := 14.0
+		dock_right_edge = minf(0.984, bar_rect.size.x + disc_side_pad / content_width)
+		var disc_left := maxf(minf(dock_rect.position.x, 0.440), bar_rect.size.x - (disc_total + disc_side_pad) / content_width)
+		return Rect2(Vector2(disc_left, dock_rect.position.y), Vector2(dock_right_edge, dock_rect.size.y))
 	else:
 		var measured_total: float = 0.0
 		var live_buttons: Array[Button] = action_bar_buttons()
@@ -54294,19 +54381,29 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 				if text_w + h_pad > btn_w:
 					btn_w = text_w + h_pad
 				measured_total += btn_w
-			var dock_hpad: float = 12.0 if live_buttons.size() == 1 else (30.0 if disconnected_online else 24.0)
+			var dock_hpad: float = 12.0 if live_buttons.size() == 1 else 24.0
 			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + dock_hpad
-		var solver_hpad: float = 12.0 if count == 1 else (30.0 if disconnected_online else 24.0)
+		var solver_hpad: float = 12.0 if count == 1 else 24.0
 		var solver_total: float = float(count) * width + float(maxi(0, count - 1) * separation) + solver_hpad
 		dock_pixels = maxf(solver_total, measured_total)
-	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else (minf(dock_rect.position.x, 0.480) if disconnected_online else dock_rect.position.x)
+	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else dock_rect.position.x
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
-	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
+	return Rect2(Vector2(left, dock_rect.position.y), Vector2(dock_right_edge, dock_rect.size.y))
 
 func round_summary_panel_width_px(content_size: Vector2) -> float:
 	if content_size.x >= 1600.0:
-		return minf(content_size.x - 48.0, floorf(content_size.x * 0.70))
+		return minf(content_size.x - 48.0, 1200.0)
 	return minf(content_size.x - 32.0, 1040.0)
+
+func round_summary_action_vertical_shift(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
+	if mode != "offline" or offline_phase != "ended":
+		return 0.0
+	var content_size := content_size_snapshot if content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	if content_size.y <= 560.0:
+		return 0.095
+	if content_size.x >= 1600.0 and content_size.y >= 900.0:
+		return 0.042
+	return 0.0
 
 func round_summary_action_alignment_shift(content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if mode != "offline" or offline_phase != "ended":
@@ -54322,8 +54419,11 @@ func action_bar_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_s
 		return DANGER_ACTION_BAR_RECT
 	if has_pending_claim_window():
 		return pending_claim_action_bar_rect_for_count(action_bar_button_count(), viewport_snapshot, content_size_snapshot)
-	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), 0.0)
-	return Rect2(ACTION_BAR_RECT.position - shift, ACTION_BAR_RECT.size - shift)
+	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), -round_summary_action_vertical_shift(viewport_snapshot, content_size_snapshot))
+	var rect := Rect2(ACTION_BAR_RECT.position - shift, ACTION_BAR_RECT.size - shift)
+	if mode == "online_game" and online_game_disconnected():
+		rect.position.x = minf(rect.position.x, 0.450)
+	return rect
 
 func battle_ui_lane_contract() -> Dictionary:
 	# Keep cross-layer exclusions inspectable by layout smoke and future overlays.
@@ -54867,7 +54967,7 @@ func action_bar_dock_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, cont
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(pending_claim_expected_action_count(), viewport_snapshot, content_size_snapshot)
-	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), 0.0)
+	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), -round_summary_action_vertical_shift(viewport_snapshot, content_size_snapshot))
 	return Rect2(ACTION_BAR_DOCK_RECT.position - shift, ACTION_BAR_DOCK_RECT.size - shift)
 
 func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> void:
@@ -54967,10 +55067,24 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 				button_width = maxf(button_width, minf(124.0, button_width + 20.0))
 			elif button.name == "DangerDiscardCancelButton":
 				button_width = maxf(74.0, minf(button_width, 84.0))
+		var disconnected_online := mode == "online_game" and online_game_disconnected()
+		var wide_action_bar := layout_viewport_snapshot.x >= 1600.0 and layout_viewport_snapshot.y >= 900.0
+		var resolved_height: float = float(height)
 		if ended_action_mode and btn_index < ended_widths.size():
 			button_width = float(ended_widths[btn_index])
-			button_font_size = 18 if str(button.get_meta("action_priority", "secondary")) == "primary" else 15
-		configure_action_button_size(button, button_width, height, button_font_size)
+			var is_ended_primary := str(button.get_meta("action_priority", "secondary")) == "primary"
+			button_font_size = (20 if is_ended_primary else 18) if wide_action_bar else (18 if is_ended_primary else 15)
+			if wide_action_bar:
+				resolved_height = 52.0
+		elif disconnected_online:
+			button_font_size = 18 if wide_action_bar else (15 if layout_viewport_snapshot.x >= 1150.0 else 13)
+			resolved_height = 50.0 if wide_action_bar else 44.0
+			var d_font := button.get_theme_font("font")
+			var d_text := button.text.strip_edges()
+			var d_tw := d_font.get_string_size(d_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, button_font_size).x if d_font != null else float(d_text.length()) * float(button_font_size) * 0.98
+			button_width = maxf(button_width, ceilf(d_tw) + 36.0)
+			button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		configure_action_button_size(button, button_width, resolved_height, button_font_size)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			button.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
 			button.scale = Vector2(0.7, 0.7)
@@ -55673,6 +55787,16 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
 	style_guofeng_secondary_action(update_secondary_button, false)
 	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
+	# Preserve the visible imperial-gold keyboard focus ring on UpdateSecondaryButton
+	# (which holds default focus) even though style_guofeng_secondary_action strips
+	# ButtonFocusPlate from generic page_back buttons.
+	if update_secondary_button.get_node_or_null("ButtonFocusPlate") == null:
+		var sec_focus_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
+		if sec_focus_tex != null:
+			var sec_focus := add_optional_gpt_illustration_texture(update_secondary_button, "focus_ring_gold_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+			if sec_focus != null:
+				sec_focus.name = "ButtonFocusPlate"
+				configure_guofeng_button_slice(sec_focus, true, 48, 0.22, sec_focus_tex, false)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -55685,6 +55809,8 @@ func ensure_update_dialog() -> void:
 	style_guofeng_reading_tree(panel)
 	refresh_update_dialog()
 	update_secondary_button.grab_focus()
+	sync_guofeng_button_focus_visual(update_secondary_button, update_secondary_button.has_focus())
+	sync_guofeng_button_focus_visual(update_primary_button, update_primary_button.has_focus())
 	register_ui_round_681_710(root_layer)
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)

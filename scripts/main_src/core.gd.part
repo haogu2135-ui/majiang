@@ -5020,7 +5020,7 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 				button_width = maxf(74.0, minf(button_width, 84.0))
 		var disconnected_online := mode == "online_game" and online_game_disconnected()
 		var wide_action_bar := layout_viewport_snapshot.x >= 1600.0 and layout_viewport_snapshot.y >= 900.0
-		var resolved_height := height
+		var resolved_height: float = float(height)
 		if ended_action_mode and btn_index < ended_widths.size():
 			button_width = float(ended_widths[btn_index])
 			var is_ended_primary := str(button.get_meta("action_priority", "secondary")) == "primary"
@@ -5748,8 +5748,6 @@ func ensure_update_dialog() -> void:
 			if sec_focus != null:
 				sec_focus.name = "ButtonFocusPlate"
 				configure_guofeng_button_slice(sec_focus, true, 48, 0.22, sec_focus_tex, false)
-	sync_guofeng_button_focus_visual(update_secondary_button)
-	sync_guofeng_button_focus_visual(update_primary_button)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -5762,6 +5760,8 @@ func ensure_update_dialog() -> void:
 	style_guofeng_reading_tree(panel)
 	refresh_update_dialog()
 	update_secondary_button.grab_focus()
+	sync_guofeng_button_focus_visual(update_secondary_button, update_secondary_button.has_focus())
+	sync_guofeng_button_focus_visual(update_primary_button, update_primary_button.has_focus())
 	register_ui_round_681_710(root_layer)
 	register_ui_round_1011_1040(root_layer)
 	register_ui_round_1041_1070(root_layer)
