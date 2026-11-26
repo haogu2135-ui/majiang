@@ -2142,6 +2142,8 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 			if diff == AI_DIFFICULTY_HARD:
 				if risk >= AI_DANGER_RISK_SOFT:
 					cheap -= (risk - 12.0) * 1.35
+					if risk >= AI_DANGER_RISK_HIGH:
+						cheap -= 16.0
 				if fast_max_opp_risk >= 24.0:
 					cheap -= (fast_max_opp_risk - 20.0) * 1.45
 			item["cheap_score"] = cheap
@@ -2198,7 +2200,7 @@ func get_ai_discard_reports(seat: int, visible_counts_override: Array = [], eval
 		for j in range(min(full_eval_limit, candidates.size())):
 			keep.append(candidates[j])
 		var preserve_safest: bool = high_pressure \
-			or (diff == AI_DIFFICULTY_HARD and (danger_risk_peak >= AI_DANGER_RISK_HIGH + 4.0 or (fast_wall_count <= wall_phase_threshold(22) and danger_risk_peak >= AI_DANGER_RISK_HIGH and float(pressure_context.get("readiness_pressure", 0.0)) >= 9.0)))
+			or (diff == AI_DIFFICULTY_HARD and danger_risk_peak >= AI_DANGER_RISK_HIGH)
 		var safest_kept = false
 		for item in keep:
 			if str(item.get("tile", "")) == str(safest_candidate.get("tile", "")):
@@ -2362,10 +2364,11 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			or best_feed >= AI_DANGER_FEED_SOFT + 24.0 \
 			or best_human_pressure >= 30.0 \
 			or best_max_opp_risk >= 26.0)
-	# 同向听可避高危守卫：未听牌且首选弃牌已达高危（>=31）时，若存在同向听且明显低危（<26）的替代张，直接切安全替代张而不损向听。
-	var same_shanten_hd_only: bool = (not standard_guard_active) and best_shanten >= 1 and best_risk >= AI_DANGER_RISK_HIGH
+	# 同向听可避高危守卫：首选弃牌达全桌高危（>=31）或对玩家高危（>=28）时，若存在不降向听、保牌质且显著低危的替代张，直接切换而不损向听。
+	var same_shanten_hd_only: bool = (not standard_guard_active) and (best_risk >= AI_DANGER_RISK_HIGH or best_human_pressure >= 28.0)
 	if not standard_guard_active and not same_shanten_hd_only:
 		return
+	var best_ukeire: int = int(best.get("ukeire", 0))
 	var best_score = float(best.get("score", 0.0))
 	var best_pressure = hard_danger_push_rank(best)
 	var best_index = -1
@@ -2382,13 +2385,35 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 		var score_gap = best_score - float(candidate.get("score", 0.0))
 		var pressure_gain = best_pressure - hard_danger_push_rank(candidate)
 		pressure_gain += (hard_safety_value(str(candidate.get("safety_label", ""))) - hard_safety_value(str(best.get("safety_label", "")))) * 0.5
+		var cand_risk_ss: float = float(candidate.get("risk", 0.0))
+		var cand_feed_ss: float = float(candidate.get("feed_risk", 0.0))
+		var cand_human_p_ss: float = float(candidate.get("human_target_pressure", 0.0))
+		var cand_ukeire_ss: int = int(candidate.get("ukeire", 0))
+		var cand_wait_rem_ss: int = int(candidate.get("wait_total_remaining", 0))
+		var same_shanten_quality_ok: bool = true
+		if best_shanten <= 0:
+			same_shanten_quality_ok = cand_wait_rem_ss >= 2 and (best_wait_remaining <= 0 or cand_wait_rem_ss * 2 >= best_wait_remaining) and not bool(candidate.get("wait_discard_furiten", false))
+		elif best_ukeire > 0:
+			same_shanten_quality_ok = cand_ukeire_ss * 5 >= best_ukeire * 3
+		var same_shanten_risk_relief: bool = shanten_delta <= 0 \
+			and best_risk >= AI_DANGER_RISK_HIGH \
+			and same_shanten_quality_ok \
+			and cand_risk_ss < AI_DANGER_RISK_HIGH \
+			and cand_risk_ss <= best_risk - maxf(8.0, best_risk * 0.20) \
+			and cand_feed_ss <= best_feed + 6.0 \
+			and cand_human_p_ss <= best_human_pressure + 4.0 \
+			and score_gap <= (210.0 if best_shanten <= 0 else 260.0)
+		var same_shanten_human_relief: bool = shanten_delta <= 0 \
+			and best_human_pressure >= 28.0 \
+			and same_shanten_quality_ok \
+			and cand_human_p_ss <= best_human_pressure - maxf(8.0, best_human_pressure * 0.35) \
+			and cand_risk_ss <= best_risk + 4.0 \
+			and score_gap <= (210.0 if best_shanten <= 0 else 250.0)
 		if same_shanten_hd_only and rejection_reason.is_empty():
 			if shanten_delta > 0:
 				rejection_reason = "same_shanten_only"
-			elif float(candidate.get("risk", 0.0)) >= AI_DANGER_RISK_HIGH - 5.0:
-				rejection_reason = "still_high_danger"
-			elif score_gap > 220.0:
-				rejection_reason = "score_gap"
+			elif not same_shanten_risk_relief and not same_shanten_human_relief:
+				rejection_reason = "same_shanten_relief_gate"
 		if ai_sim_trace_enabled and shanten_delta == 0:
 			var candidate_rank = hard_danger_push_rank(candidate)
 			if trace_safest.is_empty() or candidate_rank < trace_safest_rank:
@@ -2463,6 +2488,8 @@ func apply_hard_danger_push_guard(reports: Array, seat: int = -1) -> void:
 			and score_gap <= 180.0
 		if targeted_same_shanten_human_relief:
 			minimum_pressure_gain = 3.0
+		if same_shanten_risk_relief or same_shanten_human_relief:
+			minimum_pressure_gain = minf(minimum_pressure_gain, 8.0)
 		if rejection_reason.is_empty() and score_gap > max_gap:
 			rejection_reason = "score_gap"
 		if rejection_reason.is_empty() and pressure_gain < minimum_pressure_gain:
@@ -3059,7 +3086,7 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 			AI_DIFFICULTY_EASY:
 				danger_pen *= 0.72
 		if risk >= AI_DANGER_RISK_HIGH:
-			danger_pen += 34.0 if diff_idx == AI_DIFFICULTY_HARD else (28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0)
+			danger_pen += (44.0 if shanten >= 1 else 34.0) if diff_idx == AI_DIFFICULTY_HARD else (28.0 if diff_idx != AI_DIFFICULTY_EASY else 12.0)
 		# 困难档中后盘高压下被迫切无依据牌时，按公开可见枚数区分「全生中张」与「两见幺九/字牌」（权重低于真实花色危险差，不倒挂已知副露危险）。
 		if safety == "" and risk >= 20.0 and diff_idx == AI_DIFFICULTY_HARD and report_wall_count <= wall_phase_threshold(34) and (table_readiness >= 8.5 or table_threat_rank >= 2 or table_multi):
 			var tile_vis: int = int(risk_vector.get("visible", -1))
@@ -3074,11 +3101,11 @@ func build_ai_discard_report(seat: int, tile: String, simulated: Array, open_mel
 				if is_term_or_hon:
 					danger_pen = maxf(0.0, danger_pen - 5.0)
 		score -= danger_pen * defense
-	# R8b: 困难档单家定点重危加罚（仅针对>=23的真正染手/多副露定点炮弹，兼顾局速与放炮防线）。
+	# R8b: 困难档单家定点重危加罚（>=23温和起罚保局速，>=26无依据炮弹重罚控放炮）。
 	if diff_idx == AI_DIFFICULTY_HARD and max_opp_risk >= 23.0:
 		var focused_opp_pen: float = (max_opp_risk - 20.0) * 1.45
-		if max_opp_risk >= 28.0 and safety == "":
-			focused_opp_pen += 16.0
+		if max_opp_risk >= 26.0 and safety == "":
+			focused_opp_pen += 18.0
 		score -= focused_opp_pen * defense
 	# R9: 针对玩家的点炮惩罚（困难更重）
 	var human_pen = human_target_discard_penalty_from_pressure(human_pressure, diff_idx)
