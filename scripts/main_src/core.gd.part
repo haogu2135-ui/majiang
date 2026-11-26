@@ -4294,8 +4294,23 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 		width = minf(width, 100.0)
 	var disconnected_online: bool = mode == "online_game" and online_game_disconnected()
 	var dock_pixels: float = 0.0
+	var dock_right_edge: float = dock_rect.size.x
 	if ended_action_mode:
-		dock_pixels = ended_action_bar_required_width(count) + 24.0
+		dock_pixels = ended_action_bar_required_width(count) + 28.0
+	elif disconnected_online:
+		var disc_fs: int = 18 if resolved_viewport.x >= 1600.0 else (15 if resolved_viewport.x >= 1150.0 else 13)
+		var disc_buttons: Array[Button] = action_bar_buttons()
+		var disc_total: float = 0.0
+		for disc_btn in disc_buttons:
+			var d_font: Font = disc_btn.get_theme_font("font")
+			var d_text: String = disc_btn.text.strip_edges()
+			var d_tw: float = d_font.get_string_size(d_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, disc_fs).x if d_font != null else float(d_text.length()) * float(disc_fs) * 0.98
+			disc_total += maxf(width, ceilf(d_tw) + 36.0)
+		disc_total += float(maxi(0, disc_buttons.size() - 1) * separation)
+		var disc_side_pad := 14.0
+		dock_right_edge = minf(0.984, bar_rect.size.x + disc_side_pad / content_width)
+		var disc_left := maxf(minf(dock_rect.position.x, 0.440), bar_rect.size.x - (disc_total + disc_side_pad) / content_width)
+		return Rect2(Vector2(disc_left, dock_rect.position.y), Vector2(dock_right_edge, dock_rect.size.y))
 	else:
 		var measured_total: float = 0.0
 		var live_buttons: Array[Button] = action_bar_buttons()
@@ -4317,19 +4332,29 @@ func action_dock_rect_for_count(count: int, viewport_snapshot: Vector2 = Vector2
 				if text_w + h_pad > btn_w:
 					btn_w = text_w + h_pad
 				measured_total += btn_w
-			var dock_hpad: float = 12.0 if live_buttons.size() == 1 else (30.0 if disconnected_online else 24.0)
+			var dock_hpad: float = 12.0 if live_buttons.size() == 1 else 24.0
 			measured_total += float(maxi(0, live_buttons.size() - 1) * separation) + dock_hpad
-		var solver_hpad: float = 12.0 if count == 1 else (30.0 if disconnected_online else 24.0)
+		var solver_hpad: float = 12.0 if count == 1 else 24.0
 		var solver_total: float = float(count) * width + float(maxi(0, count - 1) * separation) + solver_hpad
 		dock_pixels = maxf(solver_total, measured_total)
-	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else (minf(dock_rect.position.x, 0.480) if disconnected_online else dock_rect.position.x)
+	var min_left = maxf(dock_rect.position.x, bar_rect.position.x - 12.0 / content_width) if danger_confirm_mode else dock_rect.position.x
 	var left = max(min_left, bar_rect.size.x - dock_pixels / content_width)
-	return Rect2(Vector2(left, dock_rect.position.y), dock_rect.size)
+	return Rect2(Vector2(left, dock_rect.position.y), Vector2(dock_right_edge, dock_rect.size.y))
 
 func round_summary_panel_width_px(content_size: Vector2) -> float:
 	if content_size.x >= 1600.0:
-		return minf(content_size.x - 48.0, floorf(content_size.x * 0.70))
+		return minf(content_size.x - 48.0, 1200.0)
 	return minf(content_size.x - 32.0, 1040.0)
+
+func round_summary_action_vertical_shift(viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
+	if mode != "offline" or offline_phase != "ended":
+		return 0.0
+	var content_size := content_size_snapshot if content_size_snapshot.y > 1.0 else safe_content_pixel_size()
+	if content_size.y <= 560.0:
+		return 0.095
+	if content_size.x >= 1600.0 and content_size.y >= 900.0:
+		return 0.042
+	return 0.0
 
 func round_summary_action_alignment_shift(content_size_snapshot: Vector2 = Vector2.ZERO) -> float:
 	if mode != "offline" or offline_phase != "ended":
@@ -4345,8 +4370,11 @@ func action_bar_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, content_s
 		return DANGER_ACTION_BAR_RECT
 	if has_pending_claim_window():
 		return pending_claim_action_bar_rect_for_count(action_bar_button_count(), viewport_snapshot, content_size_snapshot)
-	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), 0.0)
-	return Rect2(ACTION_BAR_RECT.position - shift, ACTION_BAR_RECT.size - shift)
+	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), -round_summary_action_vertical_shift(viewport_snapshot, content_size_snapshot))
+	var rect := Rect2(ACTION_BAR_RECT.position - shift, ACTION_BAR_RECT.size - shift)
+	if mode == "online_game" and online_game_disconnected():
+		rect.position.x = minf(rect.position.x, 0.450)
+	return rect
 
 func battle_ui_lane_contract() -> Dictionary:
 	# Keep cross-layer exclusions inspectable by layout smoke and future overlays.
@@ -4890,7 +4918,7 @@ func action_bar_dock_layout_rect(viewport_snapshot: Vector2 = Vector2.ZERO, cont
 		return DANGER_ACTION_BAR_DOCK_RECT
 	if has_pending_claim_window():
 		return pending_claim_action_dock_rect_for_count(pending_claim_expected_action_count(), viewport_snapshot, content_size_snapshot)
-	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), 0.0)
+	var shift := Vector2(round_summary_action_alignment_shift(content_size_snapshot), -round_summary_action_vertical_shift(viewport_snapshot, content_size_snapshot))
 	return Rect2(ACTION_BAR_DOCK_RECT.position - shift, ACTION_BAR_DOCK_RECT.size - shift)
 
 func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vector2 = Vector2.ZERO, content_size_snapshot: Vector2 = Vector2.ZERO) -> void:
@@ -4990,10 +5018,24 @@ func finalize_action_bar_layout(button_snapshot = null, viewport_snapshot: Vecto
 				button_width = maxf(button_width, minf(124.0, button_width + 20.0))
 			elif button.name == "DangerDiscardCancelButton":
 				button_width = maxf(74.0, minf(button_width, 84.0))
+		var disconnected_online := mode == "online_game" and online_game_disconnected()
+		var wide_action_bar := layout_viewport_snapshot.x >= 1600.0 and layout_viewport_snapshot.y >= 900.0
+		var resolved_height := height
 		if ended_action_mode and btn_index < ended_widths.size():
 			button_width = float(ended_widths[btn_index])
-			button_font_size = 18 if str(button.get_meta("action_priority", "secondary")) == "primary" else 15
-		configure_action_button_size(button, button_width, height, button_font_size)
+			var is_ended_primary := str(button.get_meta("action_priority", "secondary")) == "primary"
+			button_font_size = (20 if is_ended_primary else 18) if wide_action_bar else (18 if is_ended_primary else 15)
+			if wide_action_bar:
+				resolved_height = 52.0
+		elif disconnected_online:
+			button_font_size = 18 if wide_action_bar else (15 if layout_viewport_snapshot.x >= 1150.0 else 13)
+			resolved_height = 50.0 if wide_action_bar else 44.0
+			var d_font := button.get_theme_font("font")
+			var d_text := button.text.strip_edges()
+			var d_tw := d_font.get_string_size(d_text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, button_font_size).x if d_font != null else float(d_text.length()) * float(button_font_size) * 0.98
+			button_width = maxf(button_width, ceilf(d_tw) + 36.0)
+			button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		configure_action_button_size(button, button_width, resolved_height, button_font_size)
 		if fx_enabled_effective() and DisplayServer.get_name().to_lower() != "headless":
 			button.pivot_offset = Vector2(button_width * 0.5, height * 0.5)
 			button.scale = Vector2(0.7, 0.7)
@@ -5696,6 +5738,18 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
 	style_guofeng_secondary_action(update_secondary_button, false)
 	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
+	# Preserve the visible imperial-gold keyboard focus ring on UpdateSecondaryButton
+	# (which holds default focus) even though style_guofeng_secondary_action strips
+	# ButtonFocusPlate from generic page_back buttons.
+	if update_secondary_button.get_node_or_null("ButtonFocusPlate") == null:
+		var sec_focus_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
+		if sec_focus_tex != null:
+			var sec_focus := add_optional_gpt_illustration_texture(update_secondary_button, "focus_ring_gold_gpt", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
+			if sec_focus != null:
+				sec_focus.name = "ButtonFocusPlate"
+				configure_guofeng_button_slice(sec_focus, true, 48, 0.22, sec_focus_tex, false)
+	sync_guofeng_button_focus_visual(update_secondary_button)
+	sync_guofeng_button_focus_visual(update_primary_button)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()

@@ -1097,8 +1097,12 @@ func draw_actions(parent: Control) -> void:
 		reconnect_button.set_meta("min_touch_size", Vector2(ACTION_BUTTON_MIN_TOUCH_WIDTH, ACTION_BUTTON_HEIGHT))
 		var lobby_button := make_action_button("大厅", Color(0.46, 0.52, 0.56), Callable(self, "show_online_lobby").bind(true))
 		lobby_button.name = "OnlineDisconnectedLobbyButton"
-		if action_viewport_size.x >= 1600.0:
-			lobby_button.add_theme_font_size_override("font_size", guofeng_modal_font_size(14, action_viewport_size, 1.22))
+		var lobby_face := lobby_button.get_node_or_null("GptButtonFacePlate") as TextureRect
+		if lobby_face != null:
+			lobby_face.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
+			var lobby_edges := lobby_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+			if lobby_edges != null:
+				lobby_edges.self_modulate = Color(0.84, 0.82, 0.76, 1.0)
 		lobby_button.tooltip_text = "返回联机大厅，保留当前牌局以便稍后重连"
 		set_ui_full_text(lobby_button, lobby_button.tooltip_text, "断线恢复：返回联机大厅")
 		lobby_button.set_meta("recovery_route", true)
@@ -2616,7 +2620,7 @@ func draw_center(parent: Control) -> void:
 	var center_shell_w_px := center_shell_table_px.x * (CENTER_PANEL_RECT.size.x - CENTER_PANEL_RECT.position.x)
 	fit_label_font_size(wall_label, maxf(68.0, center_shell_w_px * 0.62), wall_label.get_theme_font_size("font_size"), 9)
 	var wide_center_empty_last := wide_center and get_last_discard() == ""
-	apply_rect(wall_label, rect_full(0.20, 0.275, 0.80, 0.365) if compact_center else (rect_full(0.22, 0.378 if wide_center_empty_last else 0.246, 0.78, 0.455 if wide_center_empty_last else 0.326) if wide_center else rect_full(0.18, 0.250, 0.82, 0.345)))
+	apply_rect(wall_label, rect_full(0.20, 0.275, 0.80, 0.365) if compact_center else (rect_full(0.22, 0.378 if wide_center_empty_last else 0.308, 0.78, 0.455 if wide_center_empty_last else 0.388) if wide_center else rect_full(0.18, 0.250, 0.82, 0.345)))
 	wall_label.anchor_bottom = wall_label.anchor_top
 	wall_label.offset_bottom = wall_label.get_combined_minimum_size().y
 	var wall_count_font_size := 28 if wide_center else (15 if (compact_center and large_text_enabled) else (16 if compact_center else (19 if large_text_enabled else 22)))
@@ -12742,7 +12746,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	status_label = status
 	if mode == "online_game":
 		var connection_status := online_connection_status_text()
-		var connection_color := Color(0.40, 0.78, 0.60) if connection_status == "已连接" else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
+		var connection_synced := connection_status in ["已连接", "已同步"]
+		var connection_color := Color(0.40, 0.78, 0.60) if connection_synced else Color(0.92, 0.70, 0.34) if connection_status == "断线" or connection_status == "连接异常" else Color(0.52, 0.72, 0.78)
 		var connection_surface := make_layout_host(rect_full(0.106, 0.620, 0.268, 0.960))
 		connection_surface.name = "TopHudOnlineConnectionStatus"
 		connection_surface.set_meta("ui_state_source", "tcp_status")
@@ -12750,9 +12755,9 @@ func draw_game_top_hud(parent: Control) -> void:
 		connection_surface.set_meta("ui_full_text", online_connection_status_detail())
 		connection_surface.tooltip_text = online_connection_status_detail()
 		hud.add_child(connection_surface)
-		var connection_icon_name := "zap" if connection_status == "已连接" else "x-circle"
+		var connection_icon_name := "zap" if connection_synced else "x-circle"
 		var conn_icon_px := 14.0 if wide_top_hud else 12.0
-		var connection_icon := add_lucide_icon(connection_surface, connection_icon_name, rect_full(0.0, 0.5, 0.0, 0.5), Color(0.11, 0.23, 0.18) if connection_status == "已连接" else Color(0.55, 0.17, 0.10))
+		var connection_icon := add_lucide_icon(connection_surface, connection_icon_name, rect_full(0.0, 0.5, 0.0, 0.5), Color(0.11, 0.32, 0.22) if connection_synced else Color(0.55, 0.17, 0.10))
 		if connection_icon != null:
 			connection_icon.name = "TopHudOnlineConnectionIcon"
 			connection_icon.offset_left = 0.0
@@ -15995,11 +16000,11 @@ func round_summary_paper_layout(panel_size: Vector2) -> Dictionary:
 	var hand_strip_top := yaku_top + yaku_height + small_height + 14.0
 	var detail_height := (hand_strip_top + hand_strip_height + 6.0) if show_hand_strip else (yaku_top + yaku_height + small_height + 10.0)
 	var body_top := content_top + detail_height + 8.0
-	var status_top := panel_size.y - (22.0 if wide_paper else 18.0) - small_height
+	var status_top := panel_size.y - (22.0 if wide_paper else 22.0) - small_height
 	var header_height := ceilf(ui_cjk_font().get_height(accessibility_font_size(header_fs))) + 8.0
 	var body_line_step := ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs))) + 4.0
 	var body_min_lane := body_line_step * 2.0
-	var raw_body_h := maxf(body_min_lane, status_top - body_top - 12.0)
+	var raw_body_h := maxf(body_min_lane, status_top - body_top - 14.0)
 	var snapped_body_h := maxf(body_min_lane, floorf(raw_body_h / maxf(1.0, body_line_step)) * body_line_step)
 	return {
 		"wide_paper": wide_paper,
@@ -16076,21 +16081,21 @@ func draw_round_summary(parent: Control) -> void:
 	lock_round_summary_background_controls(parent)
 	var content_size := summary_content_size_snapshot
 	var panel_width_px := round_summary_panel_width_px(content_size)
-	var panel_bottom_px := action_bar_dock_layout_rect(summary_viewport_snapshot, content_size).position.y * content_size.y - 12.0
+	var panel_bottom_px := action_bar_dock_layout_rect(summary_viewport_snapshot, content_size).position.y * content_size.y - 14.0
 	var minimum_layout := round_summary_paper_layout(Vector2(panel_width_px, 400.0 if content_size.x >= 1600.0 else 360.0))
 	var minimum_height := (minimum_layout["next"] as Rect2).end.y + 18.0
 	var body_fs_min := int(minimum_layout.get("body_fs", 14))
 	var body_min_height := (ceilf(ui_cjk_font().get_height(accessibility_font_size(body_fs_min))) + 4.0) * 2.0
-	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 38.0)
+	minimum_height = maxf(minimum_height, (minimum_layout["body"] as Rect2).position.y + body_min_height + float(minimum_layout["small_height"]) + 42.0)
 	var wide_summary := content_size.x >= 1600.0 and content_size.y >= 900.0
-	var preferred_height := (520.0 if wide_summary else (436.0 if content_size.y >= 640.0 else 372.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
+	var preferred_height := (496.0 if wide_summary else (436.0 if content_size.y >= 640.0 else 368.0)) if round_summary.length() < 180 and not large_text_enabled else content_size.y * 0.62
 	var top_clear_px := 10.0
 	if content_size.y >= 640.0:
 		top_clear_px = maxf(top_clear_px, battle_top_hud_layout_rect().size.y * content_size.y + 8.0)
-	var max_panel_height := minf(580.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
+	var max_panel_height := minf(560.0 if wide_summary else 520.0, panel_bottom_px - top_clear_px)
 	var panel_height_px := minf(maxf(maxf(312.0, minimum_height), preferred_height), maxf(312.0, max_panel_height))
 	var panel_left := (content_size.x - panel_width_px) * 0.5 / content_size.x
-	var panel_top_px := top_clear_px + maxf(0.0, (panel_bottom_px - top_clear_px - panel_height_px) * 0.5)
+	var panel_top_px := maxf(top_clear_px, panel_bottom_px - panel_height_px)
 	var panel_top := panel_top_px / content_size.y
 	var panel_right := 1.0 - panel_left
 	var panel_bottom := (panel_top_px + panel_height_px) / content_size.y
@@ -17621,8 +17626,12 @@ func settings_panel_rect_for_section(section_name: String, settings_viewport: Ve
 		else:
 			target_panel_h = minf(412.0, settings_content_size.y * 0.88)
 	elif large_text_enabled:
-		target_panel_w = minf(920.0 * modal_scale, settings_content_size.x * 0.86)
-		target_panel_h = minf(580.0 * modal_scale, settings_content_size.y * 0.86)
+		if wide_settings:
+			target_panel_w = minf(1140.0, settings_content_size.x * 0.86)
+			target_panel_h = minf(616.0, settings_content_size.y * 0.84)
+		else:
+			target_panel_w = minf(900.0, settings_content_size.x * 0.86)
+			target_panel_h = minf(488.0, settings_content_size.y * 0.86)
 	else:
 		if wide_settings:
 			target_panel_w = minf(840.0 * modal_scale, settings_content_size.x * 0.86)
@@ -17884,7 +17893,7 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.add_child(settings_content)
 		settings_content_parent = settings_content
 		settings_large_text_scroll = settings_scroll
-		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 13 if wide_settings else 11, Color(0.10, 0.22, 0.16, 1.0), false)
+		settings_large_text_status = make_label(panel, "设置区 1-2/3 · 声音、体验 · 下方还有内容", 16 if wide_settings else 11, Color(0.10, 0.22, 0.16, 1.0), false)
 		settings_large_text_status.name = "SettingsLargeTextScrollStatus"
 		style_guofeng_label(settings_large_text_status, false)
 		settings_large_text_status.add_theme_color_override("font_color", Color(0.05, 0.12, 0.09, 1.0) if high_contrast_enabled else Color(0.14, 0.25, 0.19, 1.0))
@@ -19859,17 +19868,31 @@ func draw_update_dialog_stage_map(parent: Control) -> Control:
 	parent.add_child(map)
 	var stage_vp := effective_viewport_size()
 	var stage_fs := 16 if stage_vp.x >= 1600.0 else 13
-	var stage_line := add_optional_gpt_illustration_texture(map, "quiet_gold_accent", rect_full(0.11, 0.445, 0.89, 0.495), 0.48, false)
+	var active_stage_idx := update_stage_index()
+	var stage_line := add_optional_gpt_illustration_texture(map, "battle_ink_plaque_20261112", rect_full(0.11, 0.445, 0.89, 0.500), 0.30, false)
 	if stage_line != null:
 		stage_line.name = "UpdateStageLine"
+	if active_stage_idx > 0 or update_state == "current":
+		var done_ratio := 1.0 if update_state == "current" else clampf(float(active_stage_idx) / 3.0, 0.0, 1.0)
+		var done_key := "ui_meter_guofeng_fill_jade_gpt" if guofeng_meter_fill_jade_texture() != null else "quiet_gold_accent"
+		var done_line := add_optional_gpt_illustration_texture(map, done_key, rect_full(0.11, 0.445, lerpf(0.11, 0.89, done_ratio), 0.500), 0.94, false)
+		if done_line != null:
+			done_line.name = "UpdateStageDoneLine"
+			if done_key == "quiet_gold_accent":
+				done_line.self_modulate = Color(0.18, 0.62, 0.40, 0.96)
 	var stages := [["checking", "检查"], ["downloading", "下载"], ["ready", "校验"], ["install", "安装"]]
 	for i in range(stages.size()):
+		var is_done := i < active_stage_idx or update_state == "current"
 		var label := make_label(map, str(stages[i][1]), stage_fs, Color.WHITE, true)
 		label.name = "UpdateDialogStageGlyph_%s" % str(stages[i][0])
 		apply_rect(label, rect_full(float(i) * 0.25, 0.0, float(i + 1) * 0.25, 0.44))
 		label.set_meta("update_stage_id", str(stages[i][0]))
 		label.set_meta("update_stage_full_label", str(stages[i][1]))
 		style_guofeng_label(label)
+		if is_done:
+			var check_icon := add_lucide_icon(map, "check", rect_full(float(i) * 0.25 + 0.032, 0.06, float(i) * 0.25 + 0.072, 0.38), Color(0.08, 0.44, 0.24, 1.0))
+			if check_icon != null:
+				check_icon.name = "UpdateStageCheck_%s" % str(stages[i][0])
 	var current_label := make_label(map, "当前阶段", stage_fs, Color.WHITE, true)
 	current_label.name = "UpdateDialogStageCurrentLabel"
 	apply_rect(current_label, rect_full(0.0, 0.52, 1.0, 1.0))
@@ -21800,8 +21823,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (88.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
-	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (80.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
+	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
+	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (96.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
 	row.set_meta("status_lane_contract", "title_then_status_then_action")
@@ -21825,8 +21848,8 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	if single_line_reset:
 		text_right = 0.615
 		button_left = 0.645
-	var row_title_size := 14 if compact_settings and large_text_settings else (15 if compact_settings or large_text_settings else (20 if wide_settings else guofeng_card_title_font_size(17)))
-	var row_status_size := 12 if compact_settings and large_text_settings else (13 if compact_settings or large_text_settings else (16 if wide_settings else 14))
+	var row_title_size := 14 if compact_settings and large_text_settings else (19 if (wide_settings and large_text_settings) else (15 if compact_settings or large_text_settings else (20 if wide_settings else guofeng_card_title_font_size(17))))
+	var row_status_size := 12 if compact_settings and large_text_settings else (16 if (wide_settings and large_text_settings) else (13 if compact_settings or large_text_settings else (16 if wide_settings else 14)))
 	var title_label = make_label(row, title, row_title_size, Color(0.10, 0.24, 0.17, 1.0), true)
 	title_label.name = "SettingRowTitle_%s" % title
 	title_label.add_theme_font_override("font", ui_heading_font())
@@ -21931,15 +21954,16 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	elif large_text_settings:
 		# Keep >=12px vertical and >=12px right inner card padding in large-text
 		# mode so action buttons and their focus halos never touch the card frame.
-		var lc_btn_w := 132.0 if setting_viewport.x >= 1600.0 else 118.0
+		var lc_btn_w := 154.0 if setting_viewport.x >= 1600.0 else 118.0
+		var lc_btn_half_h := 25.0 if setting_viewport.x >= 1600.0 else 23.0
 		apply_rect(button, rect_full(1.0, 0.5, 1.0, 0.5))
-		button.offset_left = -(lc_btn_w + 12.0)
-		button.offset_right = -12.0
-		button.offset_top = -23.0
-		button.offset_bottom = 23.0
+		button.offset_left = -(lc_btn_w + 14.0)
+		button.offset_right = -14.0
+		button.offset_top = -lc_btn_half_h
+		button.offset_bottom = lc_btn_half_h
 		for setting_label: Label in [title_label, status_label]:
 			setting_label.anchor_right = 1.0
-			setting_label.offset_right = -(lc_btn_w + 24.0)
+			setting_label.offset_right = -(lc_btn_w + 26.0)
 	else:
 		apply_rect(button, SETTINGS_ROW_BUTTON_RECT)
 	if not compact_settings and not large_text_settings:
@@ -22142,6 +22166,7 @@ func tile_face_crop_material(tile_key: String) -> ShaderMaterial:
 	# or swaps out res://assets/tiles/*.png Texture2D identity.
 	var crop_table: Dictionary = {
 		"7W": Vector4(0.0856, 0.0780, 0.8239, 0.8582),
+		"6W": Vector4(0.0500, 0.0120, 0.8920, 0.9540),
 		"4W": Vector4(0.0405, 0.0447, 0.9091, 0.9142),
 		"1W": Vector4(0.0234, 0.0261, 0.9432, 0.9478),
 		"7B": Vector4(0.0565, 0.0556, 0.8920, 0.9067),
