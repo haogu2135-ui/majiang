@@ -5739,10 +5739,11 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		avail_w = maxf(120.0, scroll_parent.size.x - 16.0) if scroll_parent != null else 220.0
 	var lines: PackedStringArray = text_val.split("\n")
 	var cursor_y: float = 0.0
-	var pad_y: float = 0.0 if (compact and large_text_enabled) else (1.5 if compact else (4.0 if wide else 3.0))
+	var pad_y: float = 0.0 if (compact and large_text_enabled) else (1.5 if compact else (3.5 if wide else 2.5))
 	var pad_x_right: float = 12.0 if compact else (18.0 if wide else 14.0)
 	var slice_margin: int = 24 if is_bubble_art else 104
-	var slice_scale: float = (0.24 if compact else (0.38 if wide else 0.32)) if is_bubble_art else 0.14
+	var slice_scale: float = (0.24 if compact else (0.38 if wide else 0.30)) if is_bubble_art else 0.14
+	var label_max_h: float = chat_label.size.y if chat_label.size.y > 1.0 else INF
 	for idx in range(lines.size()):
 		var raw_line: String = lines[idx]
 		var trimmed: String = raw_line.strip_edges()
@@ -5752,6 +5753,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		if trimmed != "":
 			var single_w: float = font.get_string_size(raw_line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fsize).x
 			var bubble_w: float = clampf((avail_w - 4.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 4.0, 92.0), maxf(92.0, avail_w - 4.0))
+			var bubble_top: float = maxf(0.0, cursor_y - pad_y * 0.5)
+			var bubble_bottom: float = minf(label_max_h, cursor_y + block_h + pad_y * 0.85)
 			var bubble := TextureRect.new()
 			bubble.name = "ChatMsgBubbleItem_%d" % idx
 			bubble.texture = bubble_tex
@@ -5759,8 +5762,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 			bubble.stretch_mode = TextureRect.STRETCH_SCALE
 			bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bubble.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			bubble.position = Vector2(0.0, maxf(0.0, cursor_y - pad_y))
-			bubble.size = Vector2(bubble_w, block_h + pad_y * 2.0)
+			bubble.position = Vector2(0.0, bubble_top)
+			bubble.size = Vector2(bubble_w, maxf(single_h, bubble_bottom - bubble_top))
 			host.add_child(bubble)
 			var is_self_msg: bool = trimmed.begins_with("你:") or trimmed.begins_with("你：") or trimmed.contains("  你:") or trimmed.contains("  你：")
 			var bubble_tint: Color = Color(0.90, 0.98, 0.92, 0.96) if is_self_msg else Color(1.0, 0.99, 0.95, 0.96)
@@ -5896,6 +5899,20 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 	latest.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	latest.tooltip_text = latest.text
 	latest.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var latest_bubble_tex: Texture2D = guofeng_chat_bubble_texture()
+	if latest_bubble_tex != null:
+		var latest_box := StyleBoxTexture.new()
+		latest_box.texture = latest_bubble_tex
+		latest_box.texture_margin_left = 10.0
+		latest_box.texture_margin_right = 10.0
+		latest_box.texture_margin_top = 6.0
+		latest_box.texture_margin_bottom = 6.0
+		latest_box.content_margin_left = 10.0
+		latest_box.content_margin_right = 10.0
+		latest_box.content_margin_top = 4.0
+		latest_box.content_margin_bottom = 4.0
+		latest_box.modulate_color = Color(0.99, 0.97, 0.92, 0.96)
+		latest.add_theme_stylebox_override("normal", latest_box)
 	var input_row := HBoxContainer.new()
 	input_row.name = "ChatPanelInputRow"
 	configure_passive_container(input_row)
@@ -6023,7 +6040,7 @@ func show_chat_panel() -> void:
 		var is_compact_vp: bool = chat_vp.x <= 1000.0 or chat_vp.y <= 580.0
 		var is_wide_vp: bool = chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
 		var modal_w: float = (512.0 if large_text_enabled else 468.0) if is_compact_vp else ((730.0 if large_text_enabled else 660.0) if is_wide_vp else (570.0 if large_text_enabled else 520.0))
-		var modal_h: float = (380.0 if large_text_enabled else 340.0) if is_compact_vp else ((540.0 if large_text_enabled else 484.0) if is_wide_vp else (428.0 if large_text_enabled else 384.0))
+		var modal_h: float = (408.0 if large_text_enabled else 372.0) if is_compact_vp else ((568.0 if large_text_enabled else 512.0) if is_wide_vp else (456.0 if large_text_enabled else 412.0))
 		modal_w = minf(chat_content_sz.x * 0.90, modal_w)
 		modal_h = minf(chat_content_sz.y * 0.88, modal_h)
 		var mw_f: float = modal_w / maxf(1.0, chat_content_sz.x)
@@ -6037,23 +6054,28 @@ func show_chat_panel() -> void:
 		if not left_hand.is_empty():
 			var lh_rect: Rect2 = left_hand["rect"]
 			left_clear_y = maxf(left_clear_y, lh_rect.size.y + 0.008)
-		var left_wall := root_layer.find_child("WallBackStrip_3", true, false) as Control
-		if left_wall != null and left_wall.is_visible_in_tree():
-			var wall_box := toast_obstacle_rect(left_wall)
-			var root_box := root_layer.get_global_rect()
-			if root_box.size.y > 1.0:
-				var wall_bottom_f: float = (wall_box.end.y - root_box.position.y) / root_box.size.y
-				left_clear_y = maxf(left_clear_y, wall_bottom_f + 0.008)
+		var root_box := root_layer.get_global_rect()
+		if root_box.size.y > 1.0:
+			for obstacle_name in ["WallBackStrip_3", "OpponentHand_3"]:
+				var left_obs := root_layer.find_child(obstacle_name, true, false) as Control
+				if left_obs != null and left_obs.is_visible_in_tree():
+					var obs_box := toast_obstacle_rect(left_obs)
+					var obs_bottom_f: float = (obs_box.end.y - root_box.position.y) / root_box.size.y
+					left_clear_y = maxf(left_clear_y, obs_bottom_f + 0.008)
 		var bottom_cap: float = 0.774
 		var chat_btn_rect := battle_chat_action_button_rect(chat_vp, chat_content_sz)
 		if chat_btn_rect.position.y > 0.65:
 			bottom_cap = minf(bottom_cap, chat_btn_rect.position.y - 0.006)
 		var base_h: float = panel_rect.size.y - panel_rect.position.y
-		var min_drawer_h: float = minf(base_h, 0.244)
+		var tight_desktop: bool = chat_vp.y <= 780.0
+		var target_drawer_h: float = minf(base_h, 0.220) if tight_desktop else base_h
+		var min_drawer_h: float = minf(target_drawer_h, 0.212)
 		if left_clear_y > panel_rect.position.y + 0.002 and bottom_cap - left_clear_y >= min_drawer_h:
 			var new_top: float = clampf(left_clear_y, 0.425, bottom_cap - min_drawer_h)
-			var new_bottom: float = minf(bottom_cap, new_top + base_h)
+			var new_bottom: float = minf(bottom_cap, new_top + target_drawer_h)
 			panel_rect = rect_full(panel_rect.position.x, new_top, panel_rect.size.x, new_bottom)
+		elif tight_desktop and base_h > target_drawer_h:
+			panel_rect = rect_full(panel_rect.position.x, panel_rect.position.y, panel_rect.size.x, panel_rect.position.y + target_drawer_h)
 	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
 	var wide_chat_ui: bool = not compact_chat and chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
 	# The drawer is modal for the table: keep a root-level hit target with a soft
@@ -6100,7 +6122,8 @@ func show_chat_panel() -> void:
 		configure_guofeng_button_slice(chat_panel, true, 104, 0.14 if compact_chat else (0.22 if wide_chat_ui else 0.18), chat_frame_tex, true)
 		var chat_frame_edges: NinePatchRect = chat_panel.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if chat_frame_edges != null:
-			chat_frame_edges.self_modulate = Color(0.62, 0.50, 0.26, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.94)
+			chat_frame_edges.draw_center = false
+			chat_frame_edges.self_modulate = Color(0.96, 0.91, 0.78, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.94)
 	chat_panel.z_index = 85
 	chat_panel.set_meta("layout_role", route_name)
 	chat_panel.set_meta("compact_chat", compact_chat)
@@ -6173,12 +6196,14 @@ func show_chat_panel() -> void:
 		scroll_box.texture_margin_right = 14.0
 		scroll_box.texture_margin_top = 14.0
 		scroll_box.texture_margin_bottom = 14.0
-		scroll_box.content_margin_left = 8.0
-		scroll_box.content_margin_right = 6.0
-		scroll_box.content_margin_top = 0.0
-		scroll_box.content_margin_bottom = 0.0
+		var inset_frame_margins: bool = mode != "online_game"
+		scroll_box.content_margin_left = 14.0 if inset_frame_margins else 10.0
+		scroll_box.content_margin_right = 14.0 if inset_frame_margins else 8.0
+		scroll_box.content_margin_top = 14.0 if inset_frame_margins else 0.0
+		scroll_box.content_margin_bottom = 14.0 if inset_frame_margins else 0.0
 		scroll_box.modulate_color = Color(0.95, 0.91, 0.84, 0.72)
 		chat_scroll.add_theme_stylebox_override("panel", scroll_box)
+		chat_scroll.clip_contents = true
 	apply_rect(chat_scroll, rect_full(0.060, 0.145 if compact_chat else 0.285, 0.940, 0.300 if compact_chat else 0.775))
 	chat_panel.add_child(chat_scroll)
 	var chat_label = make_label(chat_scroll, chat_display_text, chat_msg_sz, Color(0.11, 0.21, 0.16), false)
@@ -6199,7 +6224,7 @@ func show_chat_panel() -> void:
 	chat_label.clip_contents = false
 	chat_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.add_theme_constant_override("line_spacing", 0 if compact_chat and large_text_enabled else (4 if compact_chat else (12 if wide_chat_ui else 9)))
+	chat_label.add_theme_constant_override("line_spacing", 0 if compact_chat and large_text_enabled else (4 if compact_chat else (12 if wide_chat_ui else (7 if chat_vp.y <= 580.0 else 9))))
 	chat_label.tooltip_text = chat_text
 	var bubbles_host := Control.new()
 	bubbles_host.name = "ChatMsgBubblesHost"
@@ -7683,8 +7708,8 @@ func show_exit_confirm() -> void:
 	var compact_exit := exit_viewport.y <= 600.0 or exit_viewport.x <= 1000.0
 	var wide_exit := exit_viewport.x >= 1600.0 and exit_viewport.y >= 900.0
 	var content_size := safe_content_pixel_size()
-	var target_w: float = (500.0 if large_text_enabled else 440.0) if compact_exit else ((640.0 if large_text_enabled else 580.0) if wide_exit else (560.0 if large_text_enabled else 490.0))
-	var target_h: float = (300.0 if large_text_enabled else 252.0) if compact_exit else ((368.0 if large_text_enabled else 320.0) if wide_exit else (324.0 if large_text_enabled else 278.0))
+	var target_w: float = (500.0 if large_text_enabled else 432.0) if compact_exit else ((640.0 if large_text_enabled else 580.0) if wide_exit else (560.0 if large_text_enabled else 490.0))
+	var target_h: float = (300.0 if large_text_enabled else 216.0) if compact_exit else ((368.0 if large_text_enabled else 320.0) if wide_exit else (324.0 if large_text_enabled else 278.0))
 	var dialog_width := minf(content_size.x * 0.88, target_w)
 	var dialog_height := minf(content_size.y * 0.86, target_h)
 	var dialog_rect := rect_full(0.5 - dialog_width / content_size.x * 0.5, 0.5 - dialog_height / content_size.y * 0.5, 0.5 + dialog_width / content_size.x * 0.5, 0.5 + dialog_height / content_size.y * 0.5)
@@ -7693,10 +7718,11 @@ func show_exit_confirm() -> void:
 	dialog.self_modulate = Color.WHITE
 	var exit_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if exit_frame_tex != null:
-		configure_guofeng_button_slice(dialog, true, 104, 0.18 if compact_exit else (0.24 if wide_exit else 0.21), exit_frame_tex, true)
+		configure_guofeng_button_slice(dialog, true, 104, 0.16 if compact_exit else (0.24 if wide_exit else 0.21), exit_frame_tex, true)
 		var exit_edges: NinePatchRect = dialog.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if exit_edges != null:
-			exit_edges.self_modulate = Color(0.62, 0.50, 0.26, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.92)
+			exit_edges.draw_center = false
+			exit_edges.self_modulate = Color(0.96, 0.91, 0.78, 1.0) if high_contrast_enabled else Color(0.95, 0.90, 0.80, 0.92)
 	dialog.set_meta("viewport_snapshot", exit_viewport)
 	dialog.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	dialog.set_meta("compact_layout", compact_exit)
@@ -7707,23 +7733,24 @@ func show_exit_confirm() -> void:
 	dialog.set_meta("opaque_reading_surface", true)
 
 	# 标题 + 墨韵分隔线
-	var exit_title_size: int = guofeng_modal_font_size(24 if compact_exit else 26, exit_viewport, 1.15)
-	var exit_msg_size: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
+	var compact_tight_exit: bool = compact_exit and not large_text_enabled
+	var exit_title_size: int = guofeng_modal_font_size(22 if compact_tight_exit else (24 if compact_exit else 26), exit_viewport, 1.15)
+	var exit_msg_size: int = guofeng_modal_font_size(14 if compact_tight_exit else (15 if compact_exit else 16), exit_viewport, 1.18)
 	var exit_status_size: int = guofeng_modal_font_size(12 if compact_exit else 13, exit_viewport, 1.18)
 	var title = make_heading(dialog, "确认退出", exit_title_size, Color(0.10, 0.22, 0.16), true)
 	title.name = "ExitConfirmTitle"
-	apply_rect(title, rect_full(0.08, 0.07, 0.92, 0.22))
+	apply_rect(title, rect_full(0.08, 0.06 if compact_tight_exit else 0.07, 0.92, 0.22))
 	style_guofeng_label(title)
 	title.add_theme_font_size_override("font_size", exit_title_size)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var exit_divider := make_brush_stroke_divider(dialog, rect_full(0.16, 0.242, 0.84, 0.264))
+	var exit_divider := make_brush_stroke_divider(dialog, rect_full(0.16, 0.235 if compact_tight_exit else 0.242, 0.84, 0.258 if compact_tight_exit else 0.264))
 	if exit_divider != null:
 		exit_divider.modulate = Color(0.76, 0.64, 0.38, 0.72)
 
 	# 提示文本
 	var message = "是否暂离当前牌局？\n下次进入可随时续局。"
 	var msg_label = make_label(dialog, message, exit_msg_size, Color(0.14, 0.24, 0.18), false)
-	apply_rect(msg_label, rect_full(0.09, 0.29, 0.91, 0.50))
+	apply_rect(msg_label, rect_full(0.09, 0.275 if compact_tight_exit else 0.29, 0.91, 0.50))
 	style_guofeng_label(msg_label)
 	msg_label.add_theme_font_size_override("font_size", exit_msg_size)
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -7732,7 +7759,7 @@ func show_exit_confirm() -> void:
 	set_ui_full_text(msg_label, message, "退出后果")
 	var save_status := make_label(dialog, "进度将在退出前自动保存", exit_status_size, Color(0.14, 0.44, 0.28), true)
 	save_status.name = "ExitConfirmSaveStatus"
-	apply_rect(save_status, rect_full(0.09, 0.53, 0.91, 0.63))
+	apply_rect(save_status, rect_full(0.09, 0.525 if compact_tight_exit else 0.53, 0.91, 0.635 if compact_tight_exit else 0.63))
 	style_guofeng_label(save_status)
 	save_status.add_theme_font_size_override("font_size", exit_status_size)
 	save_status.add_theme_color_override("font_color", Color(0.12, 0.42, 0.26))
@@ -7747,9 +7774,9 @@ func show_exit_confirm() -> void:
 	var button_row = HBoxContainer.new()
 	button_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	button_row.add_theme_constant_override("separation", 16 if compact_exit else (24 if wide_exit else 18))
-	apply_rect(button_row, rect_full(0.09, 0.70, 0.91, 0.90))
+	apply_rect(button_row, rect_full(0.09, 0.695 if compact_tight_exit else 0.70, 0.91, 0.91 if compact_tight_exit else 0.90))
 	dialog.add_child(button_row)
-	var exit_btn_min := Vector2(132, 48) if compact_exit else (Vector2(172, 56) if wide_exit else Vector2(148, 52))
+	var exit_btn_min := (Vector2(128, 44) if compact_tight_exit else Vector2(132, 48)) if compact_exit else (Vector2(172, 56) if wide_exit else Vector2(148, 52))
 	var exit_btn_font: int = guofeng_modal_font_size(15 if compact_exit else 16, exit_viewport, 1.18)
 
 	# 继续游戏按钮
@@ -8163,11 +8190,18 @@ func _show_replay_import_screen_impl() -> void:
 	var compact_replay_large := replay_viewport.y <= 560.0 and large_text_enabled
 	var title := make_heading(panel, "回放复盘", 22 if compact_replay_large else commercial_ui_font_size(30, 4), Color(0.10, 0.22, 0.16), true)
 	title.name = "ReplayImportTitle"
-	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, 0.210, 0.095))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(title)
 	set_ui_full_text(title, "回放复盘", "回放复盘页标题")
 	mark_ui_optimization(title, "F-503")
+	var replay_content_sz := safe_content_pixel_size()
+	var replay_panel_est_w: float = panel.size.x if panel.size.x > 1.0 else (minf(replay_content_sz.x * 0.88, 1440.0 if wide_replay else 1120.0) if use_jiangnan_secondary_composition(replay_viewport) else maxf(640.0, replay_content_sz.x * 0.96))
+	var title_font: Font = title.get_theme_font("font")
+	var title_fsize: int = title.get_theme_font_size("font_size")
+	var replay_title_w: float = title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_fsize).x if title_font != null else 0.0
+	replay_title_w = maxf(replay_title_w, maxf(title.get_combined_minimum_size().x, float(title.text.length() * title_fsize) * 1.04))
+	var digest_left_frac: float = clampf((0.055 * replay_panel_est_w + replay_title_w + 20.0) / replay_panel_est_w, 0.165, 0.420)
+	apply_rect(title, rect_full(0.055, 0.018 if compact_replay_large else 0.026, minf(0.400, digest_left_frac - 0.010), 0.095))
 	var digest_hint := make_label(panel, "回放防篡改校验", commercial_ui_font_size(12, 3), Color(0.20, 0.30, 0.25), false)
 	digest_hint.name = "ReplayImportDigestHint"
 	style_guofeng_label(digest_hint)
@@ -8175,10 +8209,7 @@ func _show_replay_import_screen_impl() -> void:
 	digest_hint.set_meta("preserve_semantic_color", true)
 	digest_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	digest_hint.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	var replay_panel_est_w: float = panel.size.x if panel.size.x > 1.0 else maxf(640.0, replay_viewport.x * 0.96)
-	var replay_title_w: float = title.get_combined_minimum_size().x
-	var digest_left_frac: float = clampf((0.055 * replay_panel_est_w + replay_title_w + 14.0) / replay_panel_est_w, 0.140, 0.235)
-	apply_rect(digest_hint, rect_full(digest_left_frac, 0.036, 0.560, 0.088))
+	apply_rect(digest_hint, rect_full(digest_left_frac, 0.036, 0.620, 0.088))
 	configure_clipped_label(digest_hint)
 	set_ui_full_text(digest_hint, "回放防篡改校验（SHA-256 摘要链）", "回放完整性校验方式")
 	mark_ui_optimization(digest_hint, "F-504")
@@ -8403,7 +8434,7 @@ func _show_replay_import_screen_impl() -> void:
 	search.set_meta("ui_input_role", "replay_archive_filter")
 	search.set_meta("ui_single_line", true)
 	search.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-	apply_rect(search, rect_full(0.045, 0.112 if wide_replay else 0.130, 0.955, 0.204 if wide_replay else 0.275))
+	apply_rect(search, rect_full(0.045, 0.112 if wide_replay else (0.130 if compact_replay_layout else 0.122), 0.955, 0.204 if wide_replay else (0.275 if compact_replay_layout else 0.264)))
 	archive_pane.add_child(search)
 	var search_clear_proxy := add_line_edit_clear_proxy(archive_pane, search, "ReplayArchiveSearchClearButton", Callable(self, "set_replay_search_query").bind(""))
 	if search_clear_proxy != null:
@@ -8420,7 +8451,7 @@ func _show_replay_import_screen_impl() -> void:
 	archive_scroll.scroll_deadzone = 8
 	archive_scroll.clip_contents = true
 	archive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
-	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else 0.305, 0.975, 0.936 if wide_replay else (0.929 if not compact_replay_layout else 0.935)))
+	apply_rect(archive_scroll, rect_full(0.045, 0.228 if wide_replay else (0.305 if compact_replay_layout else 0.288), 0.985 if compact_replay_layout else 0.988, 0.936 if wide_replay else (0.935 if compact_replay_layout else 0.916)))
 	archive_pane.add_child(archive_scroll)
 	if compact_replay_layout and not large_text_enabled:
 		var compact_archive_hint := make_label(archive_pane, "上下滑动查看更多归档", 11, Color(0.24, 0.34, 0.28), false)
@@ -8430,9 +8461,10 @@ func _show_replay_import_screen_impl() -> void:
 		compact_archive_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		compact_archive_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		style_guofeng_label(compact_archive_hint)
-		compact_archive_hint.add_theme_color_override("font_color", Color(0.24, 0.34, 0.28))
+		compact_archive_hint.add_theme_color_override("font_color", Color(0.20, 0.30, 0.25))
 		compact_archive_hint.set_meta("preserve_semantic_color", true)
-		var hint_frame_tex: Texture2D = optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+		var hint_bubble_tex: Texture2D = guofeng_chat_bubble_texture()
+		var hint_frame_tex: Texture2D = hint_bubble_tex if hint_bubble_tex != null else optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		if hint_frame_tex != null:
 			var hint_bg := TextureRect.new()
 			hint_bg.name = "ReplayCompactFooterCard"
@@ -8443,10 +8475,11 @@ func _show_replay_import_screen_impl() -> void:
 			hint_bg.show_behind_parent = true
 			apply_rect(hint_bg, rect_full(0.0, 0.0, 1.0, 1.0))
 			compact_archive_hint.add_child(hint_bg)
-			configure_guofeng_button_slice(hint_bg, true, 104, 0.14, hint_frame_tex, false)
+			var is_hint_bubble: bool = hint_frame_tex == hint_bubble_tex
+			configure_guofeng_button_slice(hint_bg, true, 24 if is_hint_bubble else 96, 0.30 if is_hint_bubble else 0.125, hint_frame_tex, false)
 			var hint_edges: NinePatchRect = hint_bg.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 			if hint_edges != null:
-				hint_edges.self_modulate = Color(0.96, 0.93, 0.87, 0.86)
+				hint_edges.self_modulate = Color(0.99, 0.97, 0.92, 0.94)
 		compact_archive_hint.visible = false
 	var archive_scrollbar := archive_scroll.get_v_scroll_bar()
 	if archive_scrollbar != null:
@@ -9077,7 +9110,7 @@ func make_replay_archive_row(entry: Dictionary, archive_date_text_snapshot: Stri
 	# lane. A changing row height can move the action lane beneath the viewport
 	# edge when the archive list is already at its tail.
 	var compact_archive_actions: bool = archive_viewport_size.x <= 1100.0 or archive_viewport_size.y <= 560.0
-	var base_row_h: int = 122 if compact_archive_actions else 114
+	var base_row_h: int = 122 if compact_archive_actions else 108
 	row.custom_minimum_size = Vector2(0, (148 if large_text_enabled else 132) if delete_confirming else (128 if large_text_enabled else base_row_h))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.set_meta("archive_id", archive_id)
@@ -9932,14 +9965,15 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	var toast_vp := effective_viewport_size()
 	var face := make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color.WHITE, "settings_readable_gpt", 1.0)
 	face.name = "ToastGptFacePlate"
-	face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
+	face.self_modulate = Color(1.0, 0.995, 0.96) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var toast_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
 	if toast_frame_tex != null:
-		configure_guofeng_button_slice(face, true, 104, 0.20, toast_frame_tex, true)
+		configure_guofeng_button_slice(face, true, 104, 0.12, toast_frame_tex, true)
 		var toast_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if toast_edges != null:
-			toast_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
+			toast_edges.draw_center = false
+			toast_edges.self_modulate = Color(0.96, 0.90, 0.74, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
 	toast_bg.add_child(face)
 	var toast_msg_size: int = guofeng_modal_font_size(16, toast_vp, 1.16)
 	var toast_pending_size: int = guofeng_modal_font_size(11, toast_vp, 1.18)
@@ -9948,7 +9982,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(label)
 	label.add_theme_font_size_override("font_size", toast_msg_size)
-	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
+	label.add_theme_color_override("font_color", Color(0.02, 0.06, 0.04) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
 	set_ui_full_text(label, safe_text, "通知：" + safe_text)
 	var pending_label := make_label(toast_bg, "", toast_pending_size, Color.WHITE, false)
 	pending_label.name = "ToastPendingLabel"
@@ -9958,7 +9992,7 @@ func show_toast(text: String, duration_msec: int = TOAST_DEFAULT_DURATION_MSEC, 
 	pending_label.set_meta("dwell_policy", "oldest_first_with_minimum_dwell")
 	style_guofeng_label(pending_label)
 	pending_label.add_theme_font_size_override("font_size", toast_pending_size)
-	pending_label.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
+	pending_label.add_theme_color_override("font_color", Color(0.06, 0.13, 0.09) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var detail := make_small_button("详情", Color.WHITE, Callable(self, "open_toast_detail"))
 	detail.custom_minimum_size = Vector2(44.0, 44.0)
 	detail.add_theme_font_size_override("font_size", accessibility_font_size(12))
@@ -9991,6 +10025,15 @@ func toast_reading_obstacles() -> Array[Control]:
 	var obstacles: Array[Control] = []
 	if root_layer == null or not is_instance_valid(root_layer):
 		return obstacles
+	# When a full-scrim settings/diagnostic modal owns the screen, background menu/battle
+	# labels sit behind an opaque 0.82-0.86 scrim and must not force the toast into a narrow gutter.
+	var active_scrim_modals: Array[Control] = []
+	for modal_name in ["SettingsPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "UpdateDialogPanel"]:
+		var modal_ctrl := root_layer.find_child(modal_name, true, false) as Control
+		if modal_ctrl != null and modal_ctrl.is_visible_in_tree() and not modal_ctrl.is_queued_for_deletion() and modal_ctrl.size.x > 1.0 and modal_ctrl.size.y > 1.0:
+			active_scrim_modals.append(modal_ctrl)
+	if not active_scrim_modals.is_empty():
+		return active_scrim_modals
 	var names := ["MenuTitleLabel", "MenuTutorialEntryBanner", "TopHud3DShell", "TableLogLedgerPanel", "CenterConsole3DShell", "ActionButtonDock", "ActionIntentDock", "HandTray", "AdvisorPanel", "RoundSummaryPanel", "SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel", "DailyLoginProgressPanel"]
 	for control in root_layer.find_children("*", "Control", true, false):
 		var candidate := control as Control
@@ -10028,13 +10071,15 @@ func toast_safe_rect(height: float, obstacles: Array[Control], content_width: fl
 		preferred = Vector2(container_rect.get_center().x, container_rect.position.y + container_rect.size.y * 0.13)
 		slot_name = "battle_measured_clearance"
 	for obstacle in obstacles:
-		if str(obstacle.name) in ["SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel"]:
-			preferred = bounds.position
-			max_width = minf(max_width, container_rect.size.x * 0.36)
+		var obs_name := str(obstacle.name)
+		if obs_name in ["SettingsPanel", "AdvisorDetailPanel", "TableLogArchivePanel", "ChatPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "TutorialEntryOverlay", "UpdateDialogPanel", "LoadingCenterPanel"]:
+			var center_above_modal := obs_name in ["SettingsPanel", "TelemetryDataSheetCard", "DiagnosticDialogPanel", "ExitConfirmDialog", "UpdateDialogPanel"]
+			preferred = Vector2(container_rect.get_center().x, bounds.position.y) if center_above_modal else bounds.position
+			max_width = minf(max_width, container_rect.size.x * (0.46 if center_above_modal else 0.36))
 			toast_current.set_meta("modal_safe_route", "measured_clear_of_reading_owner")
-			toast_current.set_meta("modal_safe_owner", str(obstacle.name))
-			slot_name = "modal_override_top_left"
-			align_mode = "left"
+			toast_current.set_meta("modal_safe_owner", obs_name)
+			slot_name = "modal_override_top_center" if center_above_modal else "modal_override_top_left"
+			align_mode = "center" if center_above_modal else "left"
 			break
 	var desired_width := max_width
 	if content_width > 0.0:
@@ -10096,19 +10141,21 @@ func reflow_active_toast() -> void:
 	var detail := toast_current.get_node("ToastDetailButton") as Button
 	var face := toast_current.get_node("ToastGptFacePlate") as Control
 	if face != null:
-		face.self_modulate = Color(1.0, 0.985, 0.94) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
+		face.self_modulate = Color(1.0, 0.995, 0.96) if high_contrast_enabled else Color(0.99, 0.97, 0.91)
 		var reflow_edges: NinePatchRect = face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
 		if reflow_edges != null:
-			reflow_edges.self_modulate = Color(0.50, 0.38, 0.16, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
-	label.add_theme_color_override("font_color", Color(0.04, 0.09, 0.06) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
-	pending.add_theme_color_override("font_color", Color(0.08, 0.16, 0.11) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
+			reflow_edges.draw_center = false
+			reflow_edges.self_modulate = Color(0.96, 0.90, 0.74, 1.0) if high_contrast_enabled else Color(0.92, 0.85, 0.70, 1.0)
+	label.add_theme_color_override("font_color", Color(0.02, 0.06, 0.04) if high_contrast_enabled else Color(0.09, 0.17, 0.13))
+	pending.add_theme_color_override("font_color", Color(0.06, 0.13, 0.09) if high_contrast_enabled else Color(0.18, 0.28, 0.22))
 	var height := maxf(float(UI_MIN_TOUCH_TARGET), label.get_minimum_size().y + 12.0)
 	var slot := Rect2()
 	var shop_body := root_layer.find_child("ShopCabinetFooterBody", true, false) as Control if mode == "shop" and root_layer != null else null
 	var footer := root_layer.find_child("ShopCabinetFooterPanel", true, false) as Control if shop_body != null else null
 	var inline_shop := shop_body != null and footer != null and shop_body.size.x > 1.0
+	var compact_modal_toast: bool = not inline_shop and settings_panel_open and effective_viewport_size().y <= 720.0
 	if not inline_shop:
-		height = maxf(50.0, label.get_minimum_size().y + 20.0)
+		height = maxf(44.0, label.get_minimum_size().y + 14.0) if compact_modal_toast else maxf(50.0, label.get_minimum_size().y + 20.0)
 	var pending_width := ceilf(pending.get_theme_font("font").get_string_size(pending.text, HORIZONTAL_ALIGNMENT_LEFT, -1, pending.get_theme_font_size("font_size")).x) if pending.visible else 0.0
 	var text_width := label.get_theme_font("font").get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.get_theme_font_size("font_size")).x
 	var full_text := str(toast_current.get_meta("toast_text", ""))
@@ -10146,7 +10193,7 @@ func reflow_active_toast() -> void:
 	toast_current.position = slot.position - toast_container.get_global_rect().position
 	toast_current.size = slot.size
 	var inset_x: float = 6.0 if inline_shop else 18.0
-	var inset_y: float = 6.0 if inline_shop else 9.0
+	var inset_y: float = 6.0 if inline_shop else (7.0 if compact_modal_toast else 9.0)
 	message_width = slot.size.x - inset_x * 2.0 - (pending_width + 10.0 if pending_width > 0.0 and not stacked else 0.0)
 	overflow = full_text.contains("\n") or text_width > message_width
 	detail.visible = overflow
