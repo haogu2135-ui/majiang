@@ -47,6 +47,9 @@ const REPLACED_GPT_ILLUSTRATION_PNG_SHA256 := {
 }
 const VISUAL_NODE_REFERENCE_BACKFILL := [
 	"ButtonFocusPlate",
+	"ChatPanelFrameBorder",
+	"GuofengSecondaryBadgePlate",
+	"SettingsPanelChamferBorder",
 	"MeldKindBadge",
 	"MeldKindBadgeLabel",
 	"MeldGroup3DCastShadow",

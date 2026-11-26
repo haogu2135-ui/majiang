@@ -1599,7 +1599,7 @@ const HAND_TRAY_TEXT_RECT := Rect2(Vector2(0.030, 0.040), Vector2(0.760, 0.145))
 const HAND_TRAY_STATE_BADGE_RECT := Rect2(Vector2(0.760, 0.040), Vector2(0.970, 0.145))
 # Keep a dedicated top prompt lane above the clickable tile row while moving the
 # row upward enough to preserve the minimum touch width at the compact gate.
-const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.260), Vector2(0.985, 0.945))
+const HAND_TRAY_TILES_RECT := Rect2(Vector2(0.015, 0.225), Vector2(0.985, 0.940))
 const HAND_LAYOUT_CANDIDATES := [
 	[8.0, 2],
 	[6.0, 4],

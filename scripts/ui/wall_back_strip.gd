@@ -71,7 +71,9 @@ func _notification(what: int) -> void:
 static func face_center_for_layout(index: int, capacity: int, is_horizontal: bool, available_size: Vector2, face_size: Vector2, visible_count: int = -1) -> Vector2:
 	var slots := float(maxi(1, capacity))
 	var active_slots := float(maxi(1, visible_count if visible_count > 0 else capacity))
-	var center_shift := maxf(0.0, (slots - active_slots) * 0.5)
+	# Center horizontal wall tracks around the table compass; keep vertical side
+	# tracks top-anchored so partial walls never intrude into lower-side drawers.
+	var center_shift := maxf(0.0, (slots - active_slots) * 0.5) if is_horizontal else 0.0
 	if is_horizontal:
 		var pitch := minf(available_size.x / slots, face_size.x * 4.0 / 3.0)
 		var start := (available_size.x - pitch * slots) * 0.5

@@ -4693,8 +4693,8 @@ func advisor_panel_occupancy_snapshot(viewport_snapshot: Vector2 = Vector2.ZERO,
 			var wall_size := wall_rect.size - wall_rect.position
 			var face_size := WALL_BACK_TILE_SIZE / resolved_content_size
 			var wall_pixels := wall_size * resolved_content_size
-			var first_center := wall_rect.position + WallBackStrip.face_center_for_layout(0, capacity, bool(layout[3]), wall_pixels, WALL_BACK_TILE_SIZE) / resolved_content_size
-			var last_center := wall_rect.position + WallBackStrip.face_center_for_layout(count - 1, capacity, bool(layout[3]), wall_pixels, WALL_BACK_TILE_SIZE) / resolved_content_size
+			var first_center := wall_rect.position + WallBackStrip.face_center_for_layout(0, capacity, bool(layout[3]), wall_pixels, WALL_BACK_TILE_SIZE, count) / resolved_content_size
+			var last_center := wall_rect.position + WallBackStrip.face_center_for_layout(count - 1, capacity, bool(layout[3]), wall_pixels, WALL_BACK_TILE_SIZE, count) / resolved_content_size
 			var face_span := last_center - first_center
 			var gutter := Vector2(6.0, 6.0) / resolved_content_size
 			occupied.append(Rect2(first_center - face_size * 0.5 - gutter, face_span + face_size + gutter * 2.0))
@@ -12381,6 +12381,8 @@ func seat_meld_rect(seat: int, viewport_snapshot: Vector2 = Vector2.ZERO) -> Rec
 		var river := battle_table_anchor_root_rect(seat_discard_rect(0), viewport_size)
 		return rect_full(wall_right, 0.545, river.position.x - 8.0 / content_size.x, 0.615)
 	if viewport_size.x <= 960.0 or viewport_size.y <= 560.0:
+		if seat == 2:
+			return rect_full(0.668, 0.136, 0.954, 0.203)
 		if seat == 3:
 			return rect_full(0.125, 0.240, 0.185, 0.660)
 		if seat == 1:
