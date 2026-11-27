@@ -69,6 +69,8 @@ func check_daily(scene: Node, output: String) -> void:
 	await activate_button(claim, "mouse")
 	await settle(0.10)
 	check(int(scene.currency.get("coins", 0)) == before_coins + 100 and claim.disabled and claim.text == "已领取", "native daily claim credits exactly one reward and shows its disabled state")
+	var days_heading := reading_node(scene, "DailyLoginDaysLabel") as Label
+	check(days_heading != null and days_heading.text.begins_with("已连续签到 5 天") and not days_heading.text.contains("今日可领"), "U-04: daily login heading refreshes immediately to claimed copy after claiming")
 	var disabled_ink := claim.get_theme_color("font_disabled_color")
 	check(disabled_ink.r > 0.75 and disabled_ink.g > 0.75 and disabled_ink.b > 0.65, "claimed action keeps readable ivory text on its ink face")
 	claim.pressed.emit()

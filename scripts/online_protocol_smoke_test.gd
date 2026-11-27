@@ -476,6 +476,21 @@ func run() -> void:
 	check(scene.tcp_buffer.is_empty() and scene.online_room.is_empty() and scene.online_game.is_empty() and not scene.online_resume_pending, "old protocol rejection clears stale snapshots and resume markers")
 	check(scene.online_feedback.contains("协议版本过旧"), "old protocol rejection explains the required server update")
 
+	# F-01 regression: synchronous connect_to_host failure during reconnect must keep
+	# connection_error instead of overwriting to connecting and locking out retry.
+	scene.mode = "online_game"
+	scene.selected_room = "QA180"
+	scene.online_game = {"roomCode": "QA180", "phase": "awaitDiscard", "youSeat": 0, "currentSeat": 0, "hand": ["3W"]}
+	scene.online_resume_context = {"room": "QA180", "host": "invalid host:bad", "name": expected_name}
+	scene.online_host_edit.text = "invalid host:bad"
+	scene.online_next_reconnect_msec = 0
+	scene.online_reconnect_attempts = 0
+	scene.reconnect_online_game()
+	check(scene.online_recovery_reason_code == "connection_error" and not scene.online_recovery_connecting() and scene.online_feedback.contains("连接失败"), "synchronous reconnect failure preserves connection_error instead of locking in connecting")
+	scene.online_next_reconnect_msec = Time.get_ticks_msec() - 1
+	var recovery_after_sync_err: Dictionary = scene.online_recovery_view_model()
+	check(str(recovery_after_sync_err.get("phase", "")) == "retry_ready" and not bool(recovery_after_sync_err.get("reconnecting", true)), "synchronous reconnect failure becomes retryable once cooldown expires")
+
 	scene.shutdown_runtime()
 	scene.queue_free()
 	server.stop()

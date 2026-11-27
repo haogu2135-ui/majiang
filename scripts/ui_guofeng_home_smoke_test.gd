@@ -57,7 +57,7 @@ func check_guofeng_home(scene: Node, output_dir: String) -> void:
 		var subtitle := button.find_child("MenuCardSubtitleLabel", true, false) as Label
 		check(title != null and subtitle != null and label_text_width(title, title.text) <= title.size.x + 1.0 and label_text_width(subtitle, subtitle.text) <= subtitle.size.x + 1.0, "entry titles and subtitles fit completely in the quiet lane beside their artwork")
 	check(scene.find_children("MenuFooterStatusRail_*", "", true, false).is_empty() and scene.find_child("MenuCurrencyBadgeArt", true, false) == null, "passive account status is not decorated as fake progress")
-	for node_name in ["MenuCurrencyBadge", "MenuRankBadge", "MenuStatsBadge"]:
+	for node_name in ["MenuVersionBadge", "MenuCurrencyBadge", "MenuRankBadge", "MenuStatsBadge"]:
 		var label := scene.find_child(node_name, true, false) as Label
 		check(label != null and label_text_width(label, label.text) <= label.size.x + 1.0, "%s retains its complete visible account facts" % node_name)
 	for entry in [["Rules", "rules"], ["Stats", "stats"], ["Achievements", "achievements"], ["DailyLogin", "daily_login"], ["Replay", "replay"]]:

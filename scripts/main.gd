@@ -252,9 +252,11 @@ func recover_audio_after_screen_change() -> void:
 
 func switch_bgm_track() -> void:
 	# v1.0.157: 切换到下一首BGM
+	if BGM_TRACKS.is_empty():
+		return
 	bgm_start_generation += 1
 	bgm_start_in_flight = false
-	current_bgm_index = (current_bgm_index + 1) % BGM_TRACKS.size()
+	current_bgm_index = posmod(int(current_bgm_index) + 1, BGM_TRACKS.size())
 	var track = BGM_TRACKS[current_bgm_index]
 	print("BGM: 切换到", track["name"], " - ", track["path"])
 
@@ -277,6 +279,7 @@ func switch_bgm_track() -> void:
 		return
 
 	audio_streams["bgm"] = new_stream
+	save_settings()
 
 	# 更新播放器
 	if bgm_player != null and is_instance_valid(bgm_player):
@@ -12194,7 +12197,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
 	if not offline_sim_quiet:
-		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id, {
+		record_game_result(player_won, player_score_delta, 1, active_round_id, {
 			"result_kind": "win",
 			"fan": int(score_data.get("fan", 0)),
 			"self_draw": self_draw,
@@ -13214,7 +13217,8 @@ func use_offline_inventory_item(item_id: String) -> bool:
 			return false
 		var old_tile := str(players[0]["hand"][hand_index])
 		var new_tile := str(wall[wall_index])
-		wall[wall_index] = old_tile
+		wall.remove_at(wall_index)
+		wall.push_front(old_tile)
 		players[0]["hand"][hand_index] = new_tile
 		offline_last_draw["tile"] = new_tile
 		offline_self_draw_ready["tile"] = new_tile
@@ -13554,7 +13558,7 @@ func _skin_guofeng_meter_bar(rail: TextureRect, fill: TextureRect, rail_tex: Tex
 func draw_achievements_dashboard_art(parent: Control) -> Control:
 	var ach_vp := effective_viewport_size()
 	var compact_ach := ach_vp.y <= 560.0 or ach_vp.x <= 960.0
-	var art_rect := rect_full(0.055, 0.102, 0.945, 0.192) if compact_ach else rect_full(0.055, 0.106, 0.945, 0.190)
+	var art_rect := rect_full(0.055, 0.110, 0.945, 0.198) if compact_ach else rect_full(0.055, 0.106, 0.945, 0.190)
 	var art := make_layout_host(art_rect)
 	art.name = "AchievementsDashboardArt"
 	parent.add_child(art)
@@ -13624,8 +13628,8 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 		set_ui_full_text(next_button, achievement_goal_text(next_key) + "；" + achievement_progress_text(next_key) + "；点击定位", "下一成就目标")
 		art.add_child(next_button)
 		apply_rect(next_button, rect_full(0.62 if compact_ach else 0.68, 0.0 if compact_ach else 0.5, 1.0, 0.0 if compact_ach else 0.5))
-		next_button.offset_top = 18.0 if compact_ach else -22.0
-		next_button.offset_bottom = (18.0 + float(UI_MIN_TOUCH_TARGET)) if compact_ach else 22.0
+		next_button.offset_top = 2.0 if compact_ach else -22.0
+		next_button.offset_bottom = (2.0 + float(UI_MIN_TOUCH_TARGET)) if compact_ach else 22.0
 		style_guofeng_secondary_action(next_button)
 	else:
 		var detail := make_label(art, "全部成就已收录", 14, Color.WHITE, true)
@@ -25944,8 +25948,8 @@ func draw_game_top_hud(parent: Control) -> void:
 		wall_rect = Rect2(Vector2(0.596, 0.120), Vector2(0.766, 0.875))
 	else:
 		# Keep room code + copy on left, center status near mid-axis, compact score strip, and full wall count on right.
-		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.252, 0.535))
-		status_rect = Rect2(Vector2(0.260, 0.140), Vector2(0.450, 0.860))
+		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.282, 0.535))
+		status_rect = Rect2(Vector2(0.290, 0.140), Vector2(0.450, 0.860))
 		score_strip_rect = Rect2(Vector2(0.456, 0.150), Vector2(0.654, 0.850))
 		wall_rect = Rect2(Vector2(0.662, 0.120), Vector2(0.806, 0.875))
 	hud.set_meta("header_lane_clearance_px", 8.0)
@@ -25963,8 +25967,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
+	var hud_width := maxf(1.0, safe_content_pixel_size_for_margins(hud_viewport_snapshot, safe_area_margins).x)
 	var title_font_size := accessibility_font_size(offline_title_size if mode == "offline" else online_title_size)
-	fit_label_font_size(title, maxf(1.0, title.size.x), title_font_size, title_font_size if mode == "offline" else accessibility_font_size(10))
 	style_guofeng_label(title)
 	title.set_meta("fit_before_clip", true)
 	title.set_meta("compact_lane", "mode_and_round_before_status")
@@ -25980,7 +25984,6 @@ func draw_game_top_hud(parent: Control) -> void:
 		room_copy.set_meta("action_role", "copy_room_code")
 		room_copy.set_meta("copy_value", room_code)
 		room_copy.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-		var hud_width := maxf(1.0, safe_content_pixel_size_for_margins(hud_viewport_snapshot, safe_area_margins).x)
 		var room_copy_px := 64.0 if wide_top_hud else float(UI_MIN_TOUCH_TARGET)
 		var room_copy_left := title_rect.size.x - (room_copy_px + 8.0) / hud_width
 		title.anchor_right = room_copy_left - 8.0 / hud_width
@@ -25999,6 +26002,8 @@ func draw_game_top_hud(parent: Control) -> void:
 		title.set_meta("room_summary_contract", "short_middle_marker_plus_full_copy_action")
 		mark_ui_optimization(room_copy, "F-251")
 		mark_ui_optimization(title, "F-105")
+	var final_title_width := maxf(1.0, hud_width * maxf(0.01, title.anchor_right - title.anchor_left))
+	fit_label_font_size(title, final_title_width, title_font_size, title_font_size if mode == "offline" else accessibility_font_size(10))
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
@@ -31289,7 +31294,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(play_grid, "出牌辅助", "危险提示：%s" % ("开启" if ai_assist_enabled else "关闭"), make_setting_button("辅助", ai_assist_enabled, func() -> void:
 		toggle_ai_assist_setting()
 	))
-	make_setting_row(play_grid, "播放曲目", str(BGM_TRACKS[current_bgm_index].get("name", "默认曲目")), make_bgm_switch_button(func() -> void:
+	var current_bgm_name := str(BGM_TRACKS[posmod(int(current_bgm_index), BGM_TRACKS.size())].get("name", "默认曲目")) if not BGM_TRACKS.is_empty() else "默认曲目"
+	make_setting_row(play_grid, "播放曲目", current_bgm_name, make_bgm_switch_button(func() -> void:
 		switch_bgm_track()
 	))
 
@@ -37730,9 +37736,10 @@ func _show_achievements_screen_impl() -> void:
 	mode = "achievements"
 	clear_screen()
 	var achievement_viewport_size := effective_viewport_size()
+	var compact_ach := achievement_viewport_size.y <= 560.0 or achievement_viewport_size.x <= 960.0
 	var content_size = safe_content_pixel_size()
 	var panel_height = max(1.0, content_size.y * (0.92 if use_jiangnan_secondary_composition(achievement_viewport_size) else 0.96))
-	var achievement_scroll_top := 0.246 if large_text_enabled else 0.232
+	var achievement_scroll_top := (0.270 if large_text_enabled else 0.262) if compact_ach else (0.246 if large_text_enabled else 0.232)
 	var achievement_scroll_max_bottom := 0.935
 	var wide_achievement_gallery := achievement_viewport_size.x >= 1600.0
 	var achievement_row_height := achievement_row_height_contract(achievement_viewport_size)
@@ -37756,13 +37763,13 @@ func _show_achievements_screen_impl() -> void:
 		show_menu()
 	)
 	back.name = "AchievementsBackButton"
-	back.custom_minimum_size = Vector2(100, 48)
+	back.custom_minimum_size = Vector2(100, UI_MIN_TOUCH_TARGET if compact_ach else 48.0)
 	set_ui_full_text(back, "返回主菜单 · Esc关闭成就图鉴", "返回主菜单")
 	back.set_meta("ui_navigation_role", "page_back")
 	style_guofeng_secondary_action(back)
 	panel.add_child(back)
 	var ach_back_left := 0.825 if achievement_viewport_size.x <= 1050.0 else 0.845
-	apply_rect(back, rect_full(ach_back_left, 0.028, 0.945, 0.092))
+	apply_rect(back, rect_full(ach_back_left, 0.016 if compact_ach else 0.028, 0.945, 0.080 if compact_ach else 0.092))
 
 	draw_achievements_dashboard_art(panel)
 
@@ -37826,7 +37833,7 @@ func _show_achievements_screen_impl() -> void:
 	var achievement_status_text := "暂无成就记录" if achievements_empty else "浏览 1-%d / %d · 继续下滑" % [achievement_initial_last, achievement_total_count]
 	var achievements_browse_status = make_label(panel, achievement_status_text, 12, Color(0.14, 0.23, 0.18), true)
 	achievements_browse_status.name = "AchievementsBrowseStatusLabel"
-	apply_rect(achievements_browse_status, rect_full(0.560, 0.194, 0.935, 0.224))
+	apply_rect(achievements_browse_status, rect_full(0.560, 0.212 if compact_ach else 0.194, 0.935, 0.254 if compact_ach else 0.224))
 	achievements_browse_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	style_guofeng_label(achievements_browse_status)
 	achievements_browse_status.add_theme_color_override("font_color", Color(0.14, 0.23, 0.18))
@@ -38344,7 +38351,7 @@ func _show_menu_impl() -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	apply_rect(footer, rect_full(menu_grid_left, 0.850 if content_size.x >= 1100.0 and not large_text_enabled else 0.828, menu_grid_right, 0.948))
 	root_layer.add_child(footer)
-	var footer_back = add_optional_gpt_illustration_texture(footer, "menu_card_readable_gpt" if high_contrast_enabled else "battle_ink_plaque_20261112", rect_full(0.000, 0.050, 1.000, 0.950) if high_contrast_enabled else rect_full(0.000, 0.140, 0.790, 0.875), 1.0, false)
+	var footer_back = add_optional_gpt_illustration_texture(footer, "menu_card_readable_gpt" if high_contrast_enabled else "battle_ink_plaque_20261112", rect_full(0.000, 0.050, 1.000, 0.950) if high_contrast_enabled else rect_full(0.000, 0.140, 0.796, 0.875), 1.0, false)
 	footer_back.name = "MenuFooterBackplate"
 	if high_contrast_enabled:
 		footer_back.self_modulate = Color(0.92, 0.88, 0.78)
@@ -38355,16 +38362,18 @@ func _show_menu_impl() -> void:
 	footer_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	footer_back.visible = true
 
-	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(0.016, 0.185, 0.145, 0.830), Color(0.58, 0.54, 0.42), Color(0.10, 0.15, 0.12))
+	var compact_large_footer: bool = large_text_enabled and content_size.x <= 1100.0
+	var version_left := 0.010 if compact_large_footer else 0.012
+	var version_right := 0.178 if compact_large_footer else 0.168
+	var _version_chip = make_menu_footer_status_chip(footer, "version", "MenuVersionBadge", "版本 v%s" % app_version_short(), rect_full(version_left, 0.185, version_right, 0.830), Color(0.58, 0.54, 0.42), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(_version_chip, "当前版本：" + app_version(), "应用版本")
 	mark_ui_optimization(_version_chip, "F-455")
 
 	# 货币显示 - 使用国风配色
 	var coins_text = "铜钱 %d" % int(currency.get("coins", 0))
 	var gems_text = "玉符 %d" % int(currency.get("gems", 0))
-	var compact_large_footer: bool = large_text_enabled and content_size.x <= 1100.0
-	var currency_left := 0.155
-	var currency_right := 0.435 if compact_large_footer else 0.398
+	var currency_left := 0.186 if compact_large_footer else 0.176
+	var currency_right := 0.436 if compact_large_footer else 0.412
 	var currency_chip = make_menu_footer_status_chip(footer, "currency", "MenuCurrencyBadge", "%s     %s" % [coins_text, gems_text], rect_full(currency_left, 0.185, currency_right, 0.830), Color(0.82, 0.62, 0.28), Color(0.10, 0.15, 0.12))
 	set_ui_full_text(currency_chip, "铜钱：%d；玉符：%d" % [int(currency.get("coins", 0)), int(currency.get("gems", 0))], "当前货币")
 	currency_chip.set_meta("currency_coins", int(currency.get("coins", 0)))
@@ -38377,7 +38386,7 @@ func _show_menu_impl() -> void:
 	var rank_name = get_rank_name()
 	var rank_full_text := "%s  积分 %d" % [rank_name, int(season_data.get("points", 0))]
 	var rank_display_text := "%s · %d分" % [rank_name, int(season_data.get("points", 0))] if content_size.x <= 1280.0 else rank_full_text
-	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.445 if compact_large_footer else 0.410, 0.185, 0.578, 0.830), Color(0.46, 0.66, 0.54), Color(0.10, 0.15, 0.12))
+	var rank_chip = make_menu_footer_status_chip(footer, "rank", "MenuRankBadge", rank_display_text, rect_full(0.444 if compact_large_footer else 0.420, 0.185, 0.584, 0.830), Color(0.46, 0.66, 0.54), Color(0.10, 0.15, 0.12))
 	rank_chip.tooltip_text = "完整段位状态：" + rank_full_text
 	rank_chip.set_meta("full_status_text", rank_full_text)
 	var rank_label := rank_chip.get_meta("label_control", null) as Label
@@ -38401,7 +38410,7 @@ func _show_menu_impl() -> void:
 		stats_display_text = "暂无对局"
 	elif content_size.x <= 960.0:
 		stats_display_text = "对局%d · 胜率%d%%" % [int(game_stats.get("games_played", 0)), int(float(game_stats.get("win_rate", 0.0)) * 100.0)]
-	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.590, 0.185, 0.778, 0.830), Color(0.42, 0.72, 0.66), Color(0.10, 0.15, 0.12))
+	var stats_chip = make_menu_footer_status_chip(footer, "stats", "MenuStatsBadge", stats_display_text, rect_full(0.592, 0.185, 0.786 if compact_large_footer else 0.784, 0.830), Color(0.42, 0.72, 0.66), Color(0.10, 0.15, 0.12))
 	stats_chip.tooltip_text = "统计详情：" + stats_text
 	stats_chip.set_meta("full_status_text", stats_text)
 	var stats_label := stats_chip.get_meta("label_control", null) as Label
@@ -38449,6 +38458,10 @@ func _show_menu_impl() -> void:
 		for footer_label in [_version_chip.get_meta("label_control"), currency_chip.get_meta("label_control"), rank_label, stats_label]:
 			if footer_label is Label:
 				(footer_label as Label).add_theme_font_size_override("font_size", accessibility_font_size(16))
+	var version_label := _version_chip.get_meta("label_control", null) as Label
+	if version_label != null:
+		var version_avail_w := maxf(96.0, content_size.x * menu_footer_span * (version_right - version_left) * 0.925)
+		fit_label_font_size(version_label, version_avail_w, accessibility_font_size(16 if wide_menu else 14), 13)
 
 	# Reserve left icon gutter before configure_button_focus_navigation (which runs apply_wide_menu_scale on 1920).
 	var currency_label := currency_chip.get_meta("label_control", null) as Label
@@ -43363,7 +43376,7 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 		var block_h: float = float(wrapped_lines) * single_h + float(maxi(0, wrapped_lines - 1)) * spacing
 		if trimmed != "":
 			var single_w: float = font.get_string_size(raw_line, HORIZONTAL_ALIGNMENT_LEFT, -1.0, fsize).x
-			var bubble_w: float = clampf((avail_w - 2.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 2.0, 100.0), maxf(100.0, avail_w - 2.0))
+			var bubble_w: float = clampf((avail_w - 2.0) if wrapped_lines > 1 else (single_w + pad_x_right), minf(avail_w - 2.0, 96.0), maxf(96.0, avail_w - 2.0))
 			var bubble_top: float = maxf(0.0, cursor_y - pad_y * 0.5)
 			var bubble_bottom: float = minf(label_max_h, cursor_y + block_h + pad_y * 0.85)
 			var bubble := TextureRect.new()
@@ -43373,7 +43386,7 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 			bubble.stretch_mode = TextureRect.STRETCH_SCALE
 			bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			bubble.set_anchors_preset(Control.PRESET_TOP_LEFT)
-			bubble.position = Vector2(-4.0, bubble_top)
+			bubble.position = Vector2(0.0, bubble_top)
 			bubble.size = Vector2(bubble_w, maxf(single_h + pad_y, bubble_bottom - bubble_top))
 			host.add_child(bubble)
 			var is_self_msg: bool = trimmed.begins_with("你:") or trimmed.begins_with("你：") or trimmed.contains("  你:") or trimmed.contains("  你：")
@@ -43392,8 +43405,8 @@ func _sync_chat_message_bubbles(chat_label: Label, compact: bool, wide: bool) ->
 func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Label, close: Button, history: Button, messages: ScrollContainer, quick_title: Label, quick_actions: Control, custom_title: Label, input: LineEdit, send: Button, cooldown: Label, compact: bool) -> void:
 	var chat_vp := effective_viewport_size()
 	var wide_chat: bool = not compact and chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
-	var compact_tight: bool = compact and (panel.size.y < 168.0 or panel.size.x < 220.0 or large_text_enabled)
-	var edge_x: float = (8.0 if compact_tight else 14.0) if compact else (22.0 if wide_chat else 18.0)
+	var compact_tight: bool = compact and (panel.size.y < 185.0 or panel.size.x < 250.0 or large_text_enabled)
+	var edge_x: float = (10.0 if compact_tight else 14.0) if compact else (22.0 if wide_chat else 18.0)
 	var edge_top: float = (6.0 if compact_tight else 12.0) if compact else (20.0 if wide_chat else 16.0)
 	var btn_gap: float = (4.0 if compact_tight else 6.0) if compact else (12.0 if wide_chat else 10.0)
 	var target: float = float(UI_MIN_TOUCH_TARGET) if compact else (50.0 if wide_chat else float(UI_MIN_TOUCH_TARGET))
@@ -43519,8 +43532,8 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		latest_box.texture_margin_right = 10.0
 		latest_box.texture_margin_top = 6.0
 		latest_box.texture_margin_bottom = 6.0
-		latest_box.content_margin_left = 10.0
-		latest_box.content_margin_right = 10.0
+		latest_box.content_margin_left = 14.0
+		latest_box.content_margin_right = 14.0
 		latest_box.content_margin_top = 4.0
 		latest_box.content_margin_bottom = 4.0
 		latest_box.modulate_color = Color(0.99, 0.97, 0.92, 0.96)
@@ -43571,7 +43584,11 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		if msg_font != null:
 			msg_line_h = maxf(12.0, msg_font.get_height(msg_text_node.get_theme_font_size("font_size")) + float(msg_text_node.get_theme_constant("line_spacing")))
 	var composer_block_h: float = target + float(lane_sep) + meta_h
-	var compact_messages_first: bool = not natural_noncompact_order and not chat_messages.is_empty() and not large_text_enabled and (available_body_h - composer_block_h - float(lane_sep) - 2.0) >= maxf(46.0, msg_line_h * 2.2)
+	var min_two_lines_h: float = maxf(32.0, msg_line_h * 2.0)
+	var msg_space_with_meta: float = available_body_h - composer_block_h - float(lane_sep) - 2.0
+	var msg_space_input_only: float = available_body_h - target - float(lane_sep) - 2.0
+	var compact_messages_first: bool = not natural_noncompact_order and not chat_messages.is_empty() and not large_text_enabled and msg_space_input_only >= min_two_lines_h
+	var compact_include_meta_in_fold: bool = compact_messages_first and msg_space_with_meta >= min_two_lines_h
 	var fold_gap := Control.new()
 	fold_gap.name = "ChatBodyFoldSpacer"
 	fold_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -43591,16 +43608,16 @@ func layout_chat_reading_lanes(panel: Control, title: Label, message_range: Labe
 		for idx in range(ordered_nodes.size()):
 			content.move_child(ordered_nodes[idx], idx)
 	elif compact_messages_first:
-		# Desktop compact battle drawer: bounded whole-line messages above bottom-pinned composer.
+		# Desktop compact battle drawer: bounded whole-line messages (>= 2 lines) above composer.
 		latest.visible = false
 		latest.position = Vector2.ZERO
 		latest.custom_minimum_size = Vector2.ZERO
 		latest.size = Vector2(1.0, 1.0)
-		var raw_msg_h: float = available_body_h - composer_block_h - float(lane_sep) - 2.0
+		var raw_msg_h: float = msg_space_with_meta if compact_include_meta_in_fold else msg_space_input_only
 		var whole_lines: float = maxf(2.0, floorf(raw_msg_h / msg_line_h))
 		var snapped_msg_h: float = minf(raw_msg_h, ceilf(whole_lines * msg_line_h) + 2.0)
 		messages.custom_minimum_size.y = snapped_msg_h
-		var fold_used_h: float = snapped_msg_h + float(lane_sep) + composer_block_h
+		var fold_used_h: float = snapped_msg_h + float(lane_sep) + (composer_block_h if compact_include_meta_in_fold else target)
 		fold_gap.custom_minimum_size = Vector2(0.0, maxf(4.0, available_body_h - fold_used_h + 2.0))
 		var desktop_compact_nodes: Array[Control] = [latest, messages, input_row, meta_row, fold_gap, quick_title, quick_actions]
 		for idx in range(desktop_compact_nodes.size()):
@@ -43658,10 +43675,10 @@ func show_chat_panel() -> void:
 		var mw_f: float = modal_w / maxf(1.0, chat_content_sz.x)
 		var mh_f: float = modal_h / maxf(1.0, chat_content_sz.y)
 		panel_rect = rect_full(0.5 - mw_f * 0.5, 0.5 - mh_f * 0.5, 0.5 + mw_f * 0.5, 0.5 + mh_f * 0.5)
-	elif mode == "online_game" and route_name == "left_safe_drawer" and not large_text_enabled and chat_vp.y > 580.0:
-		# Shift the lower-left drawer cleanly below Left opponent concealed tiles & left wall
-		# while respecting the [0.42..0.774] smoke bounds and hand/chat-button clearance.
-		var left_clear_y: float = panel_rect.position.y
+	elif mode == "online_game" and route_name == "left_safe_drawer" and not large_text_enabled:
+		# Fit the lower-left drawer cleanly between Left opponent concealed tiles/wall
+		# and the chat action button while respecting all table clearance bounds.
+		var left_clear_y: float = 0.425
 		var left_hand := battle_opponent_hand_layout(3, chat_vp, chat_content_sz)
 		if not left_hand.is_empty():
 			var lh_rect: Rect2 = left_hand["rect"]
@@ -43679,15 +43696,11 @@ func show_chat_panel() -> void:
 		if chat_btn_rect.position.y > 0.65:
 			bottom_cap = minf(bottom_cap, chat_btn_rect.position.y - 0.006)
 		var base_h: float = panel_rect.size.y - panel_rect.position.y
-		var tight_desktop: bool = chat_vp.y <= 780.0
-		var target_drawer_h: float = minf(base_h, 0.220) if tight_desktop else base_h
-		var min_drawer_h: float = minf(target_drawer_h, 0.212)
-		if left_clear_y > panel_rect.position.y + 0.002 and bottom_cap - left_clear_y >= min_drawer_h:
+		var min_drawer_h: float = minf(base_h, 0.212)
+		if bottom_cap - left_clear_y >= min_drawer_h:
 			var new_top: float = clampf(left_clear_y, 0.425, bottom_cap - min_drawer_h)
-			var new_bottom: float = minf(bottom_cap, new_top + target_drawer_h)
+			var new_bottom: float = minf(bottom_cap, new_top + base_h)
 			panel_rect = rect_full(panel_rect.position.x, new_top, panel_rect.size.x, new_bottom)
-		elif tight_desktop and base_h > target_drawer_h:
-			panel_rect = rect_full(panel_rect.position.x, panel_rect.position.y, panel_rect.size.x, panel_rect.position.y + target_drawer_h)
 	var compact_chat := mode == "online_game" and ((panel_rect.size.x - panel_rect.position.x) < 0.300 or (panel_rect.size.y - panel_rect.position.y) < 0.340)
 	var wide_chat_ui: bool = not compact_chat and chat_vp.x >= 1600.0 and chat_vp.y >= 900.0
 	# The drawer is modal for the table: keep a root-level hit target with a soft
@@ -43772,8 +43785,9 @@ func show_chat_panel() -> void:
 	if chat_text.strip_edges() == "":
 		chat_text = "等待房间消息"
 	var chat_display_lines: Array[String] = []
+	var chat_line_prefix := "   " if compact_chat else "  "
 	for message_index in range(chat_messages.size()):
-		chat_display_lines.append("  %s" % str(chat_messages[message_index]))
+		chat_display_lines.append("%s%s" % [chat_line_prefix, str(chat_messages[message_index])])
 	var chat_display_text: String = "\n".join(chat_display_lines)
 	var chat_title_sz: int = 13 if compact_chat else guofeng_modal_font_size(15, chat_vp, 1.24)
 	var chat_range_sz: int = 9 if compact_chat else guofeng_modal_font_size(11, chat_vp, 1.22)
@@ -43841,7 +43855,7 @@ func show_chat_panel() -> void:
 	chat_label.clip_contents = false
 	chat_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	chat_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	chat_label.add_theme_constant_override("line_spacing", 2 if compact_chat and large_text_enabled else (6 if compact_chat else (15 if wide_chat_ui else (9 if chat_vp.y <= 580.0 else 12))))
+	chat_label.add_theme_constant_override("line_spacing", 2 if compact_chat else (15 if wide_chat_ui else (9 if chat_vp.y <= 580.0 else 12)))
 	chat_label.tooltip_text = chat_text
 	var bubbles_host := Control.new()
 	bubbles_host.name = "ChatMsgBubblesHost"
@@ -44151,10 +44165,14 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 	# 连续签到天数 - 更醒目
 	var days = maxi(0, int(login_result.get("consecutive_days", 1)))
 	var claimed_today = bool(login_result.get("claimed_today", false))
-	var days_text = "已连续签到 %d 天" % days if claimed_today else "连续签到第 %d 天 · 今日可领" % days
-	if days > 0 and days % 7 == 0:
-		days_text += " · 本周期已达成，下一周期第1天"
+	var format_days_heading := func(is_claimed: bool) -> String:
+		var heading := "已连续签到 %d 天" % days if is_claimed else "连续签到第 %d 天 · 今日可领" % days
+		if days > 0 and days % 7 == 0:
+			heading += " · 本周期已达成，下一周期第1天"
+		return heading
+	var days_text: String = format_days_heading.call(claimed_today)
 	var days_label = make_label(panel, days_text, 26, Color(0.98, 0.97, 0.92), true)
+	days_label.name = "DailyLoginDaysLabel"
 	apply_rect(days_label, rect_full(0.08, 0.16, 0.92, 0.23))
 	days_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	style_guofeng_label(days_label)
@@ -44494,6 +44512,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 					claim_button.set_meta("disabled_reason", "今日奖励已领取")
 					set_ui_full_text(claim_button, claim_button.tooltip_text, "签到奖励操作：已领取")
 					sync_guofeng_button_face_state(claim_button)
+				if days_label != null and is_instance_valid(days_label):
+					var already_claimed_days_text: String = format_days_heading.call(true)
+					set_dynamic_label_text(days_label, already_claimed_days_text, "连续签到状态：" + already_claimed_days_text)
 				show_toast("今日奖励已领取。", 1800)
 				return
 			claim_in_flight["active"] = false
@@ -44509,6 +44530,9 @@ func show_daily_login_panel(login_result: Dictionary) -> void:
 			return
 		claim_state["claimed"] = true
 		daily_login_view_state["claimed_today"] = true
+		if days_label != null and is_instance_valid(days_label):
+			var claimed_days_text: String = format_days_heading.call(true)
+			set_dynamic_label_text(days_label, claimed_days_text, "连续签到状态：" + claimed_days_text)
 		day_indicators_container.set_meta("claimed_today", true)
 		day_indicators_container.set_meta("daily_login_view_state", "claimed")
 		set_ui_full_text(day_indicators_container, "当前第%d天；今日已领取" % current_day_in_cycle, "七日签到进度：今日已领取，明日可继续签到")
@@ -46919,6 +46943,16 @@ func replay_event_line_text(event: Dictionary) -> String:
 			detail = " · %s家" % seat_wind_label(claim_seat)
 		else:
 			detail = ""
+	elif kind == "concealed_gang" or kind == "added_gang":
+		var gang_parts: Array[String] = []
+		var gang_seat := int(event.get("seat", -1))
+		if gang_seat >= 0 and gang_seat < 4:
+			gang_parts.append("%s家" % seat_wind_label(gang_seat))
+		var gang_tile := tile_label(str(event.get("tile", "")))
+		if gang_tile != "":
+			gang_parts.append(gang_tile)
+		if not gang_parts.is_empty():
+			detail = " · " + " ".join(gang_parts)
 	elif kind == "win":
 		detail = " · " + str(event.get("points", 0)) + "分"
 	return "%03d  %s%s" % [sequence, display_kind, detail]
@@ -46948,6 +46982,10 @@ func replay_event_display_name(kind: String, event: Dictionary = {}) -> String:
 		"claim":
 			var claim := claim_display_label(str(event.get("claim", "")))
 			return "响应%s" % (claim if claim != "" else "动作")
+		"concealed_gang":
+			return "暗杠"
+		"added_gang":
+			return "补杠"
 		"win":
 			return "胡牌"
 		"item_swap":
@@ -46958,7 +46996,7 @@ func replay_event_display_name(kind: String, event: Dictionary = {}) -> String:
 
 
 func replay_timeline_event_allowed(event: Dictionary) -> bool:
-	return ["round_start", "draw", "draw_flower", "discard", "claim", "win", "wall_draw", "item_swap"].has(str(event.get("type", "")).strip_edges())
+	return ["round_start", "draw", "draw_flower", "discard", "claim", "concealed_gang", "added_gang", "win", "wall_draw", "item_swap"].has(str(event.get("type", "")).strip_edges())
 
 
 func replay_timeline_visible_events(payload: Dictionary) -> Array[Dictionary]:
@@ -48137,7 +48175,8 @@ func refresh_settings_local_row(setting_key: String) -> bool:
 			full_status = "危险提示：%s" % ("开启" if ai_assist_enabled else "关闭")
 			button_tooltip = "出牌辅助：当前%s，点击切换" % ("开启" if ai_assist_enabled else "关闭")
 		"播放曲目":
-			var track_name := str(BGM_TRACKS[current_bgm_index].get("name", "默认曲目"))
+			var safe_bgm_index := posmod(int(current_bgm_index), BGM_TRACKS.size()) if not BGM_TRACKS.is_empty() else 0
+			var track_name := str(BGM_TRACKS[safe_bgm_index].get("name", "默认曲目")) if not BGM_TRACKS.is_empty() else "默认曲目"
 			full_status = track_name
 			button_text = "切歌"
 			button_tooltip = "播放曲目：当前%s，点击切换" % track_name
@@ -48646,6 +48685,7 @@ func connect_online() -> void:
 		online_host_edit.text = host
 	tcp.disconnect_from_host()
 	tcp = StreamPeerTCP.new()
+	tcp_status = StreamPeerTCP.STATUS_NONE
 	tcp_buffer.clear()
 	next_online_poll_msec = 0
 	if not preserve_game_board:
@@ -48657,6 +48697,8 @@ func connect_online() -> void:
 	set_status("正在连接 %s ..." % online_connection_endpoint_text())
 	refresh_online_lobby_state()
 	if err != OK:
+		tcp.disconnect_from_host()
+		tcp_status = tcp.get_status()
 		telemetry_record_event("online_connection", {"result": "error"})
 		set_online_feedback("连接失败：%s" % error_string(err), false)
 
@@ -48675,7 +48717,9 @@ func reconnect_online_game() -> void:
 	online_resume_join_sent = false
 	connect_online()
 	if mode == "online_game":
-		set_online_feedback("正在重新连接房间，请稍候。", false)
+		var live_status := tcp.get_status() if tcp != null else StreamPeerTCP.STATUS_NONE
+		if live_status == StreamPeerTCP.STATUS_CONNECTING or live_status == StreamPeerTCP.STATUS_CONNECTED:
+			set_online_feedback("正在重新连接房间，请稍候。", false)
 		request_game_render()
 
 func close_online_transport(message: String, return_to_lobby: bool = true, preserve_game_for_reconnect: bool = true) -> void:

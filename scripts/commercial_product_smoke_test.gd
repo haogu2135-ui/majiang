@@ -81,16 +81,70 @@ func run() -> void:
 	scene.cancel_offline_ai_run()
 	scene.set_process(false)
 	check(scene.current_seat == 0 and scene.offline_phase == "await_discard" and int(scene.offline_self_draw_ready.get("seat", -1)) == 0, "inventory fixture starts on the human dealer's actual draw")
-	scene.inventory = {"swap_card": 2, "peek_card": 1, "lucky_charm": 1, "double_coins": 0}
+	scene.inventory = {"swap_card": 3, "peek_card": 1, "lucky_charm": 1, "double_coins": 0}
 	scene.save_economy_state()
 	var ledger_before: Dictionary = scene.offline_tile_ledger_report()
 	check(bool(ledger_before.get("ok", false)), "inventory fixture starts with a conserved tile ledger")
 	var wall_count := scene.wall.size() as int
 	var hand_count := scene.players[0]["hand"].size() as int
+	var first_drawn_tile := str(scene.offline_last_draw.get("tile", ""))
 	check(scene.use_offline_inventory_item("swap_card"), "swap card replaces the actual draw on the human discard turn")
-	check(scene.wall.size() == wall_count and scene.players[0]["hand"].size() == hand_count and bool(scene.offline_tile_ledger_report().get("ok", false)) and scene.get_item_count("swap_card") == 1, "swap preserves every tile and consumes exactly one inventory item")
+	var swapped_tile_1 := str(scene.offline_last_draw.get("tile", ""))
+	check(scene.wall.size() == wall_count and scene.players[0]["hand"].size() == hand_count and bool(scene.offline_tile_ledger_report().get("ok", false)) and scene.get_item_count("swap_card") == 2, "swap preserves every tile and consumes exactly one inventory item")
+	check(str(scene.wall.front()) == first_drawn_tile and (wall_count <= 1 or str(scene.wall.back()) != first_drawn_tile), "F-04: swap places the swapped-out tile at the bottom of the wall instead of the top")
+	check(scene.use_offline_inventory_item("swap_card"), "F-04: second consecutive swap card succeeds on the same discard turn")
+	var swapped_tile_2 := str(scene.offline_last_draw.get("tile", ""))
+	check(str(scene.wall.front()) == swapped_tile_1 and (wall_count <= 2 or swapped_tile_2 != first_drawn_tile or scene.wall.count(first_drawn_tile) > 1), "F-04: second consecutive swap draws a fresh wall tile rather than reverting to the first swapped-out tile")
 	scene.offline_self_draw_ready = {"seat": -1, "serial": -1}
 	check(not scene.use_offline_inventory_item("swap_card") and scene.get_item_count("swap_card") == 1, "swap cannot bypass a claim turn without a current draw")
+
+	# F-02 regression: consecutive win settlements must add 1 hand each, not offline_hand_number.
+	scene.game_stats = {"games_played": 0, "games_won": 0, "win_rate": 0.0, "total_score": 0, "best_score": 0, "total_hands": 0}
+	scene.applied_result_transactions.clear()
+	scene.round_history_id_index.clear()
+	for round_hand_num in [1, 3]:
+		scene.mode = "offline"
+		scene.offline_phase = "await_discard"
+		scene.offline_turn_needs_draw = false
+		scene.offline_sim_quiet = false
+		scene.offline_hand_number = round_hand_num
+		scene.active_round_id = "F02-ROUND-%d" % round_hand_num
+		scene.current_seat = 0
+		scene.players[0]["hand"] = ["1W", "2W", "3W", "4W", "5W", "6W", "7W", "8W", "9W", "1T", "1T", "1T", "E", "E"]
+		scene.players[0]["melds"] = []
+		scene.offline_last_draw = {"seat": 0, "tile": "E", "source": "normal", "announce": false, "serial": 900 + round_hand_num}
+		scene.offline_self_draw_ready = {"seat": 0, "tile": "E", "serial": 900 + round_hand_num}
+		scene.finish_offline_round(0, "E", true, -1)
+	check(int(scene.game_stats.get("games_played", 0)) == 2 and int(scene.game_stats.get("total_hands", 0)) == 2, "F-02: win settlements increment total_hands by 1 per completed round instead of offline_hand_number")
+
+	# F-03 regression: replay timeline retains and formats concealed_gang and added_gang events.
+	var gang_replay_events := [
+		{"sequence": 1, "type": "round_start", "dealer": 0},
+		{"sequence": 2, "type": "concealed_gang", "seat": 0, "tile": "5W"},
+		{"sequence": 3, "type": "added_gang", "seat": 2, "tile": "3T"},
+		{"sequence": 4, "type": "win", "winner": 0, "points": 800},
+	]
+	var gang_visible: Array = scene.replay_timeline_visible_events({"events": gang_replay_events})
+	check(gang_visible.size() == 4, "F-03: replay timeline retains concealed_gang and added_gang without dropping events")
+	var concealed_line: String = scene.replay_event_line_text(gang_replay_events[1])
+	var added_line: String = scene.replay_event_line_text(gang_replay_events[2])
+	check(concealed_line.contains("暗杠") and concealed_line.contains("东家") and concealed_line.contains(scene.tile_label("5W")), "F-03: concealed_gang formats with label, seat, and tile")
+	check(added_line.contains("补杠") and added_line.contains("西家") and added_line.contains(scene.tile_label("3T")), "F-03: added_gang formats with label, seat, and tile")
+
+	# F-05 regression: switch_bgm_track persists current_bgm_index and load_settings bounds invalid values.
+	var bgm_before := int(scene.current_bgm_index)
+	scene.switch_bgm_track()
+	var bgm_after := int(scene.current_bgm_index)
+	var saved_settings := ConfigFile.new()
+	check(saved_settings.load(scene.SETTINGS_PATH) == OK and int(saved_settings.get_value("gameplay", "current_bgm_index", -1)) == bgm_after and bgm_after == posmod(bgm_before + 1, scene.BGM_TRACKS.size()), "F-05: switch_bgm_track persists updated current_bgm_index to settings.cfg")
+	saved_settings.set_value("gameplay", "current_bgm_index", 999)
+	saved_settings.save(scene.SETTINGS_PATH)
+	scene.load_settings()
+	check(int(scene.current_bgm_index) == posmod(999, scene.BGM_TRACKS.size()), "F-05: load_settings normalizes oversized current_bgm_index safely")
+	saved_settings.set_value("gameplay", "current_bgm_index", -3)
+	saved_settings.save(scene.SETTINGS_PATH)
+	scene.load_settings()
+	check(int(scene.current_bgm_index) == posmod(-3, scene.BGM_TRACKS.size()), "F-05: load_settings normalizes negative current_bgm_index safely")
 	scene.mode = "online_game"
 	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == 1, "inventory cannot expose opponents in online matches")
 	scene.mode = "offline"

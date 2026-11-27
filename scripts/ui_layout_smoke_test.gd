@@ -5862,6 +5862,9 @@ func check_achievements_layout(scene, viewport_size: Vector2) -> void:
 	if scroll == null or grid == null or status == null or hit == null:
 		return
 	check(status.get_global_rect().end.y <= scroll.get_global_rect().position.y and readable_paper_ink(status.get_theme_color("font_color")), "achievements range status clears rows and stays readable")
+	var next_target := scene.find_child("AchievementsNextTargetButton", true, false) as Button
+	if next_target != null and next_target.visible:
+		check(next_target.size.y >= 44.0 and next_target.get_global_rect().end.y + 4.0 <= status.get_global_rect().position.y, "achievements next-target button retains 44px height and clears browse status by 4px at %s" % viewport_size)
 	check(hit.size.x >= 44.0 and hit.mouse_filter == Control.MOUSE_FILTER_STOP, "achievements scrollbar retains a forty-four-pixel target")
 	check(scroll.clip_contents and not scroll.get_v_scroll_bar().visible, "achievements clips rows and uses the authored scrollbar")
 	var previous_bottom := -INF
