@@ -285,10 +285,12 @@ func switch_bgm_track() -> void:
 	if bgm_player != null and is_instance_valid(bgm_player):
 		bgm_player.stream = new_stream
 		configure_background_music_stream()
-		if music_enabled:
+		if music_enabled and audio_runtime_enabled():
 			bgm_player.play()
 			print("BGM: 开始播放", track["name"])
 			set_status("正在播放: " + track["name"])
+		elif music_enabled:
+			set_status("当前曲目: " + track["name"])
 	refresh_settings_local_row("播放曲目")
 
 func start_background_music() -> void:
