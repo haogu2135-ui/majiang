@@ -5306,7 +5306,8 @@ func load_settings() -> void:
 	telemetry_consent_decided = bool(config.get_value("privacy", "telemetry_consent_decided", telemetry_consent))
 	var saved_rule_variant := str(config.get_value("gameplay", "rule_variant", rule_variant)).strip_edges().to_lower()
 	rule_variant = saved_rule_variant if RULE_VARIANT_PROFILES.has(saved_rule_variant) else RULE_VARIANT_YANGZHOU
-	current_bgm_index = int(config.get_value("gameplay", "current_bgm_index", 0))
+	var raw_bgm_index := int(config.get_value("gameplay", "current_bgm_index", 0))
+	current_bgm_index = posmod(raw_bgm_index, BGM_TRACKS.size()) if not BGM_TRACKS.is_empty() else 0
 	if str(config.get_value("audio", "defaults_version", "")) != AUDIO_DEFAULTS_VERSION:
 		music_enabled = true
 		sfx_enabled = true
@@ -5329,7 +5330,8 @@ func save_settings() -> void:
 	config.set_value("gameplay", "ai_difficulty", ai_difficulty)
 	var saved_rule_variant := rule_variant if RULE_VARIANT_PROFILES.has(rule_variant) else RULE_VARIANT_YANGZHOU
 	config.set_value("gameplay", "rule_variant", saved_rule_variant)
-	config.set_value("gameplay", "current_bgm_index", current_bgm_index)
+	var saved_bgm_index := posmod(int(current_bgm_index), BGM_TRACKS.size()) if not BGM_TRACKS.is_empty() else 0
+	config.set_value("gameplay", "current_bgm_index", saved_bgm_index)
 	config.set_value("privacy", "telemetry_consent", telemetry_consent)
 	config.set_value("privacy", "telemetry_consent_decided", telemetry_consent_decided)
 	config.save(SETTINGS_PATH)

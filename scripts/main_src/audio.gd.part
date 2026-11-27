@@ -240,9 +240,11 @@ func recover_audio_after_screen_change() -> void:
 
 func switch_bgm_track() -> void:
 	# v1.0.157: 切换到下一首BGM
+	if BGM_TRACKS.is_empty():
+		return
 	bgm_start_generation += 1
 	bgm_start_in_flight = false
-	current_bgm_index = (current_bgm_index + 1) % BGM_TRACKS.size()
+	current_bgm_index = posmod(int(current_bgm_index) + 1, BGM_TRACKS.size())
 	var track = BGM_TRACKS[current_bgm_index]
 	print("BGM: 切换到", track["name"], " - ", track["path"])
 
@@ -265,6 +267,7 @@ func switch_bgm_track() -> void:
 		return
 
 	audio_streams["bgm"] = new_stream
+	save_settings()
 
 	# 更新播放器
 	if bgm_player != null and is_instance_valid(bgm_player):

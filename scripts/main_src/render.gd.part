@@ -318,7 +318,7 @@ func _skin_guofeng_meter_bar(rail: TextureRect, fill: TextureRect, rail_tex: Tex
 func draw_achievements_dashboard_art(parent: Control) -> Control:
 	var ach_vp := effective_viewport_size()
 	var compact_ach := ach_vp.y <= 560.0 or ach_vp.x <= 960.0
-	var art_rect := rect_full(0.055, 0.102, 0.945, 0.192) if compact_ach else rect_full(0.055, 0.106, 0.945, 0.190)
+	var art_rect := rect_full(0.055, 0.110, 0.945, 0.198) if compact_ach else rect_full(0.055, 0.106, 0.945, 0.190)
 	var art := make_layout_host(art_rect)
 	art.name = "AchievementsDashboardArt"
 	parent.add_child(art)
@@ -388,8 +388,8 @@ func draw_achievements_dashboard_art(parent: Control) -> Control:
 		set_ui_full_text(next_button, achievement_goal_text(next_key) + "；" + achievement_progress_text(next_key) + "；点击定位", "下一成就目标")
 		art.add_child(next_button)
 		apply_rect(next_button, rect_full(0.62 if compact_ach else 0.68, 0.0 if compact_ach else 0.5, 1.0, 0.0 if compact_ach else 0.5))
-		next_button.offset_top = 18.0 if compact_ach else -22.0
-		next_button.offset_bottom = (18.0 + float(UI_MIN_TOUCH_TARGET)) if compact_ach else 22.0
+		next_button.offset_top = 2.0 if compact_ach else -22.0
+		next_button.offset_bottom = (2.0 + float(UI_MIN_TOUCH_TARGET)) if compact_ach else 22.0
 		style_guofeng_secondary_action(next_button)
 	else:
 		var detail := make_label(art, "全部成就已收录", 14, Color.WHITE, true)
@@ -12708,8 +12708,8 @@ func draw_game_top_hud(parent: Control) -> void:
 		wall_rect = Rect2(Vector2(0.596, 0.120), Vector2(0.766, 0.875))
 	else:
 		# Keep room code + copy on left, center status near mid-axis, compact score strip, and full wall count on right.
-		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.252, 0.535))
-		status_rect = Rect2(Vector2(0.260, 0.140), Vector2(0.450, 0.860))
+		title_rect = Rect2(Vector2(0.106, 0.090), Vector2(0.282, 0.535))
+		status_rect = Rect2(Vector2(0.290, 0.140), Vector2(0.450, 0.860))
 		score_strip_rect = Rect2(Vector2(0.456, 0.150), Vector2(0.654, 0.850))
 		wall_rect = Rect2(Vector2(0.662, 0.120), Vector2(0.806, 0.875))
 	hud.set_meta("header_lane_clearance_px", 8.0)
@@ -12727,8 +12727,8 @@ func draw_game_top_hud(parent: Control) -> void:
 	apply_rect(title, title_rect)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(title)
+	var hud_width := maxf(1.0, safe_content_pixel_size_for_margins(hud_viewport_snapshot, safe_area_margins).x)
 	var title_font_size := accessibility_font_size(offline_title_size if mode == "offline" else online_title_size)
-	fit_label_font_size(title, maxf(1.0, title.size.x), title_font_size, title_font_size if mode == "offline" else accessibility_font_size(10))
 	style_guofeng_label(title)
 	title.set_meta("fit_before_clip", true)
 	title.set_meta("compact_lane", "mode_and_round_before_status")
@@ -12744,7 +12744,6 @@ func draw_game_top_hud(parent: Control) -> void:
 		room_copy.set_meta("action_role", "copy_room_code")
 		room_copy.set_meta("copy_value", room_code)
 		room_copy.set_meta("ui_min_touch_target", UI_MIN_TOUCH_TARGET)
-		var hud_width := maxf(1.0, safe_content_pixel_size_for_margins(hud_viewport_snapshot, safe_area_margins).x)
 		var room_copy_px := 64.0 if wide_top_hud else float(UI_MIN_TOUCH_TARGET)
 		var room_copy_left := title_rect.size.x - (room_copy_px + 8.0) / hud_width
 		title.anchor_right = room_copy_left - 8.0 / hud_width
@@ -12763,6 +12762,8 @@ func draw_game_top_hud(parent: Control) -> void:
 		title.set_meta("room_summary_contract", "short_middle_marker_plus_full_copy_action")
 		mark_ui_optimization(room_copy, "F-251")
 		mark_ui_optimization(title, "F-105")
+	var final_title_width := maxf(1.0, hud_width * maxf(0.01, title.anchor_right - title.anchor_left))
+	fit_label_font_size(title, final_title_width, title_font_size, title_font_size if mode == "offline" else accessibility_font_size(10))
 
 	# 状态
 	var compact_disconnect_status := mode == "online_game" and online_feedback.find("连接已断开") >= 0
@@ -18053,7 +18054,8 @@ func draw_settings_overlay(parent: Control) -> void:
 	make_setting_row(play_grid, "出牌辅助", "危险提示：%s" % ("开启" if ai_assist_enabled else "关闭"), make_setting_button("辅助", ai_assist_enabled, func() -> void:
 		toggle_ai_assist_setting()
 	))
-	make_setting_row(play_grid, "播放曲目", str(BGM_TRACKS[current_bgm_index].get("name", "默认曲目")), make_bgm_switch_button(func() -> void:
+	var current_bgm_name := str(BGM_TRACKS[posmod(int(current_bgm_index), BGM_TRACKS.size())].get("name", "默认曲目")) if not BGM_TRACKS.is_empty() else "默认曲目"
+	make_setting_row(play_grid, "播放曲目", current_bgm_name, make_bgm_switch_button(func() -> void:
 		switch_bgm_track()
 	))
 

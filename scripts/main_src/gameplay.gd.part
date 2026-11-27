@@ -4677,7 +4677,7 @@ func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_s
 	var player_score_delta = int(last_score_deltas[0]) if not last_score_deltas.is_empty() else 0
 	var player_won = winner == 0
 	if not offline_sim_quiet:
-		record_game_result(player_won, player_score_delta, offline_hand_number, active_round_id, {
+		record_game_result(player_won, player_score_delta, 1, active_round_id, {
 			"result_kind": "win",
 			"fan": int(score_data.get("fan", 0)),
 			"self_draw": self_draw,
@@ -5697,7 +5697,8 @@ func use_offline_inventory_item(item_id: String) -> bool:
 			return false
 		var old_tile := str(players[0]["hand"][hand_index])
 		var new_tile := str(wall[wall_index])
-		wall[wall_index] = old_tile
+		wall.remove_at(wall_index)
+		wall.push_front(old_tile)
 		players[0]["hand"][hand_index] = new_tile
 		offline_last_draw["tile"] = new_tile
 		offline_self_draw_ready["tile"] = new_tile

@@ -225,6 +225,7 @@ func connect_online() -> void:
 		online_host_edit.text = host
 	tcp.disconnect_from_host()
 	tcp = StreamPeerTCP.new()
+	tcp_status = StreamPeerTCP.STATUS_NONE
 	tcp_buffer.clear()
 	next_online_poll_msec = 0
 	if not preserve_game_board:
@@ -236,6 +237,8 @@ func connect_online() -> void:
 	set_status("正在连接 %s ..." % online_connection_endpoint_text())
 	refresh_online_lobby_state()
 	if err != OK:
+		tcp.disconnect_from_host()
+		tcp_status = tcp.get_status()
 		telemetry_record_event("online_connection", {"result": "error"})
 		set_online_feedback("连接失败：%s" % error_string(err), false)
 
@@ -254,7 +257,9 @@ func reconnect_online_game() -> void:
 	online_resume_join_sent = false
 	connect_online()
 	if mode == "online_game":
-		set_online_feedback("正在重新连接房间，请稍候。", false)
+		var live_status := tcp.get_status() if tcp != null else StreamPeerTCP.STATUS_NONE
+		if live_status == StreamPeerTCP.STATUS_CONNECTING or live_status == StreamPeerTCP.STATUS_CONNECTED:
+			set_online_feedback("正在重新连接房间，请稍候。", false)
 		request_game_render()
 
 func close_online_transport(message: String, return_to_lobby: bool = true, preserve_game_for_reconnect: bool = true) -> void:
