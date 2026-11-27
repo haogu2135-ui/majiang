@@ -49450,6 +49450,9 @@ func handle_online_message(line: String) -> void:
 	if (kind == "roomState" or kind == "gameState") and online_revision_snapshot_is_current(data, kind):
 		return
 	if kind == "welcome":
+		sent_hello = true
+		if tcp != null:
+			tcp_status = tcp.get_status()
 		var server_name = str(data.get("name", "")).strip_edges()
 		set_online_feedback("已连接%s，可建房或入房。" % (("：" + server_name) if server_name != "" else "服务器"), false)
 		resume_online_room_after_welcome()
