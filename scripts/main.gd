@@ -13253,7 +13253,7 @@ func use_offline_inventory_item(item_id: String) -> bool:
 					break
 		# If every card in hand has been peeked, cycle again avoiding immediate repeat when possible.
 		if chosen_tile == "":
-			var last_peeked := offline_peeked_tiles.back() if not offline_peeked_tiles.is_empty() else ""
+			var last_peeked: String = str(offline_peeked_tiles.back()) if not offline_peeked_tiles.is_empty() else ""
 			offline_peeked_tiles.clear()
 			for raw_tile in hand:
 				var tile_code := str(raw_tile)
