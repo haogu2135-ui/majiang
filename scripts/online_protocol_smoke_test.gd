@@ -175,6 +175,61 @@ func check_chat_action_ownership(scene: Node) -> void:
 	check(not scene.online_waiting_for_server and scene.online_last_sent_payload.is_empty() and scene.can_self_discard(), "standalone chat cannot put the table into a game-action waiting state")
 	await pump(scene, 8)
 
+	# F-08 regression: stale offline_phase == "ended" must not block online keyboard input,
+	# online ended phase must block keyboard input, and online Enter must emit a real discard frame.
+	var prev_offline_phase: String = scene.offline_phase
+	scene.offline_phase = "ended"
+	check(scene.game_keyboard_input_allowed(), "F-08: stale offline_phase=ended does not lock online keyboard input")
+	scene.online_game["phase"] = "ended"
+	check(not scene.game_keyboard_input_allowed(), "F-08: online ended phase blocks online keyboard input")
+	scene.online_game["phase"] = "awaitDiscard"
+	scene.hand_keyboard_selection = 1
+	scene.last_game_keyboard_input_msec = 0
+	var kb_discard_start := received_lines.size()
+	var enter_event := InputEventKey.new()
+	enter_event.pressed = true
+	enter_event.keycode = KEY_ENTER
+	check(scene.handle_game_keyboard_input(enter_event), "F-08: online Enter key handles discard on active turn")
+	await pump(scene, 8)
+	var kb_discard := wire_action_after("discard", kb_discard_start)
+	check(not kb_discard.is_empty() and str(kb_discard.get("tile", "")) == "2W", "F-08: online Enter transmits the selected tile via real discard frame")
+	if not kb_discard.is_empty():
+		await send_fragmented({"type": "ack", "requestId": kb_discard.get("requestId", ""), "message": "键盘出牌已确认"})
+		await pump(scene, 8)
+	scene.offline_phase = prev_offline_phase
+
+	# F-08 offline danger-discard confirmation keyboard guard: arrows/H/G blocked, Enter confirms pending tile.
+	var saved_mode: String = scene.mode
+	scene.mode = "offline"
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.offline_turn_needs_draw = false
+	scene.ai_assist_enabled = true
+	scene.players = [
+		{"name": "你", "hand": ["1W", "2W", "3W", "5T", "9B"], "hand_instance_serials": [-1, -1, -1, -1, -1], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": false},
+		{"name": "乙", "hand": ["1T"], "hand_instance_serials": [-1], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "丙", "hand": ["1B"], "hand_instance_serials": [-1], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+		{"name": "丁", "hand": ["E"], "hand_instance_serials": [-1], "discards": [], "melds": [], "flowers": 0, "flower_tiles": [], "score": 25000, "bot": true},
+	]
+	scene.hand_keyboard_selection = 4
+	scene.pending_danger_discard_index = 4
+	scene.pending_danger_discard_tile = "9B"
+	scene.pending_danger_discard_report = {"tile": "9B", "risk_label": "高", "risk": 55.0}
+	scene.last_game_keyboard_input_msec = 0
+	var left_event := InputEventKey.new()
+	left_event.pressed = true
+	left_event.keycode = KEY_LEFT
+	scene.handle_game_keyboard_input(left_event)
+	check(scene.hand_keyboard_selection == 4 and scene.has_pending_danger_discard(), "F-08: arrow navigation is locked while confirming a pending danger discard")
+	scene.last_game_keyboard_input_msec = 0
+	var danger_enter := InputEventKey.new()
+	danger_enter.pressed = true
+	danger_enter.keycode = KEY_ENTER
+	check(scene.handle_game_keyboard_input(danger_enter) and not scene.has_pending_danger_discard() and scene.last_discard == "9B", "F-08: Enter confirms and discards the pending danger tile")
+	scene.cancel_offline_ai_run()
+	scene.mode = saved_mode
+	scene.offline_phase = prev_offline_phase
+
 
 func check_chat_correlations(scene: Node) -> void:
 	for request_id in scene.online_pending_chat_requests.keys():

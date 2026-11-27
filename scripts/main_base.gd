@@ -926,6 +926,7 @@ var offline_claim_counts: Dictionary = {}
 var offline_package_liability: Dictionary = {}
 var offline_passed_win_tiles: Dictionary = {}  # seat -> {tile: true} 同张过水
 var offline_claim_discard_bans: Dictionary = {}  # seat -> {tile: true} 吃碰后本回合食替禁打
+var offline_peeked_tiles: Array[String] = []  # 本局已通过偷看卡查看过的下家手牌
 var offline_concealed_gang_tiles: Dictionary = {}  # seat -> {tile: true} 保留暗杠门清来源
 var offline_last_draw: Dictionary = {}
 var offline_self_draw_ready: Dictionary = {}  # 当前回合可自摸的真实摸牌；空值只兼容旧局状态
@@ -6125,9 +6126,15 @@ func offline_progress_state_payload() -> Dictionary:
 	var snapshot_players: Array = []
 	for i in range(mini(players.size(), 4)):
 		var source: Dictionary = players[i] if typeof(players[i]) == TYPE_DICTIONARY else {}
+		var serials_out: Array[int] = []
+		var raw_serials = source.get("hand_instance_serials", [])
+		if typeof(raw_serials) == TYPE_ARRAY:
+			for raw_serial in raw_serials:
+				serials_out.append(int(raw_serial))
 		snapshot_players.append({
 			"name": str(source.get("name", SEAT_NAMES[i])),
 			"hand": (source.get("hand", []) as Array).duplicate(),
+			"hand_instance_serials": serials_out,
 			"discards": (source.get("discards", []) as Array).duplicate(),
 			"melds": (source.get("melds", []) as Array).duplicate(true),
 			"flowers": int(source.get("flowers", 0)),
@@ -6293,25 +6300,136 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 	offline_hand_seed = int(state.get("offline_hand_seed", 0))
 	active_round_id = str(state.get("active_round_id", ""))
 	offline_draw_serial = int(state.get("offline_draw_serial", 0))
-	offline_last_draw = state.get("offline_last_draw", {}).duplicate(true) if typeof(state.get("offline_last_draw", {})) == TYPE_DICTIONARY else {}
-	offline_self_draw_ready = state.get("offline_self_draw_ready", {}).duplicate(true) if typeof(state.get("offline_self_draw_ready", {})) == TYPE_DICTIONARY else {}
+	offline_last_draw = {}
+	if typeof(state.get("offline_last_draw", {})) == TYPE_DICTIONARY:
+		offline_last_draw = (state.get("offline_last_draw", {}) as Dictionary).duplicate(true)
+		if offline_last_draw.has("seat"):
+			offline_last_draw["seat"] = int(offline_last_draw.get("seat", -1))
+		if offline_last_draw.has("serial"):
+			offline_last_draw["serial"] = int(offline_last_draw.get("serial", -1))
+		if offline_last_draw.has("hand_index"):
+			offline_last_draw["hand_index"] = int(offline_last_draw.get("hand_index", -1))
+		if offline_last_draw.has("tile"):
+			offline_last_draw["tile"] = str(offline_last_draw.get("tile", ""))
+	offline_self_draw_ready = {}
+	if typeof(state.get("offline_self_draw_ready", {})) == TYPE_DICTIONARY:
+		offline_self_draw_ready = (state.get("offline_self_draw_ready", {}) as Dictionary).duplicate(true)
+		if offline_self_draw_ready.has("seat"):
+			offline_self_draw_ready["seat"] = int(offline_self_draw_ready.get("seat", -1))
+		if offline_self_draw_ready.has("serial"):
+			offline_self_draw_ready["serial"] = int(offline_self_draw_ready.get("serial", -1))
+		if offline_self_draw_ready.has("hand_index"):
+			offline_self_draw_ready["hand_index"] = int(offline_self_draw_ready.get("hand_index", -1))
+		if offline_self_draw_ready.has("tile"):
+			offline_self_draw_ready["tile"] = str(offline_self_draw_ready.get("tile", ""))
 	offline_pending_claim = state.get("offline_pending_claim", {}).duplicate(true) if typeof(state.get("offline_pending_claim", {})) == TYPE_DICTIONARY else {}
+	if offline_pending_claim.has("from_seat"):
+		offline_pending_claim["from_seat"] = int(offline_pending_claim.get("from_seat", -1))
 	if offline_pending_claim.has("remaining_msec"):
 		offline_pending_claim["deadline_msec"] = Time.get_ticks_msec() + maxi(0, int(offline_pending_claim.get("remaining_msec", 0)))
 		offline_pending_claim.erase("remaining_msec")
 	if offline_phase == "pending_claim" and not offline_pending_claim.is_empty():
 		offline_claim_sequence += 1
-	offline_claim_counts = state.get("offline_claim_counts", {}).duplicate(true) if typeof(state.get("offline_claim_counts", {})) == TYPE_DICTIONARY else {}
-	offline_package_liability = state.get("offline_package_liability", {}).duplicate(true) if typeof(state.get("offline_package_liability", {})) == TYPE_DICTIONARY else {}
+	offline_claim_counts = {}
+	if typeof(state.get("offline_claim_counts", {})) == TYPE_DICTIONARY:
+		var raw_claim_counts: Dictionary = state.get("offline_claim_counts", {})
+		for raw_claim_key in raw_claim_counts.keys():
+			offline_claim_counts[str(raw_claim_key)] = int(raw_claim_counts[raw_claim_key])
+	offline_package_liability = {}
+	if typeof(state.get("offline_package_liability", {})) == TYPE_DICTIONARY:
+		var raw_pkg: Dictionary = state.get("offline_package_liability", {})
+		for raw_winner in raw_pkg.keys():
+			var winner_key_text := str(raw_winner).strip_edges()
+			if winner_key_text.is_valid_int():
+				var winner_seat := int(winner_key_text)
+				var payer_seat := int(raw_pkg[raw_winner])
+				if winner_seat >= 0 and winner_seat < 4 and payer_seat >= 0 and payer_seat < 4 and payer_seat != winner_seat:
+					offline_package_liability[winner_seat] = payer_seat
 	ai_package_liability_revision += 1
-	offline_passed_win_tiles = state.get("offline_passed_win_tiles", {}).duplicate(true) if typeof(state.get("offline_passed_win_tiles", {})) == TYPE_DICTIONARY else {}
-	offline_claim_discard_bans = state.get("offline_claim_discard_bans", {}).duplicate(true) if typeof(state.get("offline_claim_discard_bans", {})) == TYPE_DICTIONARY else {}
+	var normalize_seat_tile_map := func(raw_value) -> Dictionary:
+		var normalized: Dictionary = {}
+		if typeof(raw_value) != TYPE_DICTIONARY:
+			return normalized
+		var raw_dict: Dictionary = raw_value
+		for raw_seat in raw_dict.keys():
+			var seat_text := str(raw_seat).strip_edges()
+			if not seat_text.is_valid_int():
+				continue
+			var seat_index := int(seat_text)
+			if seat_index < 0 or seat_index >= 4:
+				continue
+			var raw_tiles = raw_dict[raw_seat]
+			if typeof(raw_tiles) != TYPE_DICTIONARY:
+				continue
+			var tile_map: Dictionary = {}
+			for raw_tile in (raw_tiles as Dictionary).keys():
+				if bool((raw_tiles as Dictionary)[raw_tile]):
+					tile_map[str(raw_tile)] = true
+			if not tile_map.is_empty():
+				normalized[seat_index] = tile_map
+		return normalized
+	offline_passed_win_tiles = normalize_seat_tile_map.call(state.get("offline_passed_win_tiles", {}))
+	offline_claim_discard_bans = normalize_seat_tile_map.call(state.get("offline_claim_discard_bans", {}))
 	ai_claim_ban_revision += 1
-	offline_concealed_gang_tiles = state.get("offline_concealed_gang_tiles", {}).duplicate(true) if typeof(state.get("offline_concealed_gang_tiles", {})) == TYPE_DICTIONARY else {}
+	offline_concealed_gang_tiles = normalize_seat_tile_map.call(state.get("offline_concealed_gang_tiles", {}))
+	offline_peeked_tiles.clear()
 	wall = []
 	for raw_tile in state.get("wall", []):
 		wall.append(str(raw_tile))
-	players = (state.get("players", []) as Array).duplicate(true)
+	players = []
+	var raw_players: Array = state.get("players", []) if typeof(state.get("players", [])) == TYPE_ARRAY else []
+	var restored_draw_seat := int(offline_last_draw.get("seat", -1))
+	var restored_draw_serial := int(offline_last_draw.get("serial", -1))
+	var restored_draw_tile := str(offline_last_draw.get("tile", ""))
+	var restored_draw_index := int(offline_last_draw.get("hand_index", -1))
+	for seat_idx in range(mini(raw_players.size(), 4)):
+		var raw_player: Dictionary = raw_players[seat_idx] if typeof(raw_players[seat_idx]) == TYPE_DICTIONARY else {}
+		var restored_hand: Array = []
+		for raw_tile in raw_player.get("hand", []):
+			restored_hand.append(str(raw_tile))
+		var restored_discards: Array = []
+		for raw_tile in raw_player.get("discards", []):
+			restored_discards.append(str(raw_tile))
+		var restored_flowers: Array = []
+		for raw_tile in raw_player.get("flower_tiles", []):
+			restored_flowers.append(str(raw_tile))
+		var restored_melds: Array = []
+		for raw_meld in raw_player.get("melds", []):
+			if typeof(raw_meld) == TYPE_ARRAY:
+				var meld_copy: Array = []
+				for meld_tile in raw_meld:
+					meld_copy.append(str(meld_tile))
+				restored_melds.append(meld_copy)
+		var restored_serials: Array[int] = []
+		var raw_serials = raw_player.get("hand_instance_serials", [])
+		if typeof(raw_serials) == TYPE_ARRAY and (raw_serials as Array).size() == restored_hand.size():
+			for raw_serial in raw_serials:
+				restored_serials.append(int(raw_serial))
+		else:
+			for _h in range(restored_hand.size()):
+				restored_serials.append(-1)
+			if seat_idx == restored_draw_seat and restored_draw_serial > 0 and not restored_hand.is_empty():
+				var fallback_idx := -1
+				if restored_draw_index >= 0 and restored_draw_index < restored_hand.size() and (restored_draw_tile == "" or str(restored_hand[restored_draw_index]) == restored_draw_tile):
+					fallback_idx = restored_draw_index
+				elif restored_draw_tile != "":
+					for scan_idx in range(restored_hand.size() - 1, -1, -1):
+						if str(restored_hand[scan_idx]) == restored_draw_tile:
+							fallback_idx = scan_idx
+							break
+				if fallback_idx >= 0:
+					restored_serials[fallback_idx] = restored_draw_serial
+		players.append({
+			"name": str(raw_player.get("name", SEAT_NAMES[seat_idx])),
+			"hand": restored_hand,
+			"hand_instance_serials": restored_serials,
+			"discards": restored_discards,
+			"melds": restored_melds,
+			"flowers": int(raw_player.get("flowers", restored_flowers.size())),
+			"flower_tiles": restored_flowers,
+			"score": int(raw_player.get("score", MATCH_START_SCORE)),
+			"bot": bool(raw_player.get("bot", seat_idx != 0)),
+		})
 	last_discard = str(state.get("last_discard", ""))
 	last_discard_seat = int(state.get("last_discard_seat", -1))
 	round_summary = str(state.get("round_summary", ""))
@@ -6328,7 +6446,13 @@ func restore_offline_progress_state(state: Dictionary) -> bool:
 		table_logs.append(str(log_entry))
 	round_event_history = state.get("round_event_history", []).duplicate(true) if typeof(state.get("round_event_history", [])) == TYPE_ARRAY else []
 	round_event_sequence = int(state.get("round_event_sequence", 0))
-	ai_profile_seat_map = state.get("ai_profile_seat_map", [0, 1, 2, 3]).duplicate() if typeof(state.get("ai_profile_seat_map", [])) == TYPE_ARRAY else [0, 1, 2, 3]
+	ai_profile_seat_map = []
+	var raw_profile_map = state.get("ai_profile_seat_map", [0, 1, 2, 3])
+	if typeof(raw_profile_map) == TYPE_ARRAY and (raw_profile_map as Array).size() == 4:
+		for profile_val in raw_profile_map:
+			ai_profile_seat_map.append(int(profile_val))
+	else:
+		ai_profile_seat_map = [0, 1, 2, 3]
 	if has_method("offline_tile_ledger_report"):
 		var ledger: Dictionary = call("offline_tile_ledger_report") as Dictionary
 		if not bool(ledger.get("ok", false)):

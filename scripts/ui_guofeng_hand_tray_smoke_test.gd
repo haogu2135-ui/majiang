@@ -114,6 +114,9 @@ func check_hand_surface(scene: Node) -> void:
 	for tile_value in tiles:
 		var tile := tile_value as Control
 		check(tray.get_global_rect().grow(1.0).encloses(tile.get_global_rect()) and tile.modulate == Color.WHITE and tile.self_modulate == Color.WHITE, "%s remains bounded and untinted" % tile.name)
+		if bool(tile.get_meta("danger_pending", false)):
+			for header_label in reading_labels:
+				check(not tile.get_global_rect().intersects(header_label.get_global_rect()), "U-08: lifted danger tile clears visible header label %s" % header_label.name)
 		if scene.effective_viewport_size().x >= 1600.0 and scene.effective_viewport_size().y >= 900.0 and scene.safe_content_pixel_size().y >= 1000.0:
 			check(tile.size.x > 68.0 and tile.size.x <= 88.0, "%s uses the larger bounded wide-screen hand size" % tile.name)
 

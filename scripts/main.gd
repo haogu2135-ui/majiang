@@ -13229,9 +13229,43 @@ func use_offline_inventory_item(item_id: String) -> bool:
 		return true
 	if item_id == "peek_card":
 		var hand: Array = players[1].get("hand", []) if players.size() > 1 else []
-		if hand.is_empty() or not use_item(item_id):
+		if hand.is_empty():
+			show_toast("下家当前没有可查看的手牌，道具未消耗。", 2200)
 			return false
-		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(str(hand[0])), "偷看卡")
+		var chosen_tile := ""
+		# First prefer a tile type not yet peeked this round.
+		for raw_tile in hand:
+			var tile_code := str(raw_tile)
+			if not offline_peeked_tiles.has(tile_code):
+				chosen_tile = tile_code
+				break
+		# If every distinct tile type was already seen, prefer an unseen duplicate copy.
+		if chosen_tile == "":
+			var seen_counts: Dictionary = {}
+			for seen in offline_peeked_tiles:
+				seen_counts[seen] = int(seen_counts.get(seen, 0)) + 1
+			var hand_counts: Dictionary = {}
+			for raw_tile in hand:
+				var tile_code := str(raw_tile)
+				hand_counts[tile_code] = int(hand_counts.get(tile_code, 0)) + 1
+				if int(hand_counts[tile_code]) > int(seen_counts.get(tile_code, 0)):
+					chosen_tile = tile_code
+					break
+		# If every card in hand has been peeked, cycle again avoiding immediate repeat when possible.
+		if chosen_tile == "":
+			var last_peeked := offline_peeked_tiles.back() if not offline_peeked_tiles.is_empty() else ""
+			offline_peeked_tiles.clear()
+			for raw_tile in hand:
+				var tile_code := str(raw_tile)
+				if tile_code != last_peeked:
+					chosen_tile = tile_code
+					break
+			if chosen_tile == "":
+				chosen_tile = str(hand[0])
+		if not use_item(item_id):
+			return false
+		offline_peeked_tiles.append(chosen_tile)
+		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(chosen_tile), "偷看卡")
 		return true
 	if not use_item(item_id):
 		return false
@@ -24190,8 +24224,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# lines and omits this duplicate level caption in the same small card.
 	risk_seal.visible = not large_text_enabled
 	panel.add_child(risk_seal)
-	var risk_caption := make_label(risk_seal, "风险等级：%s" % risk_label, 13, Color(1.0, 0.62, 0.48), true)
+	var risk_caption := make_label(risk_seal, "风险等级：%s" % risk_label, 13, Color(1.0, 0.84, 0.72, 1.0), true)
 	risk_caption.name = "DangerDiscardRiskLevelText"
+	risk_caption.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.03, 0.92))
+	risk_caption.add_theme_constant_override("shadow_offset_x", 1)
+	risk_caption.add_theme_constant_override("shadow_offset_y", 1)
 	apply_rect(risk_caption, rect_full(0.0, 0.0, 1.0, 1.0))
 	risk_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(risk_caption)
@@ -26364,7 +26401,7 @@ func draw_hand(parent: Control) -> void:
 	tray.set_meta("hand_tray_state_text_snapshot", hand_state_text)
 	mark_ui_optimization(state_badge, "F-256")
 	mark_ui_optimization(state_badge, "F-417")
-	state_badge.visible = not hand_has_pending_claim_window and not tutorial_hint_visible and not disconnected_hand_state
+	state_badge.visible = not hand_has_pending_claim_window and not hand_has_pending_danger_discard and not tutorial_hint_visible and not disconnected_hand_state
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
@@ -26675,7 +26712,7 @@ func draw_hand(parent: Control) -> void:
 			hand_box.add_child(danger_mount)
 			danger_mount.add_child(tile_node)
 			apply_rect(tile_node, rect_full(0.0, 0.0, 1.0, 1.0))
-			var danger_lift_px := 12.0 if hand_viewport_size.y >= 650.0 else 8.0
+			var danger_lift_px := 8.0 if hand_viewport_size.y >= 650.0 else 5.0
 			tile_node.offset_top = -danger_lift_px
 			tile_node.offset_bottom = -danger_lift_px
 			var danger_underline := add_optional_gpt_illustration_texture(danger_mount, "quiet_gold_accent", rect_full(0.08, 0.96, 0.92, 1.03), 0.96, false)
@@ -31184,10 +31221,19 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.set_meta("section_count_contract", "one_visible_category_of_three_native_sections")
 		mark_ui_optimization(settings_scroll, "F-557")
 		mark_ui_optimization(settings_scroll, "F-563")
-		apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.895))
-		settings_scroll.offset_left = rail_pad
-		settings_scroll.offset_right = -rail_pad
-		settings_scroll.offset_top = content_top_px
+		if compact_settings:
+			# Snap compact large-text viewport to whole rows (3x66+2x10=218px for audio/play,
+			# 68+68+66+20=222px for system) so row 4 ("播放测试") starts cleanly at y=228 below the clip edge.
+			apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.0))
+			settings_scroll.offset_left = rail_pad
+			settings_scroll.offset_right = -rail_pad
+			settings_scroll.offset_top = content_top_px
+			settings_scroll.offset_bottom = content_top_px + 224.0
+		else:
+			apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.895))
+			settings_scroll.offset_left = rail_pad
+			settings_scroll.offset_right = -rail_pad
+			settings_scroll.offset_top = content_top_px
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
 		settings_content.name = "SettingsLargeTextContent"
@@ -33956,12 +34002,21 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		set_ui_full_text(reason, badge_text, badge_text)
 	var limit_name := str(score_data.get("limit_name", ""))
+	var snapped_yaku_h := floorf(float(layout["yaku_height"]))
+	if badges.get_child_count() > 0:
+		var sample_badge := badges.get_child(0) as Control
+		var sample_h := ceilf(sample_badge.get_combined_minimum_size().y) if sample_badge != null else 0.0
+		var actual_v_sep := 2.0 if compact_yaku_list else 6.0
+		if sample_h > 0.0:
+			var fit_rows := maxi(1, int(floorf((snapped_yaku_h + actual_v_sep + 0.5) / (sample_h + actual_v_sep))))
+			snapped_yaku_h = minf(snapped_yaku_h, float(fit_rows) * sample_h + float(fit_rows - 1) * actual_v_sep)
+	yaku_scroll.size.y = snapped_yaku_h
 	var score_basis := "%d番 · 基础分%d分 · 番种%d项" % [fan, points, reasons.size()]
 	var status := make_label(detail_panel, score_basis + " · 可滚动", int(layout.get("small_fs", 13)), Color.WHITE, false)
 	status.name = "WinDetailYakuStatus"
 	style_guofeng_label(status)
 	var status_width := detail_rect.size.x - (78.0 if (limit_name != "" and cap_stamp_tex == null) else 0.0)
-	place_round_summary_control(status, Rect2(0.0, float(layout["yaku_top"]) + float(layout["yaku_height"]) + 6.0, status_width, float(layout["small_height"])))
+	place_round_summary_control(status, Rect2(0.0, float(layout["yaku_top"]) + snapped_yaku_h + 6.0, status_width, float(layout["small_height"])))
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var sync_yaku := func(_value: float = 0.0) -> void:
 		if not is_instance_valid(status) or not is_instance_valid(yaku_scroll):
@@ -35129,7 +35184,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
+	var consequence_row_height := 68.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
 	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (96.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")
@@ -40738,10 +40793,10 @@ func _show_rules_screen_impl() -> void:
 	], 4)
 
 	add_rule_section(content, "游戏操作", [
-		"出牌：点击手牌直接打出；键盘方向键选牌，回车出牌",
-		"响应：出现「吃 / 碰 / 杠 / 胡」提示时，点击对应按钮即可操作",
-		"续局与重开：中途退出自动保存进度；点击「重开」可开始新局",
-		"当前规则档案：%s（可在首页或设置中随时切换）" % rule_variant_label(),
+		"出牌：点击手牌直接打出；←/→ 或 1-0/QWER 选牌，回车/空格出牌",
+		"响应快捷键：H胡、G杠、P碰、C吃、X过；Esc 关闭弹窗或返回",
+		"续局与重开：中途退出自动保存进度；牌桌「更多」菜单可重开新局",
+		"当前规则档案：%s（可在设置中随时切换）" % rule_variant_label(),
 		"单机牌局与联机好友房均遵循上述完整牌型、番数与结算规则",
 	], 5)
 	var rules_tail_spacer := Control.new()
@@ -51119,8 +51174,12 @@ func game_keyboard_input_allowed() -> bool:
 		modal_open = true
 	if modal_open or game_keyboard_focus_is_text_input():
 		return false
-	if offline_phase == "ended" or online_waiting_for_server:
-		return false
+	if mode == "offline":
+		if offline_phase == "ended":
+			return false
+	elif mode == "online_game":
+		if online_waiting_for_server or str(online_game.get("phase", "")).strip_edges().to_lower() == "ended":
+			return false
 	return true
 
 
@@ -51384,6 +51443,12 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 		return false
 	if game_keyboard_input_throttled():
 		return true
+	if mode == "offline" and has_pending_danger_discard():
+		if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
+			confirm_pending_danger_discard()
+			return true
+		# Block tile selection changes and unrelated H/G shortcuts while confirming a danger discard.
+		return true
 	if number_index >= 0:
 		return set_hand_keyboard_selection(number_index)
 	if key == KEY_LEFT or key_event.is_action_pressed("ui_left"):
@@ -51408,7 +51473,7 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 		if key == KEY_ENTER or key == KEY_KP_ENTER:
 			return keyboard_claim_action("confirm")
 		return false
-	if key == KEY_H and mode == "offline" and can_win_for_seat(0):
+	if key == KEY_H and mode == "offline" and can_self_discard() and can_win_for_seat(0):
 		human_self_win()
 		return true
 	if key == KEY_G and mode == "offline" and can_self_discard():
@@ -51422,10 +51487,17 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 				human_added_gang(gang_tile)
 			return true
 	if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
-		var selected := normalized_hand_keyboard_selection(get_self_hand())
-		if selected >= 0:
-			human_discard(selected)
-			return true
+		var hand := get_self_hand()
+		var selected := normalized_hand_keyboard_selection(hand)
+		if selected >= 0 and selected < hand.size():
+			if mode == "offline":
+				human_discard(selected)
+				return true
+			if mode == "online_game" and can_self_discard():
+				var selected_tile := str(hand[selected])
+				var online_identity := online_hand_identity_at(selected, selected_tile)
+				send_online_discard_by_identity(online_identity, selected_tile, "打出%s" % tile_label(selected_tile))
+				return true
 	return false
 
 func unlock_achievement(key: String) -> bool:
@@ -52617,6 +52689,7 @@ func deal_offline_hand() -> void:
 	offline_passed_win_tiles.clear()
 	offline_claim_discard_bans.clear()
 	offline_concealed_gang_tiles.clear()
+	offline_peeked_tiles.clear()
 	discard_window_start_by_seat.clear()
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()

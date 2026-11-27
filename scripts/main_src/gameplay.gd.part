@@ -5709,9 +5709,43 @@ func use_offline_inventory_item(item_id: String) -> bool:
 		return true
 	if item_id == "peek_card":
 		var hand: Array = players[1].get("hand", []) if players.size() > 1 else []
-		if hand.is_empty() or not use_item(item_id):
+		if hand.is_empty():
+			show_toast("下家当前没有可查看的手牌，道具未消耗。", 2200)
 			return false
-		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(str(hand[0])), "偷看卡")
+		var chosen_tile := ""
+		# First prefer a tile type not yet peeked this round.
+		for raw_tile in hand:
+			var tile_code := str(raw_tile)
+			if not offline_peeked_tiles.has(tile_code):
+				chosen_tile = tile_code
+				break
+		# If every distinct tile type was already seen, prefer an unseen duplicate copy.
+		if chosen_tile == "":
+			var seen_counts: Dictionary = {}
+			for seen in offline_peeked_tiles:
+				seen_counts[seen] = int(seen_counts.get(seen, 0)) + 1
+			var hand_counts: Dictionary = {}
+			for raw_tile in hand:
+				var tile_code := str(raw_tile)
+				hand_counts[tile_code] = int(hand_counts.get(tile_code, 0)) + 1
+				if int(hand_counts[tile_code]) > int(seen_counts.get(tile_code, 0)):
+					chosen_tile = tile_code
+					break
+		# If every card in hand has been peeked, cycle again avoiding immediate repeat when possible.
+		if chosen_tile == "":
+			var last_peeked := offline_peeked_tiles.back() if not offline_peeked_tiles.is_empty() else ""
+			offline_peeked_tiles.clear()
+			for raw_tile in hand:
+				var tile_code := str(raw_tile)
+				if tile_code != last_peeked:
+					chosen_tile = tile_code
+					break
+			if chosen_tile == "":
+				chosen_tile = str(hand[0])
+		if not use_item(item_id):
+			return false
+		offline_peeked_tiles.append(chosen_tile)
+		open_toast_detail("下家手牌中的一张：%s。仅本次查看，不改变牌局。" % tile_label(chosen_tile), "偷看卡")
 		return true
 	if not use_item(item_id):
 		return false

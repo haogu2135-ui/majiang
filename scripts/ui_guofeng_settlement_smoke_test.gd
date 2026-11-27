@@ -84,6 +84,14 @@ func check_settlement_paper(scene: Node) -> void:
 		check(yaku_scroll.get_global_rect().end.y < body_scroll.get_global_rect().position.y, "all reasons clear the independent full settlement source")
 		var tile := scene.find_child("WinDetailTile", true, false) as Control
 		check(tile != null and not tile.get_global_rect().intersects(winner.get_global_rect()) and not tile.get_global_rect().intersects(score.get_global_rect()) and not tile.get_global_rect().intersects(yaku_scroll.get_global_rect()), "authored winning tile clears the winner score and complete reasons")
+		var yaku_rect := yaku_scroll.get_global_rect()
+		var partially_clipped_badge := false
+		for badge_node in yaku_scroll.find_children("WinDetailYakuBadge_*", "Control", true, false):
+			var br := (badge_node as Control).get_global_rect()
+			if br.position.y < yaku_rect.end.y - 0.5 and br.end.y > yaku_rect.end.y + 1.0:
+				partially_clipped_badge = true
+				break
+		check(not partially_clipped_badge, "U-06: yaku scroll viewport ends on complete rows without clipping the next row border")
 	for button in actions.find_children("*", "Button", true, false):
 		check((button as Button).size.y >= 44.0, "settlement action %s keeps a native touch target" % button.name)
 

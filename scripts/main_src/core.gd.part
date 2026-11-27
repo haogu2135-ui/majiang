@@ -909,8 +909,12 @@ func game_keyboard_input_allowed() -> bool:
 		modal_open = true
 	if modal_open or game_keyboard_focus_is_text_input():
 		return false
-	if offline_phase == "ended" or online_waiting_for_server:
-		return false
+	if mode == "offline":
+		if offline_phase == "ended":
+			return false
+	elif mode == "online_game":
+		if online_waiting_for_server or str(online_game.get("phase", "")).strip_edges().to_lower() == "ended":
+			return false
 	return true
 
 
@@ -1174,6 +1178,12 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 		return false
 	if game_keyboard_input_throttled():
 		return true
+	if mode == "offline" and has_pending_danger_discard():
+		if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
+			confirm_pending_danger_discard()
+			return true
+		# Block tile selection changes and unrelated H/G shortcuts while confirming a danger discard.
+		return true
 	if number_index >= 0:
 		return set_hand_keyboard_selection(number_index)
 	if key == KEY_LEFT or key_event.is_action_pressed("ui_left"):
@@ -1198,7 +1208,7 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 		if key == KEY_ENTER or key == KEY_KP_ENTER:
 			return keyboard_claim_action("confirm")
 		return false
-	if key == KEY_H and mode == "offline" and can_win_for_seat(0):
+	if key == KEY_H and mode == "offline" and can_self_discard() and can_win_for_seat(0):
 		human_self_win()
 		return true
 	if key == KEY_G and mode == "offline" and can_self_discard():
@@ -1212,10 +1222,17 @@ func handle_game_keyboard_input(event: InputEvent) -> bool:
 				human_added_gang(gang_tile)
 			return true
 	if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE:
-		var selected := normalized_hand_keyboard_selection(get_self_hand())
-		if selected >= 0:
-			human_discard(selected)
-			return true
+		var hand := get_self_hand()
+		var selected := normalized_hand_keyboard_selection(hand)
+		if selected >= 0 and selected < hand.size():
+			if mode == "offline":
+				human_discard(selected)
+				return true
+			if mode == "online_game" and can_self_discard():
+				var selected_tile := str(hand[selected])
+				var online_identity := online_hand_identity_at(selected, selected_tile)
+				send_online_discard_by_identity(online_identity, selected_tile, "打出%s" % tile_label(selected_tile))
+				return true
 	return false
 
 func unlock_achievement(key: String) -> bool:
@@ -2407,6 +2424,7 @@ func deal_offline_hand() -> void:
 	offline_passed_win_tiles.clear()
 	offline_claim_discard_bans.clear()
 	offline_concealed_gang_tiles.clear()
+	offline_peeked_tiles.clear()
 	discard_window_start_by_seat.clear()
 	offline_last_draw.clear()
 	offline_self_draw_ready.clear()

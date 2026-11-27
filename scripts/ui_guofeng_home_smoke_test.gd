@@ -130,6 +130,18 @@ func check_guofeng_home(scene: Node, output_dir: String) -> void:
 	if scroll != null:
 		var navigation := scene.find_child("SettingsSectionNavigation", true, false) as Control
 		check(navigation != null and scroll.get_global_rect().position.y >= navigation.get_global_rect().end.y + 8.0, "large-text first-section reading viewport clears the resolved fixed navigation by eight pixels")
+		if root.size.x <= 960 or root.size.y <= 560:
+			var scroll_rect := scroll.get_global_rect()
+			var sliced_row := false
+			for row_node in scroll.find_children("SettingRow_*", "Control", true, false):
+				var rc := row_node as Control
+				if not rc.is_visible_in_tree():
+					continue
+				var rr := rc.get_global_rect()
+				if rr.position.y < scroll_rect.end.y - 0.5 and rr.end.y > scroll_rect.end.y + 1.0:
+					sliced_row = true
+					break
+			check(not sliced_row, "U-07: compact large-text settings scroll viewport does not bisect any setting row")
 		scroll.grab_focus()
 		await send_key(KEY_END, 0)
 		await settle()

@@ -10950,8 +10950,11 @@ func draw_danger_discard_confirmation_art(parent: Control, tile: String, report:
 	# lines and omits this duplicate level caption in the same small card.
 	risk_seal.visible = not large_text_enabled
 	panel.add_child(risk_seal)
-	var risk_caption := make_label(risk_seal, "风险等级：%s" % risk_label, 13, Color(1.0, 0.62, 0.48), true)
+	var risk_caption := make_label(risk_seal, "风险等级：%s" % risk_label, 13, Color(1.0, 0.84, 0.72, 1.0), true)
 	risk_caption.name = "DangerDiscardRiskLevelText"
+	risk_caption.add_theme_color_override("font_shadow_color", Color(0.02, 0.04, 0.03, 0.92))
+	risk_caption.add_theme_constant_override("shadow_offset_x", 1)
+	risk_caption.add_theme_constant_override("shadow_offset_y", 1)
 	apply_rect(risk_caption, rect_full(0.0, 0.0, 1.0, 1.0))
 	risk_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(risk_caption)
@@ -13124,7 +13127,7 @@ func draw_hand(parent: Control) -> void:
 	tray.set_meta("hand_tray_state_text_snapshot", hand_state_text)
 	mark_ui_optimization(state_badge, "F-256")
 	mark_ui_optimization(state_badge, "F-417")
-	state_badge.visible = not hand_has_pending_claim_window and not tutorial_hint_visible and not disconnected_hand_state
+	state_badge.visible = not hand_has_pending_claim_window and not hand_has_pending_danger_discard and not tutorial_hint_visible and not disconnected_hand_state
 
 	# 新手提示：仅在首次出牌和收尾 checkpoint 展示；完成/跳过后永久收起。
 	if tutorial_hint_visible:
@@ -13435,7 +13438,7 @@ func draw_hand(parent: Control) -> void:
 			hand_box.add_child(danger_mount)
 			danger_mount.add_child(tile_node)
 			apply_rect(tile_node, rect_full(0.0, 0.0, 1.0, 1.0))
-			var danger_lift_px := 12.0 if hand_viewport_size.y >= 650.0 else 8.0
+			var danger_lift_px := 8.0 if hand_viewport_size.y >= 650.0 else 5.0
 			tile_node.offset_top = -danger_lift_px
 			tile_node.offset_bottom = -danger_lift_px
 			var danger_underline := add_optional_gpt_illustration_texture(danger_mount, "quiet_gold_accent", rect_full(0.08, 0.96, 0.92, 1.03), 0.96, false)
@@ -17944,10 +17947,19 @@ func draw_settings_overlay(parent: Control) -> void:
 		settings_scroll.set_meta("section_count_contract", "one_visible_category_of_three_native_sections")
 		mark_ui_optimization(settings_scroll, "F-557")
 		mark_ui_optimization(settings_scroll, "F-563")
-		apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.895))
-		settings_scroll.offset_left = rail_pad
-		settings_scroll.offset_right = -rail_pad
-		settings_scroll.offset_top = content_top_px
+		if compact_settings:
+			# Snap compact large-text viewport to whole rows (3x66+2x10=218px for audio/play,
+			# 68+68+66+20=222px for system) so row 4 ("播放测试") starts cleanly at y=228 below the clip edge.
+			apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.0))
+			settings_scroll.offset_left = rail_pad
+			settings_scroll.offset_right = -rail_pad
+			settings_scroll.offset_top = content_top_px
+			settings_scroll.offset_bottom = content_top_px + 224.0
+		else:
+			apply_rect(settings_scroll, rect_full(0.0, 0.0, 1.0, 0.895))
+			settings_scroll.offset_left = rail_pad
+			settings_scroll.offset_right = -rail_pad
+			settings_scroll.offset_top = content_top_px
 		panel.add_child(settings_scroll)
 		var settings_content := Control.new()
 		settings_content.name = "SettingsLargeTextContent"
@@ -20716,12 +20728,21 @@ func draw_win_detail_section(parent: Control, score_data: Dictionary, viewport_s
 		reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		set_ui_full_text(reason, badge_text, badge_text)
 	var limit_name := str(score_data.get("limit_name", ""))
+	var snapped_yaku_h := floorf(float(layout["yaku_height"]))
+	if badges.get_child_count() > 0:
+		var sample_badge := badges.get_child(0) as Control
+		var sample_h := ceilf(sample_badge.get_combined_minimum_size().y) if sample_badge != null else 0.0
+		var actual_v_sep := 2.0 if compact_yaku_list else 6.0
+		if sample_h > 0.0:
+			var fit_rows := maxi(1, int(floorf((snapped_yaku_h + actual_v_sep + 0.5) / (sample_h + actual_v_sep))))
+			snapped_yaku_h = minf(snapped_yaku_h, float(fit_rows) * sample_h + float(fit_rows - 1) * actual_v_sep)
+	yaku_scroll.size.y = snapped_yaku_h
 	var score_basis := "%d番 · 基础分%d分 · 番种%d项" % [fan, points, reasons.size()]
 	var status := make_label(detail_panel, score_basis + " · 可滚动", int(layout.get("small_fs", 13)), Color.WHITE, false)
 	status.name = "WinDetailYakuStatus"
 	style_guofeng_label(status)
 	var status_width := detail_rect.size.x - (78.0 if (limit_name != "" and cap_stamp_tex == null) else 0.0)
-	place_round_summary_control(status, Rect2(0.0, float(layout["yaku_top"]) + float(layout["yaku_height"]) + 6.0, status_width, float(layout["small_height"])))
+	place_round_summary_control(status, Rect2(0.0, float(layout["yaku_top"]) + snapped_yaku_h + 6.0, status_width, float(layout["small_height"])))
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var sync_yaku := func(_value: float = 0.0) -> void:
 		if not is_instance_valid(status) or not is_instance_valid(yaku_scroll):
@@ -21889,7 +21910,7 @@ func make_setting_row(parent: Control, title: String, status: String, button: Bu
 	configure_passive_container(row)
 	row.mouse_filter = Control.MOUSE_FILTER_PASS
 	var consequence_row := title == "画面质量" or title == "本地进度"
-	var consequence_row_height := 72.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
+	var consequence_row_height := 68.0 if compact_settings and large_text_settings else (58.0 if compact_settings else (104.0 if (wide_settings and large_text_settings) else (82.0 if large_text_settings else (90.0 if (wide_settings and title == "本地进度") else (78.0 if (wide_settings or title == "本地进度") else 64.0)))))
 	row.custom_minimum_size = Vector2(0, consequence_row_height if consequence_row else (66.0 if compact_settings and large_text_enabled else (96.0 if (wide_settings and large_text_enabled) else (72.0 if large_text_enabled else (58.0 if compact_settings else (78.0 if wide_settings else 64.0))))))
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_ui_optimization(row, "F-413")

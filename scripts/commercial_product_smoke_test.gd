@@ -145,6 +145,53 @@ func run() -> void:
 	saved_settings.save(scene.SETTINGS_PATH)
 	scene.load_settings()
 	check(int(scene.current_bgm_index) == posmod(-3, scene.BGM_TRACKS.size()), "F-05: load_settings normalizes negative current_bgm_index safely")
+
+	# F-06 & F-07 regression: real JSON save/load roundtrip preserves integer seat keys,
+	# hand_instance_serials, and swap_card functionality after resume (plus legacy fallback).
+	scene.reset_offline_progress()
+	scene.start_offline(true)
+	scene.cancel_offline_ai_run()
+	scene.set_process(false)
+	scene.inventory = {"swap_card": 3, "peek_card": 3, "lucky_charm": 1, "double_coins": 0}
+	scene.save_economy_state()
+	scene.offline_claim_counts = {"0:1": 3}
+	scene.offline_package_liability = {0: 1}
+	scene.offline_passed_win_tiles = {0: {"5W": true}}
+	scene.offline_claim_discard_bans = {0: {"9T": true}}
+	scene.offline_concealed_gang_tiles = {0: {"1W": true}}
+	scene.mark_offline_progress_dirty()
+	scene.save_offline_progress(false)
+	check(scene.offline_progress_last_save_ok, "F-06/F-07: offline progress saves cleanly before JSON roundtrip")
+	var saved_payload_for_legacy: Dictionary = scene.offline_progress_state_payload()
+	scene.offline_claim_counts.clear()
+	scene.offline_package_liability.clear()
+	scene.offline_passed_win_tiles.clear()
+	scene.offline_claim_discard_bans.clear()
+	scene.offline_concealed_gang_tiles.clear()
+	scene.players[0]["hand_instance_serials"] = []
+	check(scene.load_offline_progress(), "F-06/F-07: real JSON load_offline_progress succeeds")
+	check(scene.package_payer_from_state(0) == 1 and int(scene.offline_claim_counts.get("0:1", 0)) == 3, "F-06: package liability and claim counts survive JSON roundtrip with int keys/values")
+	check(scene.is_passed_win_tile(0, "5W") and scene.claim_discard_ban_snapshot_for_seat(0).has("9T") and scene.is_concealed_gang_meld(0, ["1W", "1W", "1W", "1W"]), "F-06: passed-win, kuikae discard bans, and concealed-gang menzen survive JSON roundtrip")
+	var resumed_serials: Array = scene.players[0].get("hand_instance_serials", [])
+	check(resumed_serials.size() == scene.players[0]["hand"].size() and resumed_serials.has(int(scene.offline_last_draw.get("serial", -1))), "F-07: resumed hand restores hand_instance_serials matching offline_last_draw")
+	check(scene.use_offline_inventory_item("swap_card") and bool(scene.offline_tile_ledger_report().get("ok", false)), "F-07: swap_card succeeds after JSON resume with conserved tile ledger")
+	var legacy_state: Dictionary = JSON.parse_string(JSON.stringify(saved_payload_for_legacy)) as Dictionary
+	for legacy_p in legacy_state.get("players", []):
+		if typeof(legacy_p) == TYPE_DICTIONARY:
+			(legacy_p as Dictionary).erase("hand_instance_serials")
+	check(scene.restore_offline_progress_state(legacy_state) and scene.use_offline_inventory_item("swap_card") and bool(scene.offline_tile_ledger_report().get("ok", false)), "F-07: legacy save without hand_instance_serials reconstructs draw serial for swap_card")
+
+	# F-09 regression: peek_card does not repeatedly return hand[0] in the same round, and handles empty hand safely.
+	scene.offline_peeked_tiles.clear()
+	scene.players[1]["hand"] = ["1W", "2W", "3W"]
+	var peek_before: int = int(scene.get_item_count("peek_card"))
+	check(scene.use_offline_inventory_item("peek_card") and scene.use_offline_inventory_item("peek_card"), "F-09: two consecutive peek_card uses succeed")
+	check(scene.offline_peeked_tiles.size() == 2 and scene.offline_peeked_tiles[0] != scene.offline_peeked_tiles[1] and scene.get_item_count("peek_card") == peek_before - 2, "F-09: consecutive peek_card uses show distinct unseen opponent tiles instead of repeating hand[0]")
+	scene.players[1]["hand"] = []
+	var peek_before_empty: int = int(scene.get_item_count("peek_card"))
+	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == peek_before_empty, "F-09: peek_card refuses empty opponent hand without consuming an item")
+	scene.players[1]["hand"] = ["1W", "2W", "3W"]
+
 	scene.mode = "online_game"
 	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == 1, "inventory cannot expose opponents in online matches")
 	scene.mode = "offline"
