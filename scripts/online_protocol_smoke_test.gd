@@ -547,14 +547,14 @@ func run() -> void:
 			"phase": "awaitDiscard",
 			"youSeat": 0,
 			"currentSeat": 0,
-			"remaining": 48,
+			"remainingTiles": 48,
 			"hand": ["3W", "4W"],
-			"players": [{"seat": 0, "name": "协议测试者", "handCount": 2}]
+			"players": [{"seat": 0, "nickname": "协议测试者", "tiles": ["3W", "4W"], "tileCount": 2}]
 		}
 	}
 	await send_fragmented(f17_game_msg)
 	await pump(scene, 12)
-	check(not scene.online_resume_pending and not scene.online_resume_join_sent and scene.online_reconnect_attempts == 0, "F-17: direct valid gameState clears online_resume_pending and reconnect attempts")
+	check(not scene.online_resume_pending and not scene.online_resume_join_sent and scene.online_reconnect_attempts == 0, "F-17: direct valid gameState clears online_resume_pending and reconnect attempts (feedback=%s)" % scene.online_feedback)
 	check(not scene.online_game_disconnected(), "F-17: online_game_disconnected becomes false immediately upon valid gameState")
 	var err_f17_discard: String = scene.online_action_validation_error({"type": "discard", "tile": "3W", "handIndex": 0})
 	check(err_f17_discard == "", "F-17: discarding succeeds after direct gameState recovery (err=%s)" % err_f17_discard)
