@@ -194,12 +194,12 @@ func run() -> void:
 
 	# F-15 regression: daily tasks auto-reset across dates, unmet tasks refuse direct claim_task_reward,
 	# and record_game_result forwards wall_draw into season_points_for_result.
-	scene.task_date = "2020-01-01"
+	scene.last_task_reset_date = "2020-01-01"
 	scene.task_progress["play_5"] = 5
 	scene.task_claimed["play_5"] = true
 	var rolled_status: Dictionary = scene.get_task_status("play_5")
-	check(int(rolled_status.get("progress", -1)) == 0 and not bool(rolled_status.get("claimed", true)) and scene.task_date == Time.get_date_string_from_system(), "F-15: get_task_status triggers automatic daily task reset across date boundary")
-	scene.task_date = "2020-01-01"
+	check(int(rolled_status.get("progress", -1)) == 0 and not bool(rolled_status.get("claimed", true)) and scene.last_task_reset_date == Time.get_date_string_from_system(), "F-15: get_task_status triggers automatic daily task reset across date boundary")
+	scene.last_task_reset_date = "2020-01-01"
 	scene.task_progress["play_5"] = 5
 	scene.task_claimed["play_5"] = true
 	scene.update_task_progress("play_5", 1)

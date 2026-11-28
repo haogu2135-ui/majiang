@@ -41743,12 +41743,12 @@ func _show_shop_screen_impl() -> void:
 	# snap ShopItemsScroll cleanly to an integer number of complete rows so the next row is
 	# never bisected horizontally at the bottom edge.
 	if not shop_wide_layout:
-		var shop_total_h := float(shop_visual_rows) * shop_row_height + float(maxi(0, shop_visual_rows - 1)) * shop_row_gap
-		var shop_scroll_avail_h := shop_panel_size.y * (scroll.anchor_bottom - scroll.anchor_top)
-		if shop_total_h > shop_scroll_avail_h + 1.0 and shop_panel_size.y > 1.0:
-			var complete_rows := clampi(int(floor((shop_scroll_avail_h + shop_row_gap) / maxf(1.0, shop_row_height + shop_row_gap))), 1, shop_visual_rows)
-			var snapped_scroll_h := float(complete_rows) * shop_row_height + float(maxi(0, complete_rows - 1)) * shop_row_gap + 2.0
-			var snapped_bottom := minf(scroll.anchor_bottom, scroll.anchor_top + snapped_scroll_h / shop_panel_size.y)
+		var shop_total_h: float = float(shop_visual_rows) * shop_row_height + float(maxi(0, shop_visual_rows - 1)) * shop_row_gap
+		var shop_scroll_avail_h: float = float(shop_panel_size.y) * (scroll.anchor_bottom - scroll.anchor_top)
+		if shop_total_h > shop_scroll_avail_h + 1.0 and float(shop_panel_size.y) > 1.0:
+			var complete_rows: int = clampi(int(floor((shop_scroll_avail_h + shop_row_gap) / maxf(1.0, shop_row_height + shop_row_gap))), 1, shop_visual_rows)
+			var snapped_scroll_h: float = float(complete_rows) * shop_row_height + float(maxi(0, complete_rows - 1)) * shop_row_gap + 2.0
+			var snapped_bottom: float = minf(scroll.anchor_bottom, scroll.anchor_top + snapped_scroll_h / float(shop_panel_size.y))
 			scroll.anchor_bottom = snapped_bottom
 			shop_scroll_gutter.anchor_bottom = snapped_bottom - 0.007
 			shop_scroll_hit_target.anchor_bottom = snapped_bottom
