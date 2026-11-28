@@ -210,7 +210,7 @@ func run() -> void:
 	var season_pts_before_draw: int = int(scene.season_data.get("points", 0))
 	var expected_draw_delta: int = int(scene.season_points_for_result(false, 0, true))
 	var expected_loss_delta: int = int(scene.season_points_for_result(false, 0, false))
-	scene.record_game_result(false, 0, 12, {"wall_draw": true, "rule_variant": "yangzhou"})
+	scene.record_game_result(false, 0, 1, "f15_wall_draw_smoke", {"wall_draw": true, "rule_variant": "yangzhou"})
 	var season_pts_after_draw: int = int(scene.season_data.get("points", 0))
 	check(expected_draw_delta != expected_loss_delta and season_pts_after_draw - season_pts_before_draw == expected_draw_delta, "F-15: record_game_result passes wall_draw=true to season_points_for_result (delta=%d expected=%d)" % [season_pts_after_draw - season_pts_before_draw, expected_draw_delta])
 
