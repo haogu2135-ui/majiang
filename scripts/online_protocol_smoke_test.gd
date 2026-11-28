@@ -527,20 +527,21 @@ func run() -> void:
 	scene.rule_variant = prev_rule_variant
 
 	# F-17 regression: receiving a valid gameState directly while online_resume_pending == true
-	# must clear online_resume_pending / disconnect banner immediately so discarding is not blocked.
+	# (even at the same revision!) must clear online_resume_pending / disconnect banner immediately
+	# so discarding is not blocked.
 	var prev_mode_f17: String = scene.mode
 	var prev_game_f17: Dictionary = scene.online_game.duplicate(true)
 	var prev_selected_f17: String = scene.selected_room
+	var prev_resume_ctx_f17: Dictionary = scene.online_resume_context.duplicate(true)
 	scene.mode = "online_game"
 	scene.selected_room = "QA180"
+	scene.online_resume_context = {"room": "QA180", "host": "127.0.0.1", "name": expected_name}
 	scene.online_resume_pending = true
 	scene.online_resume_join_sent = true
 	scene.online_reconnect_attempts = 2
-	scene.online_last_game_fingerprint = ""
-	scene.online_last_state_revision = 0
 	var f17_game_msg: Dictionary = {
 		"type": "gameState",
-		"revision": 200,
+		"revision": maxi(1, int(scene.online_game_revision)),
 		"game": {
 			"roomCode": "QA180",
 			"phase": "awaitDiscard",
@@ -560,6 +561,7 @@ func run() -> void:
 	scene.online_game = prev_game_f17
 	scene.mode = prev_mode_f17
 	scene.selected_room = prev_selected_f17
+	scene.online_resume_context = prev_resume_ctx_f17
 
 	var oversized_partial := ("{\"type\":\"log\",\"text\":\"" + "X".repeat(scene.ONLINE_MESSAGE_MAX_BYTES + 32)).to_utf8_buffer()
 	check(server_peer.put_data(oversized_partial) == OK, "server queues an oversized unterminated frame")

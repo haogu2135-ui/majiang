@@ -49862,8 +49862,10 @@ func handle_online_message(line: String) -> void:
 		return
 	# Server revisions are authoritative for room/game snapshots. Once a revision
 	# has been committed, discard retransmissions before normalization, validation,
-	# fingerprint construction, or any UI work.
-	if (kind == "roomState" or kind == "gameState") and online_revision_snapshot_is_current(data, kind):
+	# fingerprint construction, or any UI work — except while resuming from a
+	# disconnect, when the server may re-send the exact same revision to confirm
+	# recovery.
+	if (kind == "roomState" or kind == "gameState") and not online_resume_pending and online_revision_snapshot_is_current(data, kind):
 		return
 	if kind == "welcome":
 		sent_hello = true
