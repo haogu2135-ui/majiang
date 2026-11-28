@@ -4491,10 +4491,10 @@ func run() -> void:
 	scene.rule_variant = "yangzhou"
 	scene.start_offline(true)
 	scene.cancel_offline_ai_run()
-	scene.offline_turn = 1
+	scene.current_seat = 1
 	scene.offline_phase = "await_discard"
 	scene.offline_pending_claim.clear()
-	scene.offline_wall = ["9B", "8B", "7B", "6B", "5B", "4B"]
+	scene.wall.assign(["9B", "8B", "7B", "6B", "5B", "4B"])
 	scene.players[0]["melds"] = []
 	scene.players[0]["discards"] = []
 	scene.players[0]["hand"] = ["1W", "2W", "3W", "2T", "3T", "4T", "6B", "7B", "8B", "2B", "3B", "4B", "5W"]
@@ -4507,16 +4507,18 @@ func run() -> void:
 	scene.players[3]["hand"] = ["1W", "4W", "7W", "2T", "5T", "8T", "3B", "6B", "9B", "E", "S", "N", "F"]
 	var rob_opened_f11: bool = scene.begin_rob_gang_resolution(1, "5W")
 	check(rob_opened_f11 and scene.offline_phase == "pending_claim" and bool(scene.offline_pending_claim.get("rob_gang", false)), "F-11: AI added gang opens human rob-gang claim window")
-	scene.offline_ai_running = false
+	scene.offline_ai_active = false
+	scene.offline_ai_run_queued = false
 	scene.human_claim("pass")
 	var seat1_melds_after_pass: Array = scene.players[1].get("melds", [])
 	var upgraded_to_gang := not seat1_melds_after_pass.is_empty() and (seat1_melds_after_pass[0] as Array).size() == 4
-	check(upgraded_to_gang and (scene.offline_ai_running or scene.offline_phase != "await_discard" or scene.offline_turn == 0), "F-11: passing rob-gang completes AI added gang and schedules AI turn instead of deadlocking")
+	check(upgraded_to_gang and (scene.offline_ai_run_queued or scene.offline_ai_active or scene.offline_phase != "await_discard" or scene.current_seat == 0), "F-11: passing rob-gang completes AI added gang and schedules AI turn instead of deadlocking")
 	scene.cancel_offline_ai_run()
 
 	# F-12 regression: Sichuan (no honors) excludes honor tiles from remaining counts, 13-orphans shanten,
 	# and effective_tile_metrics, and caches stay isolated when switching back to Yangzhou.
 	scene.rule_variant = "sichuan"
+	scene.offline_active_rule_variant = "sichuan"
 	scene.clear_shanten_cache()
 	scene.effective_tiles_cache.clear()
 	check(scene.remaining_tile_count("E", []) == 0 and scene.remaining_tile_count_from_counts(scene.tile_index("E"), scene.make_empty_tile_counts(), scene.make_empty_tile_counts()) == 0, "F-12: Sichuan remaining tile counts return 0 for disabled honor tiles")
@@ -4530,22 +4532,27 @@ func run() -> void:
 	var f12_orphans := ["1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R", "Z", "F", "P"]
 	var f12_shanten_sichuan: int = scene.calculate_min_shanten(f12_orphans, 0)
 	scene.rule_variant = "yangzhou"
+	scene.offline_active_rule_variant = "yangzhou"
 	var f12_shanten_yangzhou: int = scene.calculate_min_shanten(f12_orphans, 0)
 	check(f12_shanten_sichuan > 0 and f12_shanten_yangzhou == 0, "F-12: shanten excludes 13-orphans in Sichuan and cache does not poison Yangzhou (%d vs %d)" % [f12_shanten_sichuan, f12_shanten_yangzhou])
 
 	# F-13 regression: rob-gang passes win_context="rob_gang" into min-fan validation so a 2-fan hand
 	# under Guangdong (min_fan=3) cannot ron normal discards but CAN rob-gang and settle at >=3 fan.
+	scene.reset_offline_progress()
 	scene.rule_variant = "guangdong"
+	scene.offline_active_rule_variant = "guangdong"
 	scene.start_offline(true)
 	scene.cancel_offline_ai_run()
-	scene.offline_turn = 1
+	check(scene.rule_min_fan() == 3, "F-13: Guangdong active rule profile requires min_fan=3")
+	scene.dealer_seat = 2
+	scene.current_seat = 1
 	scene.offline_phase = "await_discard"
 	scene.offline_pending_claim.clear()
 	scene.offline_passed_win_tiles.clear()
-	scene.players[0]["melds"] = [["2W", "3W", "4W"]]
+	scene.players[0]["melds"] = []
 	scene.players[0]["discards"] = []
-	scene.players[0]["flowers"] = []
-	scene.players[0]["hand"] = ["3W", "4W", "5W", "4T", "5T", "6T", "6B", "7B", "8B", "2T"]
+	scene.players[0]["flowers"] = 0
+	scene.players[0]["hand"] = ["1W", "2W", "3W", "3W", "4W", "5W", "4T", "5T", "6T", "6B", "7B", "8B", "2T"]
 	scene.players[1]["melds"] = [["2T", "2T", "2T"]]
 	scene.players[1]["discards"] = []
 	scene.players[1]["hand"] = ["2T", "1W", "9W", "1T", "9T", "1B", "9B", "E", "S", "N", "R"]
@@ -4560,6 +4567,7 @@ func run() -> void:
 	check(not f13_normal_ron and f13_rob_ron and f13_rob_opened and f13_can_finish, "F-13: Guangdong 2-fan hand rejects normal ron but allows rob-gang window and settlement (normal=%s rob=%s opened=%s finish=%s)" % [f13_normal_ron, f13_rob_ron, f13_rob_opened, f13_can_finish])
 	scene.cancel_offline_ai_run()
 	scene.rule_variant = prev_rule_r3
+	scene.offline_active_rule_variant = prev_rule_r3
 
 	scene.task_progress = saved_task_progress
 	scene.task_claimed = saved_task_claimed
