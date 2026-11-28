@@ -4092,8 +4092,6 @@ func commit_discard(seat: int, tile: String, preferred_index: int = -1) -> bool:
 		hand_instance_serials.remove_at(index)
 	players[seat]["hand_instance_serials"] = hand_instance_serials
 	if seat == 0:
-		offline_last_draw = {}
-	if seat == 0:
 		clear_pending_danger_discard()
 	invalidate_self_draw_readiness()
 	players[seat]["discards"].append(tile)
@@ -5689,23 +5687,33 @@ func use_offline_inventory_item(item_id: String) -> bool:
 		var serial := int(offline_last_draw.get("serial", -1))
 		var instances: Array = players[0].get("hand_instance_serials", [])
 		var hand_index := instances.find(serial)
+		if hand_index < 0 or hand_index >= players[0]["hand"].size():
+			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+			return false
+		var old_tile := normalize_tile_code(str(players[0]["hand"][hand_index]))
 		var wall_index := -1
+		var has_any_non_flower := false
 		for index in range(wall.size() - 1, -1, -1):
-			if not is_flower_tile(wall[index]):
+			var candidate := normalize_tile_code(str(wall[index]))
+			if is_flower_tile(candidate):
+				continue
+			has_any_non_flower = true
+			if candidate != old_tile:
 				wall_index = index
 				break
-		if hand_index < 0 or wall_index < 0:
-			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+		if wall_index < 0:
+			show_toast("余牌中已无与当前摸牌不同的牌，道具未消耗。" if has_any_non_flower else "当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
 			return false
 		if not use_item(item_id):
 			return false
-		var old_tile := str(players[0]["hand"][hand_index])
 		var new_tile := str(wall[wall_index])
 		wall.remove_at(wall_index)
 		wall.push_front(old_tile)
 		players[0]["hand"][hand_index] = new_tile
 		offline_last_draw["tile"] = new_tile
 		offline_self_draw_ready["tile"] = new_tile
+		sort_player_hand(0)
+		hand_keyboard_selection = -1
 		record_round_event("item_swap", {"seat": 0, "old_tile": old_tile, "new_tile": new_tile})
 		mark_offline_progress_dirty()
 		request_game_render()

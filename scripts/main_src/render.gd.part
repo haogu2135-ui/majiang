@@ -13255,7 +13255,7 @@ func draw_hand(parent: Control) -> void:
 	# Consume an announced draw on the first hand render even when reduced motion
 	# suppresses the visual tween; otherwise the same replacement draw is retried
 	# on every subsequent render.
-	var should_animate_drawn_tile = mode == "offline" and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
+	var should_animate_drawn_tile = mode == "offline" and stable_drawn_index >= 0 and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
 

@@ -106,11 +106,13 @@ func digest_is_missing_or_invalid(event: Dictionary) -> bool:
 	var digest := str(event.get("digest", ""))
 	return digest == "" or digest != replay_event_digest(event)
 
-func round_replay_digest(events: Array = []) -> String:
-	if events.is_empty():
+func round_replay_digest(events: Variant = null) -> String:
+	if events == null:
 		ensure_round_replay_view_cache()
 		return str(replay_view_cache.get("digest", ""))
-	var source := events if not events.is_empty() else round_event_history
+	if typeof(events) != TYPE_ARRAY:
+		return ""
+	var source: Array = events as Array
 	if source.is_empty():
 		return ""
 	var last = source.back()
@@ -803,13 +805,17 @@ func import_round_replay_share_code(code: String) -> Dictionary:
 		return {}
 	var payload: Dictionary = parsed
 	var events = payload.get("events", [])
-	if typeof(events) != TYPE_ARRAY or not validate_round_replay(events as Array):
+	if typeof(events) != TYPE_ARRAY:
+		return {}
+	var event_list: Array = events as Array
+	if event_list.is_empty() or not validate_round_replay(event_list):
 		return {}
 	if int(payload.get("schema", 0)) != REPLAY_SCHEMA_VERSION:
 		return {}
-	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
+	var payload_digest := str(payload.get("digest", "")).strip_edges()
+	if payload_digest == "" or payload_digest != round_replay_digest(event_list):
 		return {}
-	telemetry_record_event("replay_imported", {"verified": true, "event_count": (events as Array).size()})
+	telemetry_record_event("replay_imported", {"verified": true, "event_count": event_list.size()})
 	return payload.duplicate(true)
 
 func match_progress_report() -> Dictionary:

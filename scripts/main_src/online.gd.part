@@ -1079,8 +1079,19 @@ func handle_online_message(line: String) -> void:
 		if snapshot_error != "":
 			set_online_feedback("服务器状态无效：%s" % snapshot_error, false)
 			return
+		var next_game_room := bounded_online_input(str(next_game.get("roomCode", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		if next_game_room != "":
+			selected_room = next_game_room
+		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var resumed_from_game_state := false
+		if online_resume_pending and (resumed_room == "" or next_game_room == "" or next_game_room == resumed_room):
+			online_resume_pending = false
+			online_resume_join_sent = false
+			online_reconnect_attempts = 0
+			online_next_reconnect_msec = 0
+			resumed_from_game_state = true
 		var game_fingerprint := online_snapshot_fingerprint("gameState", next_game)
-		if game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
+		if not resumed_from_game_state and game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
 			return
 		if str(next_game.get("roomCode", "")) != online_chat_room_context():
 			online_pending_chat_requests.clear()
