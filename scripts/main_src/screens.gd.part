@@ -2166,11 +2166,11 @@ func _show_online_lobby_impl() -> void:
 		if line_count <= 0 or content_h <= 1.0:
 			return
 		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
+		var min_one_line_h: float = ceilf(maxf(18.0, maxf(float(logs_label.get_line_height(0)), float(logs_label.get_line_height(line_count - 1))))) + 2.0
 		if compact_large_roster:
-			var one_line_h: float = ceilf(maxf(18.0, float(logs_label.get_line_height(line_count - 1))))
 			var feedback_cap: float = log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0 - log_scroll_base_top
-			var list_cap: float = log_list_panel.size.y - 4.0 - log_scroll_base_top
-			avail_h = maxf(one_line_h, minf(list_cap, feedback_cap))
+			var list_cap: float = log_list_panel.size.y - 2.0 - log_scroll_base_top
+			avail_h = maxf(min_one_line_h, minf(list_cap, feedback_cap))
 		if avail_h < 18.0:
 			return
 		var best_start: int = line_count - 1
@@ -2183,8 +2183,8 @@ func _show_online_lobby_impl() -> void:
 			else:
 				break
 		var tail_top_offset: float = float(logs_label.get_line_offset(best_start))
-		var exact_tail_h: float = ceilf(maxf(1.0, content_h - tail_top_offset))
-		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else avail_h
+		var exact_tail_h: float = ceilf(maxf(min_one_line_h, content_h - tail_top_offset + 1.0))
+		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else maxf(min_one_line_h, avail_h)
 		var pad_y: float = 0.0 if compact_large_roster else floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
 		var target_top: float = log_scroll_base_top + pad_y
 		var target_bottom: float = target_top + snapped_h

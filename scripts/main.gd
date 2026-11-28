@@ -31863,23 +31863,23 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	var estimated_chip_w := maxf(120.0, chip_viewport.x * 0.89 * (rect.size.x - rect.position.x) * 0.84)
 	var caption := make_label(chip, caption_text, 13, Color.WHITE, false)
 	caption.name = "StatsSummaryCaption_%s" % chip_id
-	apply_rect(caption, rect_full(0.065, 0.070, 0.440, 0.320))
+	apply_rect(caption, rect_full(0.065, 0.050, 0.440, 0.285))
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(caption)
 	fit_label_font_size(caption, maxf(56.0, estimated_chip_w * 0.42), accessibility_font_size(13), 10)
 	if sub_metric_text != "":
 		var sub_label := make_label(chip, sub_metric_text, 12, Color.WHITE, false)
 		sub_label.name = "StatsSummarySubMetric_%s" % chip_id
-		apply_rect(sub_label, rect_full(0.450, 0.070, 0.945, 0.320))
+		apply_rect(sub_label, rect_full(0.450, 0.050, 0.945, 0.285))
 		sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_guofeng_label(sub_label)
 		configure_clipped_label(sub_label)
 		fit_label_font_size(sub_label, maxf(72.0, estimated_chip_w * 0.56), accessibility_font_size(12), 10)
-	var target_value_font := 26 if chip_viewport.x <= 960.0 or large_text_enabled else 30
+	var target_value_font := 21 if (chip_viewport.x <= 960.0 and large_text_enabled) else (26 if chip_viewport.x <= 960.0 or large_text_enabled else 30)
 	var value := make_label(chip, value_text, target_value_font, Color.WHITE, true)
 	value.name = "StatsSummaryValue_%s" % chip_id
 	value.add_theme_font_override("font", ui_heading_font())
-	apply_rect(value, rect_full(0.065, 0.330, 0.935, 0.720))
+	apply_rect(value, rect_full(0.065, 0.285, 0.935, 0.720))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(value)
 	if value_text.begins_with("-"):
@@ -31895,7 +31895,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	# Keep semantic unit metadata for readers; the visible value carries it once.
 	unit.hide()
 	if meter_ratio >= 0.0:
-		var rail := add_optional_gpt_illustration_texture(chip, "battle_ink_plaque_20261112", rect_full(0.065, 0.840, 0.935, 0.920), 1.0, false)
+		var rail := add_optional_gpt_illustration_texture(chip, "battle_ink_plaque_20261112", rect_full(0.065, 0.860, 0.935, 0.940), 1.0, false)
 		if rail != null:
 			rail.name = "StatsSummaryMeterRail_%s" % chip_id
 			rail.clip_contents = true
@@ -39809,11 +39809,11 @@ func _show_online_lobby_impl() -> void:
 		if line_count <= 0 or content_h <= 1.0:
 			return
 		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
+		var min_one_line_h: float = ceilf(maxf(18.0, maxf(float(logs_label.get_line_height(0)), float(logs_label.get_line_height(line_count - 1))))) + 2.0
 		if compact_large_roster:
-			var one_line_h: float = ceilf(maxf(18.0, float(logs_label.get_line_height(line_count - 1))))
 			var feedback_cap: float = log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0 - log_scroll_base_top
-			var list_cap: float = log_list_panel.size.y - 4.0 - log_scroll_base_top
-			avail_h = maxf(one_line_h, minf(list_cap, feedback_cap))
+			var list_cap: float = log_list_panel.size.y - 2.0 - log_scroll_base_top
+			avail_h = maxf(min_one_line_h, minf(list_cap, feedback_cap))
 		if avail_h < 18.0:
 			return
 		var best_start: int = line_count - 1
@@ -39826,8 +39826,8 @@ func _show_online_lobby_impl() -> void:
 			else:
 				break
 		var tail_top_offset: float = float(logs_label.get_line_offset(best_start))
-		var exact_tail_h: float = ceilf(maxf(1.0, content_h - tail_top_offset))
-		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else avail_h
+		var exact_tail_h: float = ceilf(maxf(min_one_line_h, content_h - tail_top_offset + 1.0))
+		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else maxf(min_one_line_h, avail_h)
 		var pad_y: float = 0.0 if compact_large_roster else floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
 		var target_top: float = log_scroll_base_top + pad_y
 		var target_bottom: float = target_top + snapped_h
