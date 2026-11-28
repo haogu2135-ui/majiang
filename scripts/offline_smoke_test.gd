@@ -4568,6 +4568,7 @@ func run() -> void:
 	scene.cancel_offline_ai_run()
 	scene.rule_variant = prev_rule_r3
 	scene.offline_active_rule_variant = prev_rule_r3
+	scene.reset_offline_progress()
 
 	scene.task_progress = saved_task_progress
 	scene.task_claimed = saved_task_claimed
