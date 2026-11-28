@@ -1662,9 +1662,12 @@ func run() -> void:
 	root.add_child(summary_parent)
 	scene.draw_round_summary(summary_parent)
 	var summary_panel := summary_parent.find_child("RoundSummaryPanel", true, false) as TextureRect
+	var summary_shadow := summary_parent.find_child("RoundSummaryPanelDropShadow", true, false) as TextureRect
+	var summary_gold_frame := summary_parent.find_child("RoundSummaryGoldFrame", true, false) as NinePatchRect
 	var summary_body := summary_parent.find_child("RoundSummaryBody", true, false) as Label
 	var summary_detail := summary_parent.find_child("WinDetailPanel", true, false) as Control
 	check(summary_panel != null and summary_panel.texture is AtlasTexture and (summary_panel.texture as AtlasTexture).atlas == scene.optional_gpt_illustration_texture("settings_readable_gpt") and summary_panel.self_modulate == Color.WHITE, "ended settlement owns one opaque authored account paper")
+	check(summary_shadow != null and summary_shadow.texture == scene.optional_gpt_illustration_texture("table_tile_back_celadon_gpt") and summary_gold_frame != null and not summary_gold_frame.draw_center, "V-04/R4-B01: ended settlement renders authored drop shadow and slender hollow antique-gold frame")
 	check(summary_panel != null and summary_body != null and summary_detail != null and summary_panel.is_ancestor_of(summary_body) and summary_panel.is_ancestor_of(summary_detail) and summary_body.text.contains("庄家连庄") and not summary_body.text.contains("青竹道人自摸5万") and str(summary_body.get_meta("ui_full_text", "")).contains(scene.round_summary), "settlement body avoids repeating the structured win header while preserving consequences and full accessible record")
 	dispose_node(summary_parent)
 	scene.offline_phase = summary_previous_phase
