@@ -4310,10 +4310,11 @@ func _show_shop_screen_impl() -> void:
 				if triggered:
 					show_toast("还差 %d 玉符，可在下方用铜钱兑换" % shortage_gems, 2200, "shop_currency_hint")
 			)
-		# Keep the CTA's center slightly below the row midpoint. This leaves the
+		# Keep the CTA's center well below the row midpoint. This leaves the
 		# real hit area reachable when the terminal row grows beyond one viewport
+		# (even with snapped single-column complete rows + large-text bottom spacer)
 		# and the native scroll range clamps its bottom edge to the viewport.
-		apply_rect(buy_hit_host, rect_full(buy_button_left, 0.715 if shop_wide_layout else 0.22, 0.960 if shop_wide_layout else 0.955, 0.950 if shop_wide_layout else 0.92))
+		apply_rect(buy_hit_host, rect_full(buy_button_left, 0.715 if shop_wide_layout else 0.28, 0.960 if shop_wide_layout else 0.955, 0.950 if shop_wide_layout else 0.94))
 		row.add_child(buy_hit_host)
 		apply_rect(buy_btn, rect_full(0.0, 0.0, 1.0, 1.0))
 		buy_hit_host.add_child(buy_btn)
