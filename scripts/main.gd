@@ -31875,7 +31875,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 		style_guofeng_label(sub_label)
 		configure_clipped_label(sub_label)
 		fit_label_font_size(sub_label, maxf(72.0, estimated_chip_w * 0.56), accessibility_font_size(12), 10)
-	var target_value_font := 21 if (chip_viewport.x <= 960.0 and large_text_enabled) else (26 if chip_viewport.x <= 960.0 or large_text_enabled else 30)
+	var target_value_font := 21 if chip_viewport.x <= 960.0 else (26 if large_text_enabled else 30)
 	var value := make_label(chip, value_text, target_value_font, Color.WHITE, true)
 	value.name = "StatsSummaryValue_%s" % chip_id
 	value.add_theme_font_override("font", ui_heading_font())
