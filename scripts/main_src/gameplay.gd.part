@@ -2505,6 +2505,10 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			# consumes this deferred added-gang action.
 			offline_pending_claim["rob_gang_passed"] = true
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
+			if mode == "offline" and offline_phase == "await_discard":
+				schedule_ai_until_human()
+			if tutorial_step == TUTORIAL_STEP_CLAIM:
+				set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
 		else:
 			offline_pending_claim.clear()
 			offline_phase = "resolving"
@@ -4624,13 +4628,13 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 				return false
 		else:
 			return false
-		return can_added_gang(payer, win_tile) and can_ron_for_seat(winner, win_tile)
+		return can_added_gang(payer, win_tile) and can_ron_for_seat(winner, win_tile, "rob_gang")
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false
 	var discards: Array = players[payer]["discards"]
 	if last_discard != win_tile or last_discard_seat != payer or discards.is_empty() or str(discards.back()) != win_tile:
 		return false
-	return can_ron_for_seat(winner, win_tile)
+	return can_ron_for_seat(winner, win_tile, win_context)
 
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	win_tile = normalize_tile_code(win_tile)
@@ -5055,29 +5059,29 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 	return false
 
 
-func can_ron_for_seat(seat: int, tile: String) -> bool:
+func can_ron_for_seat(seat: int, tile: String, win_context: String = "") -> bool:
 	tile = normalize_tile_code(tile)
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile, win_context)
 
 
-func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile))
+func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String, win_context: String = "") -> bool:
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile), win_context)
 
 
-func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String) -> bool:
+func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String, win_context: String = "") -> bool:
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
+	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile, false, win_context):
 		return false
 	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
-func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false) -> bool:
-	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(extra_tile), self_draw)
+func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false, win_context: String = "") -> bool:
+	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(extra_tile), self_draw, win_context)
 
 
-func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, extra_tile: String, self_draw: bool = false) -> bool:
+func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, extra_tile: String, self_draw: bool = false, win_context: String = "") -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
 		return false
 	var counts = hand_counts
@@ -5096,7 +5100,7 @@ func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, ext
 		return false
 	if rule_min_fan() <= 1:
 		return true
-	return rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, "", validated_counts)
+	return rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, win_context, validated_counts)
 
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":

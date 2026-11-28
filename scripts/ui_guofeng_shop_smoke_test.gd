@@ -117,6 +117,24 @@ func check_shop_purchase_inputs(scene: Node, output_dir: String) -> void:
 	var range_label := scene.find_child("ShopItemsScrollPosition", true, false) as Label
 	var item_scroll := scene.find_child("ShopItemsScroll", true, false) as ScrollContainer
 	check(range_label != null and item_scroll != null and range_label.get_global_rect().position.y >= item_scroll.get_global_rect().end.y + 4.0 - 0.1, "shop range text has a separate measured lane four pixels below the clipped catalogue")
+	if range_label != null and item_scroll != null:
+		var complete_shop_rows: Array[int] = []
+		var partial_shop_rows := 0
+		var s_rect := item_scroll.get_global_rect()
+		var r_idx := 0
+		for item_id in scene.shop_item_ids_shared():
+			r_idx += 1
+			var row_node := scene.find_child("ShopItemRow_%s" % item_id, true, false) as Control
+			if row_node == null:
+				continue
+			var r_rect := row_node.get_global_rect()
+			var inter_h := r_rect.intersection(s_rect).size.y
+			if inter_h >= r_rect.size.y - 2.0:
+				complete_shop_rows.append(r_idx)
+			elif inter_h > 2.0:
+				partial_shop_rows += 1
+		check(partial_shop_rows == 0, "U-12: shop catalogue shows complete rows without bisecting the bottom item (partial=%d)" % partial_shop_rows)
+		check(not complete_shop_rows.is_empty() and range_label.text == "商品 %d-%d/%d" % [complete_shop_rows.front(), complete_shop_rows.back(), scene.shop_item_ids_shared().size()], "U-12: shop range text matches actual complete visible rows (%s vs %s)" % [range_label.text, str(complete_shop_rows)])
 	await save_reading_capture(scene, output_dir, "shop_available", shop_capture_state(scene))
 	var purchase_probes: Array[Dictionary] = []
 	for modality in ["mouse", "touch", "key"]:

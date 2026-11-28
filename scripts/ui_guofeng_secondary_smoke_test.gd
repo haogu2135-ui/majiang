@@ -106,6 +106,12 @@ func check_secondary_stats(scene: Node, output: String) -> void:
 	for spec in [["winrate", "33.3%"], ["games", "3局"], ["best", "-8800分"]]:
 		var value := scene.find_child("StatsSummaryValue_" + str(spec[0]), true, false) as Label
 		check(value != null and value.text == str(spec[1]) and label_text_width(value, value.text) <= value.size.x + 1.0, "statistics presents complete %s value and unit together" % spec[0])
+	var best_sub := scene.find_child("StatsSummarySubMetric_best", true, false) as Label
+	var best_cap := scene.find_child("StatsSummaryCaption_best", true, false) as Label
+	check(best_sub != null and best_cap != null and best_sub.text.contains("1200") and label_text_width(best_sub, best_sub.text) <= best_sub.size.x + 1.0 and not best_cap.get_global_rect().intersects(best_sub.get_global_rect()), "U-13: StatsSummarySubMetric_best fits complete best score without ellipsis or caption overlap")
+	var winrate_val := scene.find_child("StatsSummaryValue_winrate", true, false) as Label
+	var winrate_rail := scene.find_child("StatsSummaryMeterRail_winrate", true, false) as Control
+	check(winrate_val != null and winrate_rail != null and winrate_val.get_global_rect().end.y + 4.0 <= winrate_rail.get_global_rect().position.y + 0.5, "U-13: StatsSummaryValue_winrate clears StatsSummaryMeterRail_winrate by at least 4px")
 	await save_reading_capture(scene, output, "stats_overview", {"score": score.text, "summary": (scene.find_child("StatsSummaryValue_best", true, false) as Label).text})
 	(scene.find_child("StatsRuleFilterButton", true, false) as Button).pressed.emit()
 	await settle(0.20)
@@ -222,6 +228,12 @@ func check_secondary_lobby(scene: Node, output: String) -> void:
 	var log := scene.find_child("OnlineLobbyLogListText", true, false) as RichTextLabel
 	var log_scroll := scene.find_child("OnlineLobbyLogScroll", true, false) as ScrollContainer
 	check(log_scroll.size.y >= log.get_line_height(0), "the lobby viewport can reveal a complete native log line")
+	var lobby_panel := scene.find_child("OnlineLobbyLowFrequencyPagePlate", true, false) as Control
+	var lobby_start_btn := scene.find_child("OnlineLobbyPrimaryStartButton", true, false) as Control
+	var lobby_return_btn := scene.find_child("OnlineLobbySecondaryReturnButton", true, false) as Control
+	var lobby_status_lbl := scene.find_child("OnlineLobbyStatusLabel", true, false) as Control
+	check(lobby_panel != null and lobby_start_btn != null and lobby_return_btn != null and lobby_panel.get_global_rect().grow(1.0).encloses(lobby_start_btn.get_global_rect()) and lobby_panel.get_global_rect().grow(1.0).encloses(lobby_return_btn.get_global_rect()), "U-10: lobby bottom buttons stay completely inside the lobby panel")
+	check(lobby_status_lbl != null and lobby_start_btn != null and not lobby_status_lbl.get_global_rect().intersects(lobby_start_btn.get_global_rect()) and not lobby_status_lbl.get_global_rect().intersects(lobby_return_btn.get_global_rect()), "U-10: OnlineLobbyStatusLabel does not overlap start or return buttons")
 	var visible_entries: Array = connected_state.visible_log_entries
 	check(not visible_entries.is_empty() and connected_state.log_range.contains("%d-%d/4" % [visible_entries.front(), visible_entries.back()]), "lobby range agrees with the actual visible native log lines")
 	check(connected_state.log_font_size >= scene.accessibility_font_size(13) and connected_state.range_font_size >= scene.accessibility_font_size(12) and connected_state.roster_name_font_size >= scene.accessibility_font_size(16) and connected_state.roster_state_font_size >= scene.accessibility_font_size(16), "live lobby refresh preserves accessible roster, log and range font sizes")

@@ -3558,6 +3558,8 @@ func sync_guofeng_button_focus_visual(button: Button, focused: bool) -> bool:
 		return false
 	var focus_plate: CanvasItem = button.get_node_or_null("ButtonFocusPlate") as CanvasItem
 	var face: TextureRect = button.get_node_or_null("GptButtonFacePlate") as TextureRect
+	if focus_plate != null and face != null and focus_plate.get_index() > face.get_index():
+		button.move_child(focus_plate, face.get_index())
 	var is_dark_face: bool = button.has_meta("guofeng_chamfer_focus_ink") and bool(button.get_meta("guofeng_chamfer_focus_ink"))
 	var pad: float = 0.0
 	if focus_plate != null:
@@ -5890,6 +5892,7 @@ func reset_daily_tasks() -> void:
 
 
 func get_task_status(task_id: String) -> Dictionary:
+	reset_daily_tasks()
 	for task in DAILY_TASKS:
 		if task.id == task_id:
 			var progress = int(task_progress.get(task_id, 0))
@@ -5907,6 +5910,7 @@ func get_task_status(task_id: String) -> Dictionary:
 	return {}
 
 func daily_task_summary() -> Dictionary:
+	reset_daily_tasks()
 	var completed := 0
 	var claimed := 0
 	var claimable := 0
@@ -6095,7 +6099,7 @@ func record_game_result(won: bool, score: int, hands_played: int, result_key: St
 			call("update_task_progress", "win_3", 1)
 		if score > 0:
 			call("update_task_progress", "score_plus", 1)
-		add_season_points(season_points_for_result(won, score), won)
+		add_season_points(season_points_for_result(won, score, bool(metrics.get("wall_draw", false))), won)
 		grant_round_coins(won, score)
 	if not offline_sim_quiet and not metrics.is_empty():
 		var normalized_metrics := metrics.duplicate(true)

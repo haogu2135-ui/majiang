@@ -1808,7 +1808,7 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 		var seat = (gang_seat + offset) % 4
 		if seat == gang_seat or not is_ai_controlled_seat(seat):
 			continue
-		if can_ron_for_seat(seat, tile):
+		if can_ron_for_seat(seat, tile, "rob_gang"):
 			# 抢杠固定接受：额外番型 + 对手公开加杠信息。
 			return {"seat": seat, "claim": "hu", "score": 1100.0 - offset, "claim_report": {"accept": true, "reason": "抢杠", "fan": 0, "points": 0}}
 	return {}
@@ -5646,7 +5646,8 @@ func calculate_min_shanten_from_counts_with_memo(counts: Array, open_melds: int,
 		return standard
 	if open_melds == 0:
 		standard = min(standard, seven_pairs_shanten(counts))
-		standard = min(standard, thirteen_orphans_shanten(counts))
+		if rule_includes_honors():
+			standard = min(standard, thirteen_orphans_shanten(counts))
 	store_shanten_cache(cache_key, standard)
 	return standard
 
@@ -5665,7 +5666,8 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	# 将可见张快照纳入缓存键，避免牌河/副露变化后复用旧的 ukeire。
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
 	var visible_key := visible_counts_key_override if visible_counts_key_override != "" else counts_compact_key(visible_counts)
-	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, hand_counts_key, visible_key]
+	var include_honors := rule_includes_honors()
+	var cache_key = "%d:%d:%d:%s:%s" % [current_shanten, open_melds, 1 if include_honors else 0, hand_counts_key, visible_key]
 	if effective_tiles_cache.has(cache_key):
 		effective_tiles_cache_hits += 1
 		touch_effective_tiles_cache_key(cache_key)
@@ -5710,11 +5712,12 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	if open_melds == 0:
 		if unique_in_hand < 7 and seven_pairs_shanten(hand_counts) <= current_shanten + 1:
 			probe_all = true
-		elif thirteen_orphans_shanten(hand_counts) <= current_shanten + 1:
+		elif include_honors and thirteen_orphans_shanten(hand_counts) <= current_shanten + 1:
 			for orphan_index in thirteen_orphans_indices:
 				if orphan_index >= 0 and orphan_index < probe_mask.size():
 					probe_mask[orphan_index] = true
-	for i in range(TILE_CODES.size()):
+	var probe_limit := TILE_CODES.size() if include_honors else 27
+	for i in range(probe_limit):
 		if not probe_all and not probe_mask[i]:
 			continue
 		var tile = TILE_CODES[i]
@@ -10027,6 +10030,10 @@ func human_claim(claim: String, chi_choice: Dictionary = {}) -> void:
 			# consumes this deferred added-gang action.
 			offline_pending_claim["rob_gang_passed"] = true
 			resolve_after_rob_gang_pass(from_seat, tile, prepared_ai_claim)
+			if mode == "offline" and offline_phase == "await_discard":
+				schedule_ai_until_human()
+			if tutorial_step == TUTORIAL_STEP_CLAIM:
+				set_tutorial_checkpoint(TUTORIAL_STEP_WIN, "已完成响应选择")
 		else:
 			offline_pending_claim.clear()
 			offline_phase = "resolving"
@@ -12146,13 +12153,13 @@ func can_finish_offline_round(winner: int, win_tile: String, self_draw: bool, fr
 				return false
 		else:
 			return false
-		return can_added_gang(payer, win_tile) and can_ron_for_seat(winner, win_tile)
+		return can_added_gang(payer, win_tile) and can_ron_for_seat(winner, win_tile, "rob_gang")
 	if offline_phase != "resolving" and offline_phase != "pending_claim":
 		return false
 	var discards: Array = players[payer]["discards"]
 	if last_discard != win_tile or last_discard_seat != payer or discards.is_empty() or str(discards.back()) != win_tile:
 		return false
-	return can_ron_for_seat(winner, win_tile)
+	return can_ron_for_seat(winner, win_tile, win_context)
 
 func finish_offline_round(winner: int, win_tile: String, self_draw: bool, from_seat: int, win_context: String = "") -> void:
 	win_tile = normalize_tile_code(win_tile)
@@ -12577,29 +12584,29 @@ func is_discard_furiten_from_counts(seat: int, hand_counts: Array, hand_tile_cou
 	return false
 
 
-func can_ron_for_seat(seat: int, tile: String) -> bool:
+func can_ron_for_seat(seat: int, tile: String, win_context: String = "") -> bool:
 	tile = normalize_tile_code(tile)
 	var hand_counts = tile_counts(players[seat].get("hand", []))
-	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile)
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, tile, win_context)
 
 
-func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String) -> bool:
-	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile))
+func can_ron_for_seat_from_counts(seat: int, hand_counts: Array, tile: String, win_context: String = "") -> bool:
+	return _can_ron_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(tile), win_context)
 
 
-func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String) -> bool:
+func _can_ron_for_seat_from_counts_normalized(seat: int, hand_counts: Array, tile: String, win_context: String = "") -> bool:
 	if tile == "" or is_passed_win_tile(seat, tile):
 		return false
-	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile):
+	if not _can_win_for_seat_from_counts_normalized(seat, hand_counts, tile, false, win_context):
 		return false
 	return not is_discard_furiten_from_counts(seat, hand_counts)
 
 
-func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false) -> bool:
-	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(extra_tile), self_draw)
+func can_win_for_seat_from_counts(seat: int, hand_counts: Array, extra_tile: String = "", self_draw: bool = false, win_context: String = "") -> bool:
+	return _can_win_for_seat_from_counts_normalized(seat, hand_counts, normalize_tile_code(extra_tile), self_draw, win_context)
 
 
-func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, extra_tile: String, self_draw: bool = false) -> bool:
+func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, extra_tile: String, self_draw: bool = false, win_context: String = "") -> bool:
 	if seat < 0 or seat >= players.size() or hand_counts.is_empty():
 		return false
 	var counts = hand_counts
@@ -12618,7 +12625,7 @@ func _can_win_for_seat_from_counts_normalized(seat: int, hand_counts: Array, ext
 		return false
 	if rule_min_fan() <= 1:
 		return true
-	return rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, "", validated_counts)
+	return rule_minimum_met_for_counts(seat, counts, tile_count, self_draw, win_context, validated_counts)
 
 func discard_report_for_tile(tile: String, hand_index: int = -1) -> Dictionary:
 	if not player_ai_assist_enabled() or mode != "offline" or not can_self_discard() or tile == "":
@@ -22460,7 +22467,7 @@ func register_ui_round_1731_1790(root: Control) -> void:
 				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
 		elif target is ScrollContainer:
 			var scroll := target as ScrollContainer
-			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll"].has(str(scroll.name))
+			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll", "UpdateReleaseNotesScroll"].has(str(scroll.name))
 			if authored_hidden_scroll:
 				# These pages own an authored gutter and intentionally hide the native bar.
 				scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -22627,7 +22634,7 @@ func register_ui_round_1791_1850(root: Control) -> void:
 				set_ui_full_text(label, label.text.strip_edges(), label.text.strip_edges())
 		elif target is ScrollContainer:
 			var scroll := target as ScrollContainer
-			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll"].has(str(scroll.name))
+			var authored_hidden_scroll := ["ShopItemsScroll", "AchievementsScroll", "RulesContentScroll", "UpdateReleaseNotesScroll"].has(str(scroll.name))
 			if authored_hidden_scroll:
 				scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 				scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
@@ -31853,30 +31860,32 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	chip.set_meta("summary_value", display_value)
 	chip.set_meta("summary_unit", unit_text)
 	chip.set_meta("summary_structure", "caption/value/unit")
+	var estimated_chip_w := maxf(120.0, chip_viewport.x * 0.89 * (rect.size.x - rect.position.x) * 0.84)
 	var caption := make_label(chip, caption_text, 13, Color.WHITE, false)
 	caption.name = "StatsSummaryCaption_%s" % chip_id
-	apply_rect(caption, rect_full(0.07, 0.08, 0.56, 0.34))
+	apply_rect(caption, rect_full(0.065, 0.070, 0.440, 0.320))
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(caption)
+	fit_label_font_size(caption, maxf(56.0, estimated_chip_w * 0.42), accessibility_font_size(13), 10)
 	if sub_metric_text != "":
 		var sub_label := make_label(chip, sub_metric_text, 12, Color.WHITE, false)
 		sub_label.name = "StatsSummarySubMetric_%s" % chip_id
-		apply_rect(sub_label, rect_full(0.54, 0.08, 0.93, 0.34))
+		apply_rect(sub_label, rect_full(0.450, 0.070, 0.945, 0.320))
 		sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		style_guofeng_label(sub_label)
 		configure_clipped_label(sub_label)
+		fit_label_font_size(sub_label, maxf(72.0, estimated_chip_w * 0.56), accessibility_font_size(12), 10)
 	var target_value_font := 26 if chip_viewport.x <= 960.0 or large_text_enabled else 30
 	var value := make_label(chip, value_text, target_value_font, Color.WHITE, true)
 	value.name = "StatsSummaryValue_%s" % chip_id
 	value.add_theme_font_override("font", ui_heading_font())
-	apply_rect(value, rect_full(0.07, 0.34, 0.93, 0.78))
+	apply_rect(value, rect_full(0.065, 0.330, 0.935, 0.720))
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	style_guofeng_label(value)
 	if value_text.begins_with("-"):
 		value.add_theme_color_override("font_color", Color(0.54, 0.13, 0.10))
 	elif chip_id == "best" and value_text.begins_with("+") and value_text != "+0分":
 		value.add_theme_color_override("font_color", Color(0.09, 0.27, 0.20))
-	var estimated_chip_w := maxf(120.0, chip_viewport.x * 0.89 * (rect.size.x - rect.position.x) * 0.84)
 	fit_label_font_size(value, estimated_chip_w, accessibility_font_size(target_value_font), accessibility_font_size(16))
 	var unit := make_label(chip, unit_text, 12, Color.WHITE, false)
 	unit.name = "StatsSummaryUnit_%s" % chip_id
@@ -31886,7 +31895,7 @@ func make_stats_summary_chip(parent: Control, chip_id: String, caption_text: Str
 	# Keep semantic unit metadata for readers; the visible value carries it once.
 	unit.hide()
 	if meter_ratio >= 0.0:
-		var rail := add_optional_gpt_illustration_texture(chip, "battle_ink_plaque_20261112", rect_full(0.07, 0.82, 0.93, 0.92), 1.0, false)
+		var rail := add_optional_gpt_illustration_texture(chip, "battle_ink_plaque_20261112", rect_full(0.065, 0.840, 0.935, 0.920), 1.0, false)
 		if rail != null:
 			rail.name = "StatsSummaryMeterRail_%s" % chip_id
 			rail.clip_contents = true
@@ -33273,7 +33282,7 @@ func draw_update_release_notes_art(parent: Control) -> Control:
 	notes_scroll.name = "UpdateReleaseNotesScroll"
 	configure_scroll_container(notes_scroll, "上下滚动查看完整更新说明")
 	notes_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	notes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	notes_scroll.clip_contents = true
 	notes_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 	apply_rect(notes_scroll, rect_full(0.048, 0.130, 0.870, 0.650))
@@ -38834,8 +38843,8 @@ func style_flat_clear_proxy(proxy: Button) -> void:
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
 	# On short safe areas the caption and focus indicator sit beside the field.
 	# The clear proxy remains an absolute sibling of the native editor.
-	var use_inline_caption := safe_content_pixel_size().y <= 560.0 and not large_text_enabled
-	var caption_width := 76.0 if use_inline_caption else 96.0
+	var use_inline_caption := safe_content_pixel_size().y <= 560.0
+	var caption_width := (86.0 if large_text_enabled else 76.0) if use_inline_caption else 96.0
 	var row = Control.new()
 	configure_passive_container(row)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -38934,9 +38943,10 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var caption_height := ceilf(maxf(caption.get_combined_minimum_size().y, editing.get_combined_minimum_size().y))
 	var edit_height := ceilf(edit.get_combined_minimum_size().y)
 	if use_inline_caption:
-		row.custom_minimum_size.y = maxf(edit_height, caption_height * 2.0)
+		row.custom_minimum_size.y = maxf(edit_height, caption_height + 16.0)
 		apply_rect(caption, rect_full(0.0, 0.0, 0.0, 1.0))
 		caption.offset_right = caption_width
+		fit_label_font_size(caption, maxf(48.0, caption_width - 4.0), accessibility_font_size(commercial_ui_font_size(13, 3)), 11)
 		apply_rect(editing, rect_full(0.0, 0.62, 0.0, 1.0))
 		editing.offset_right = caption_width
 		editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -39232,9 +39242,14 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	if not is_current_ui_control(form_panel) or not is_current_ui_control(form) or not is_current_ui_control(feedback) or not is_current_ui_control(first_row) or not is_current_ui_control(second_row):
 		return
 	var lobby_lane_vp := effective_viewport_size()
+	var compact_large_lane := lobby_lane_vp.y <= 560.0 and large_text_enabled
 	var lane_gap := 12.0 if (lobby_lane_vp.x >= 1200.0 and not large_text_enabled) else 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
 	var form_top := form.position.y
+	if compact_large_lane:
+		var help_btn := form_panel.get_node_or_null("OnlineLobbyConnectionHelpButton") as Control
+		var min_form_top := ceilf(help_btn.position.y + help_btn.size.y + 4.0) if help_btn != null else 48.0
+		form_top = minf(form_top, min_form_top)
 	var form_height := maxf(form.get_combined_minimum_size().y, 120.0)
 	form.anchor_top = 0.0
 	form.anchor_bottom = 0.0
@@ -39256,6 +39271,18 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	second_row.offset_top = second_top
 	second_row.offset_bottom = second_top + second_height
 	form_panel.custom_minimum_size.y = maxf(form_panel.custom_minimum_size.y, ceilf(second_top + second_height + 4.0))
+	var panel_host := form_panel.get_parent() as Control
+	if panel_host != null:
+		var status_lbl := panel_host.get_node_or_null("OnlineLobbyStatusLabel") as Label
+		if status_lbl != null:
+			var required_status_top := form_panel.position.y + second_top + second_height + 4.0
+			var status_h := maxf(status_lbl.get_minimum_size().y, 20.0)
+			if status_lbl.position.y < required_status_top:
+				status_lbl.anchor_top = 0.0
+				status_lbl.anchor_bottom = 0.0
+				var clamped_top := minf(required_status_top, maxf(0.0, panel_host.size.y - status_h - 4.0))
+				status_lbl.offset_top = clamped_top
+				status_lbl.offset_bottom = clamped_top + status_h
 	if is_current_ui_control(action_plate):
 		action_plate.anchor_top = 0.0
 		action_plate.anchor_bottom = 0.0
@@ -39775,12 +39802,19 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(logs_label, "F-909")
 	log_scroll.add_child(logs_label)
 	var snap_online_log_viewport := func() -> void:
-		if compact_large_roster or not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
+		if not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
 			return
-		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
 		var line_count: int = logs_label.get_line_count()
 		var content_h: float = float(logs_label.get_content_height())
-		if avail_h < 18.0 or line_count <= 0 or content_h <= 1.0:
+		if line_count <= 0 or content_h <= 1.0:
+			return
+		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
+		if compact_large_roster:
+			var one_line_h: float = ceilf(maxf(18.0, float(logs_label.get_line_height(line_count - 1))))
+			var feedback_cap: float = log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0 - log_scroll_base_top
+			var list_cap: float = log_list_panel.size.y - 4.0 - log_scroll_base_top
+			avail_h = maxf(one_line_h, minf(list_cap, feedback_cap))
+		if avail_h < 18.0:
 			return
 		var best_start: int = line_count - 1
 		var start_idx: int = line_count - 1
@@ -39794,7 +39828,7 @@ func _show_online_lobby_impl() -> void:
 		var tail_top_offset: float = float(logs_label.get_line_offset(best_start))
 		var exact_tail_h: float = ceilf(maxf(1.0, content_h - tail_top_offset))
 		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else avail_h
-		var pad_y: float = floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
+		var pad_y: float = 0.0 if compact_large_roster else floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
 		var target_top: float = log_scroll_base_top + pad_y
 		var target_bottom: float = target_top + snapped_h
 		if log_scroll.anchor_bottom != 0.0 or absf(log_scroll.offset_top - target_top) > 0.5 or absf(log_scroll.offset_bottom - target_bottom) > 0.5:
@@ -41029,16 +41063,33 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 		section.set_meta("section_height_policy", "content_measured_min_136px")
 		mark_ui_optimization(section, "F-532")
 		mark_ui_optimization(section, "F-227")
+	# Prevent any chapter jump from landing with the next chapter's heading sliced
+	# in half at the bottom of RulesContentScroll (e.g., Chapter 3 exposing half of
+	# Chapter 4's "牌型介绍" heading at 960x540 large_contrast).
+	var scroll_view_h_est: float = content_scroll.size.y
+	if scroll_view_h_est <= 1.0:
+		var panel_host_est_ch := content_scroll.get_parent() as Control
+		if panel_host_est_ch != null and panel_host_est_ch.size.y > 1.0:
+			scroll_view_h_est = panel_host_est_ch.size.y * maxf(0.20, content_scroll.anchor_bottom - content_scroll.anchor_top)
+	var rules_vbox_sep: float = float(content.get_theme_constant("separation")) if content is VBoxContainer else 12.0
+	if scroll_view_h_est > 100.0:
+		for ch_idx in range(RULES_SECTION_COUNT - 1):
+			var ch_node := content.get_node_or_null("RuleSection_%d" % ch_idx) as Control
+			var next_ch_node := content.get_node_or_null("RuleSection_%d" % (ch_idx + 1)) as Control
+			if ch_node == null or next_ch_node == null:
+				continue
+			var next_title := next_ch_node.find_child("RuleSectionTitle_%d" % (ch_idx + 1), true, false) as Label
+			var next_title_h: float = maxf(28.0, next_title.get_minimum_size().y + 12.0) if next_title != null else 40.0
+			var ch_h: float = maxf(ch_node.size.y, ch_node.custom_minimum_size.y)
+			var next_start: float = ch_h + rules_vbox_sep
+			if next_start < scroll_view_h_est and next_start + next_title_h > scroll_view_h_est - 2.0:
+				ch_node.custom_minimum_size.y = maxf(ch_node.custom_minimum_size.y, ceilf(scroll_view_h_est - rules_vbox_sep + 4.0))
 	# Give the final chapter enough trailing scroll tail so jumping to Chapter 6
 	# aligns "游戏操作" cleanly to the top of the reading viewport instead of clamping mid-Chapter 5.
 	var tail_spacer: Control = content.get_node_or_null("RulesBottomTailSpacer") as Control
 	var last_chapter: Control = content.get_node_or_null("RuleSection_%d" % (RULES_SECTION_COUNT - 1)) as Control
 	if tail_spacer != null and last_chapter != null:
-		var scroll_view_h: float = content_scroll.size.y
-		if scroll_view_h <= 1.0:
-			var panel_host_est := content_scroll.get_parent() as Control
-			if panel_host_est != null and panel_host_est.size.y > 1.0:
-				scroll_view_h = panel_host_est.size.y * maxf(0.20, content_scroll.anchor_bottom - content_scroll.anchor_top)
+		var scroll_view_h: float = scroll_view_h_est
 		var last_chapter_h: float = maxf(last_chapter.size.y, last_chapter.custom_minimum_size.y)
 		var desired_tail: float = ceilf(maxf(0.0, scroll_view_h - last_chapter_h - 20.0)) if scroll_view_h > 1.0 else 0.0
 		if absf(tail_spacer.custom_minimum_size.y - desired_tail) > 1.0:
@@ -41688,6 +41739,22 @@ func _show_shop_screen_impl() -> void:
 		if description_height > 34.0:
 			shop_row_height = maxf(shop_row_height, description_height + 48.0)
 	shop_row_height = minf(shop_row_height, shop_row_max_height)
+	# When a single-column catalogue overflows the viewport (e.g. 960x540 large_contrast),
+	# snap ShopItemsScroll cleanly to an integer number of complete rows so the next row is
+	# never bisected horizontally at the bottom edge.
+	if not shop_wide_layout:
+		var shop_total_h := float(shop_visual_rows) * shop_row_height + float(maxi(0, shop_visual_rows - 1)) * shop_row_gap
+		var shop_scroll_avail_h := shop_panel_size.y * (scroll.anchor_bottom - scroll.anchor_top)
+		if shop_total_h > shop_scroll_avail_h + 1.0 and shop_panel_size.y > 1.0:
+			var complete_rows := clampi(int(floor((shop_scroll_avail_h + shop_row_gap) / maxf(1.0, shop_row_height + shop_row_gap))), 1, shop_visual_rows)
+			var snapped_scroll_h := float(complete_rows) * shop_row_height + float(maxi(0, complete_rows - 1)) * shop_row_gap + 2.0
+			var snapped_bottom := minf(scroll.anchor_bottom, scroll.anchor_top + snapped_scroll_h / shop_panel_size.y)
+			scroll.anchor_bottom = snapped_bottom
+			shop_scroll_gutter.anchor_bottom = snapped_bottom - 0.007
+			shop_scroll_hit_target.anchor_bottom = snapped_bottom
+			apply_rect(shop_scroll_position, rect_full(0.750, snapped_bottom, 0.930, snapped_bottom))
+			shop_scroll_position.offset_top = 8.0
+			shop_scroll_position.offset_bottom = 8.0 + shop_scroll_position.get_combined_minimum_size().y
 
 	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
@@ -42180,9 +42247,31 @@ func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> 
 	if str(thumb.get_meta("shop_scroll_sync_token", "")) == sync_token:
 		return
 	thumb.set_meta("shop_scroll_sync_token", sync_token)
-	var visible_items := total_items if total_items <= 0 else clampi(int(ceil(float(total_items) * visible_ratio)), 1, total_items)
+	var visible_items := total_items if total_items <= 0 else clampi(int(floor(float(total_items) * visible_ratio + 0.05)), 1, total_items)
 	var first_item := 1 if total_items <= 0 else clampi(int(floor(progress * float(maxi(0, total_items - visible_items)))) + 1, 1, total_items)
 	var last_item := total_items if total_items <= 0 else mini(total_items, first_item + visible_items - 1)
+	var content_box := content_scroll.find_child("ShopItemsContent", true, false) as Control
+	var scroll_rect := content_scroll.get_global_rect()
+	if content_box != null and scroll_rect.size.y > 1.0:
+		var measured_first := 0
+		var measured_last := 0
+		var row_idx := 0
+		for child in content_box.get_children():
+			var row_ctrl := child as Control
+			if row_ctrl == null or not str(row_ctrl.name).begins_with("ShopItemRow_"):
+				continue
+			row_idx += 1
+			var row_rect := row_ctrl.get_global_rect()
+			if row_rect.size.y <= 1.0:
+				continue
+			var visible_h := row_rect.intersection(scroll_rect).size.y
+			if visible_h >= minf(row_rect.size.y * 0.60, scroll_rect.size.y * 0.60):
+				if measured_first == 0:
+					measured_first = row_idx
+				measured_last = row_idx
+		if measured_first > 0 and measured_last >= measured_first:
+			first_item = measured_first
+			last_item = measured_last
 	thumb.set_meta("shop_scroll_progress", progress)
 	thumb.set_meta("shop_scroll_boundary", "top" if progress <= 0.001 else ("bottom" if progress >= 0.999 else "middle"))
 	mark_ui_optimization(thumb, "F-601")
@@ -46018,10 +46107,12 @@ func _show_replay_import_screen_impl() -> void:
 	mark_ui_optimization(import_button, "F-508")
 	apply_rect(import_button, rect_full(0.755, input_row_top, 0.945, input_row_bottom))
 	panel.add_child(import_button)
+	var replay_paper_secondary_ink := Color(0.05, 0.12, 0.08) if high_contrast_enabled else Color(0.20, 0.30, 0.25)
 	var status := make_label(panel, "等待粘贴回放码", commercial_ui_font_size(14, 2), Color(0.24, 0.34, 0.28), false)
 	status.name = "ReplayImportStatus"
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status.set_meta("preserve_semantic_color", true)
+	status.add_theme_color_override("font_color", replay_paper_secondary_ink)
 	status.add_theme_constant_override("outline_size", 0)
 	status.add_theme_constant_override("shadow_offset_x", 0)
 	status.add_theme_constant_override("shadow_offset_y", 0)
@@ -46033,6 +46124,10 @@ func _show_replay_import_screen_impl() -> void:
 	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), commercial_ui_font_size(12, 3), Color(0.26, 0.35, 0.30), false)
 	code_summary.name = "ReplayImportCodeSummary"
 	code_summary.set_meta("preserve_semantic_color", true)
+	code_summary.add_theme_color_override("font_color", replay_paper_secondary_ink)
+	code_summary.add_theme_constant_override("outline_size", 0)
+	code_summary.add_theme_constant_override("shadow_offset_x", 0)
+	code_summary.add_theme_constant_override("shadow_offset_y", 0)
 	apply_rect(code_summary, rect_full(0.055, 0.264 if wide_replay else 0.340, 0.735, 0.302 if wide_replay else 0.392))
 	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(code_summary)
@@ -46249,6 +46344,10 @@ func _show_replay_import_screen_impl() -> void:
 	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", commercial_ui_font_size(12, 3), Color(0.24, 0.33, 0.28), false)
 	empty.name = "ReplayImportTimelineEmpty"
 	empty.set_meta("preserve_semantic_color", true)
+	empty.add_theme_color_override("font_color", replay_paper_secondary_ink)
+	empty.add_theme_constant_override("outline_size", 0)
+	empty.add_theme_constant_override("shadow_offset_x", 0)
+	empty.add_theme_constant_override("shadow_offset_y", 0)
 	empty.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	apply_rect(empty, rect_full(0.060, 0.600 if empty_scroll_tex != null else 0.360, 0.940, 0.720 if empty_scroll_tex != null else 0.560))
 	configure_clipped_label(empty)
@@ -49103,21 +49202,25 @@ func online_rule_flower_set(variant: String) -> Dictionary:
 
 
 func online_rule_model(variant: String) -> Dictionary:
-	var cache_key := variant if variant != "" else "__default__"
+	var resolved_variant := variant.strip_edges()
+	var cache_key := normalized_rule_variant(resolved_variant) if resolved_variant != "" else "__default__"
 	var cached: Variant = online_rule_model_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
 		return cached
 	var allowed: Dictionary = {}
+	var play_tiles: Dictionary = {}
 	var flowers: Dictionary = {}
-	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	var tile_codes: Array = rule_tile_codes(cache_key) if resolved_variant != "" else TILE_CODES
+	var flower_codes: Array = rule_flower_codes(cache_key) if resolved_variant != "" else FLOWER_CODES
 	for code in tile_codes:
-		allowed[normalize_tile_code(str(code))] = true
+		var normalized := normalize_tile_code(str(code))
+		allowed[normalized] = true
+		play_tiles[normalized] = true
 	for code in flower_codes:
 		var normalized := normalize_tile_code(str(code))
 		allowed[normalized] = true
 		flowers[normalized] = true
-	var model := {"allowed": allowed, "flowers": flowers}
+	var model := {"allowed": allowed, "tiles": play_tiles, "flowers": flowers}
 	online_rule_model_cache[cache_key] = model
 	online_rule_code_set_cache[cache_key] = allowed
 	return model
@@ -49355,7 +49458,8 @@ func online_action_validation_error(payload: Dictionary) -> String:
 		var tile := normalize_tile_code(str(payload.get("tile", "")))
 		if tile == "":
 			return "请选择一张牌。"
-		if not rule_tile_codes().has(normalize_tile_code(tile)):
+		var online_play_tiles: Dictionary = online_rule_model(str(online_game.get("ruleVariant", ""))).get("tiles", {}) as Dictionary
+		if not online_play_tiles.has(tile):
 			return "这张牌不在当前牌谱中。"
 		if mode != "online_game":
 			return "请先进入联机牌局。"
@@ -50456,6 +50560,9 @@ func wall_state_text(wall_count: int = -1) -> String:
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
 
+func rule_includes_honors(variant: String = "") -> bool:
+	return bool(rule_profile(variant).get("include_honors", true))
+
 func rule_min_fan(variant: String = "") -> int:
 	return max(1, int(rule_profile(variant).get("min_fan", 1)))
 
@@ -51513,6 +51620,7 @@ func unlock_achievement(key: String) -> bool:
 	return true
 
 func update_task_progress(task_id: String, amount: int = 1) -> void:
+	reset_daily_tasks()
 	if amount <= 0 or not task_progress.has(task_id):
 		return
 	var target := 1
@@ -51532,10 +51640,19 @@ func update_task_progress(task_id: String, amount: int = 1) -> void:
 	save_tasks()
 
 func claim_task_reward(task: Dictionary) -> void:
+	reset_daily_tasks()
 	var task_id := str(task.get("id", "")).strip_edges()
 	if task_id != "" and bool(task_claimed.get(task_id, false)):
 		show_toast("任务奖励已领取。", 1600)
 		return
+	if task_id != "":
+		var required_target := maxi(1, int(task.get("target", 1)))
+		for task_def in DAILY_TASKS:
+			if str(task_def.get("id", "")) == task_id:
+				required_target = maxi(1, int(task_def.get("target", required_target)))
+				break
+		if int(task_progress.get(task_id, 0)) < required_target:
+			return
 	var reward = int(task.get("reward_coins", 0))
 	if reward <= 0:
 		return
@@ -51547,6 +51664,7 @@ func claim_task_reward(task: Dictionary) -> void:
 	show_toast("任务完成！+%d铜钱" % reward, 2500)
 
 func claim_available_task(task_id: String) -> bool:
+	reset_daily_tasks()
 	var status := get_task_status(task_id)
 	if status.is_empty() or not bool(status.get("claimable", false)):
 		return false
@@ -56033,10 +56151,9 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.set_meta("ui_navigation_role", "page_back")
 	update_secondary_button.focus_mode = Control.FOCUS_ALL
 	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
-	style_guofeng_secondary_action(update_secondary_button, false)
-	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
-	# Preserve a chamfer-matched focus plate on UpdateSecondaryButton instead of a
-	# 90-degree outer rectangle that leaves corner gaps on chamfered Jiangnan buttons.
+	# Ensure the chamfer-matched focus plate exists BEFORE apply_guofeng_button_face runs,
+	# so it sits strictly behind GptButtonFacePlate and never covers the paper button face
+	# with dark focus/idle tint in high-contrast mode.
 	if update_secondary_button.get_node_or_null("ButtonFocusPlate") == null:
 		var sec_focus_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		if sec_focus_tex != null:
@@ -56044,9 +56161,10 @@ func ensure_update_dialog() -> void:
 			if sec_focus != null:
 				sec_focus.name = "ButtonFocusPlate"
 				sec_focus.show_behind_parent = true
+				update_secondary_button.move_child(sec_focus, 0)
 				configure_guofeng_button_slice(sec_focus, true, 96, 0.125, sec_focus_tex, false)
-				update_secondary_button.set_meta("guofeng_chamfer_focus_enabled", true)
-				update_secondary_button.set_meta("guofeng_chamfer_focus_ink", false)
+	style_guofeng_secondary_action(update_secondary_button, false)
+	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -56573,7 +56691,7 @@ func complete_added_gang(seat: int, tile: String) -> bool:
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)
-	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_ron_for_seat(0, tile):
+	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_ron_for_seat(0, tile, "rob_gang"):
 		offline_claim_sequence += 1
 		offline_pending_claim = {
 			"from_seat": gang_seat,
@@ -57723,7 +57841,7 @@ func is_isolated_shape_tile(counts: Array, index: int) -> bool:
 
 func shanten_cache_key(counts: Array, open_melds: int, counts_key_override: String = "") -> String:
 	var compact_key := counts_key_override if counts_key_override != "" else counts_compact_key(counts)
-	return "%d:%s" % [open_melds, compact_key]
+	return "%d:%d:%s" % [open_melds, 1 if rule_includes_honors() else 0, compact_key]
 
 func counts_compact_key(counts: Array) -> String:
 	# Shanten recursion asks for this key at every memo state. Reuse the temporary
@@ -57941,10 +58059,18 @@ func sort_effective_tiles_by_remaining(tiles: Array, remaining_by_tile: Dictiona
 func remaining_tile_count_from_counts(index: int, visible_counts: Array, hand_counts: Array) -> int:
 	if index < 0 or index >= TILE_CODES.size():
 		return 0
+	if index >= 27 and not rule_includes_honors():
+		return 0
 	return max(0, 4 - int(visible_counts[index]) - int(hand_counts[index]))
 
 func remaining_tile_count(tile: String, hand: Array) -> int:
-	return max(0, 4 - visible_tile_count(tile) - count_tile(hand, tile))
+	var normalized := normalize_tile_code(tile)
+	var index := tile_index_normalized(normalized)
+	if index < 0 or index >= TILE_CODES.size():
+		return 0
+	if index >= 27 and not rule_includes_honors():
+		return 0
+	return max(0, 4 - visible_tile_count(normalized) - count_tile(hand, normalized))
 
 
 func rank_mask_unique_count(mask: int) -> int:

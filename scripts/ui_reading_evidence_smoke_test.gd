@@ -87,6 +87,13 @@ func check_rules_reading(scene: Node, output_dir: String) -> void:
 			check(chapter_icon == null or chapter_icon.get_global_rect().end.x <= chapter_state.get_global_rect().position.x, "chapter %d keeps any existing optional icon outside the state text row" % (chapter + 1))
 		var progress := 0.0 if scroll_range <= 0.0 else scrollbar.value / scroll_range
 		check(absf(float(thumb.get_meta("scroll_progress", -1.0)) - progress) <= 0.01, "chapter %d keeps the visual thumb synchronized" % (chapter + 1))
+		if chapter == 2:
+			var next_ch_title := scene.find_child("RuleSectionTitle_3", true, false) as Label
+			if next_ch_title != null:
+				var next_t_rect := next_ch_title.get_global_rect()
+				var s_rect := scroll.get_global_rect()
+				var title_bisected := next_t_rect.position.y < s_rect.end.y - 1.0 and next_t_rect.end.y > s_rect.end.y + 1.0
+				check(not title_bisected, "U-14: rules chapter 3 bottom edge does not bisect chapter 4 heading (title=%s scroll=%s)" % [next_t_rect, s_rect])
 		await save_reading_capture(scene, output_dir, "rules_chapter_%d" % (chapter + 1), {"status": status.text, "scroll_value": scrollbar.value, "progress": progress})
 		var before_tab_scroll := scrollbar.value
 		var previous_button := scene.find_child("RulesGuideStepButton_%d" % (chapter - 1), true, false) as Button

@@ -1200,8 +1200,8 @@ func style_flat_clear_proxy(proxy: Button) -> void:
 func add_lobby_line_edit(parent: Control, label_text: String, value: String, max_length: int, keyboard_type: int = LineEdit.KEYBOARD_TYPE_DEFAULT) -> LineEdit:
 	# On short safe areas the caption and focus indicator sit beside the field.
 	# The clear proxy remains an absolute sibling of the native editor.
-	var use_inline_caption := safe_content_pixel_size().y <= 560.0 and not large_text_enabled
-	var caption_width := 76.0 if use_inline_caption else 96.0
+	var use_inline_caption := safe_content_pixel_size().y <= 560.0
+	var caption_width := (86.0 if large_text_enabled else 76.0) if use_inline_caption else 96.0
 	var row = Control.new()
 	configure_passive_container(row)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1300,9 +1300,10 @@ func add_lobby_line_edit(parent: Control, label_text: String, value: String, max
 	var caption_height := ceilf(maxf(caption.get_combined_minimum_size().y, editing.get_combined_minimum_size().y))
 	var edit_height := ceilf(edit.get_combined_minimum_size().y)
 	if use_inline_caption:
-		row.custom_minimum_size.y = maxf(edit_height, caption_height * 2.0)
+		row.custom_minimum_size.y = maxf(edit_height, caption_height + 16.0)
 		apply_rect(caption, rect_full(0.0, 0.0, 0.0, 1.0))
 		caption.offset_right = caption_width
+		fit_label_font_size(caption, maxf(48.0, caption_width - 4.0), accessibility_font_size(commercial_ui_font_size(13, 3)), 11)
 		apply_rect(editing, rect_full(0.0, 0.62, 0.0, 1.0))
 		editing.offset_right = caption_width
 		editing.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1598,9 +1599,14 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	if not is_current_ui_control(form_panel) or not is_current_ui_control(form) or not is_current_ui_control(feedback) or not is_current_ui_control(first_row) or not is_current_ui_control(second_row):
 		return
 	var lobby_lane_vp := effective_viewport_size()
+	var compact_large_lane := lobby_lane_vp.y <= 560.0 and large_text_enabled
 	var lane_gap := 12.0 if (lobby_lane_vp.x >= 1200.0 and not large_text_enabled) else 8.0
 	# Preserve the measured input lanes when the host grows to enclose its actions.
 	var form_top := form.position.y
+	if compact_large_lane:
+		var help_btn := form_panel.get_node_or_null("OnlineLobbyConnectionHelpButton") as Control
+		var min_form_top := ceilf(help_btn.position.y + help_btn.size.y + 4.0) if help_btn != null else 48.0
+		form_top = minf(form_top, min_form_top)
 	var form_height := maxf(form.get_combined_minimum_size().y, 120.0)
 	form.anchor_top = 0.0
 	form.anchor_bottom = 0.0
@@ -1622,6 +1628,18 @@ func normalize_online_lobby_form_lanes(form_panel: Control, form: Control, feedb
 	second_row.offset_top = second_top
 	second_row.offset_bottom = second_top + second_height
 	form_panel.custom_minimum_size.y = maxf(form_panel.custom_minimum_size.y, ceilf(second_top + second_height + 4.0))
+	var panel_host := form_panel.get_parent() as Control
+	if panel_host != null:
+		var status_lbl := panel_host.get_node_or_null("OnlineLobbyStatusLabel") as Label
+		if status_lbl != null:
+			var required_status_top := form_panel.position.y + second_top + second_height + 4.0
+			var status_h := maxf(status_lbl.get_minimum_size().y, 20.0)
+			if status_lbl.position.y < required_status_top:
+				status_lbl.anchor_top = 0.0
+				status_lbl.anchor_bottom = 0.0
+				var clamped_top := minf(required_status_top, maxf(0.0, panel_host.size.y - status_h - 4.0))
+				status_lbl.offset_top = clamped_top
+				status_lbl.offset_bottom = clamped_top + status_h
 	if is_current_ui_control(action_plate):
 		action_plate.anchor_top = 0.0
 		action_plate.anchor_bottom = 0.0
@@ -2141,12 +2159,19 @@ func _show_online_lobby_impl() -> void:
 	mark_ui_optimization(logs_label, "F-909")
 	log_scroll.add_child(logs_label)
 	var snap_online_log_viewport := func() -> void:
-		if compact_large_roster or not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
+		if not is_instance_valid(log_scroll) or not is_instance_valid(logs_label) or not is_instance_valid(log_list_panel):
 			return
-		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
 		var line_count: int = logs_label.get_line_count()
 		var content_h: float = float(logs_label.get_content_height())
-		if avail_h < 18.0 or line_count <= 0 or content_h <= 1.0:
+		if line_count <= 0 or content_h <= 1.0:
+			return
+		var avail_h: float = log_list_panel.size.y * 0.960 - 12.0 - log_scroll_base_top
+		if compact_large_roster:
+			var one_line_h: float = ceilf(maxf(18.0, float(logs_label.get_line_height(line_count - 1))))
+			var feedback_cap: float = log_panel.size.y * 0.90 - log_list_panel.position.y - 12.0 - log_scroll_base_top
+			var list_cap: float = log_list_panel.size.y - 4.0 - log_scroll_base_top
+			avail_h = maxf(one_line_h, minf(list_cap, feedback_cap))
+		if avail_h < 18.0:
 			return
 		var best_start: int = line_count - 1
 		var start_idx: int = line_count - 1
@@ -2160,7 +2185,7 @@ func _show_online_lobby_impl() -> void:
 		var tail_top_offset: float = float(logs_label.get_line_offset(best_start))
 		var exact_tail_h: float = ceilf(maxf(1.0, content_h - tail_top_offset))
 		var snapped_h: float = minf(avail_h, exact_tail_h) if exact_tail_h <= avail_h + 0.5 else avail_h
-		var pad_y: float = floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
+		var pad_y: float = 0.0 if compact_large_roster else floorf(maxf(0.0, avail_h - snapped_h) * 0.5)
 		var target_top: float = log_scroll_base_top + pad_y
 		var target_bottom: float = target_top + snapped_h
 		if log_scroll.anchor_bottom != 0.0 or absf(log_scroll.offset_top - target_top) > 0.5 or absf(log_scroll.offset_bottom - target_bottom) > 0.5:
@@ -3395,16 +3420,33 @@ func normalize_rules_section_heights(content_scroll: ScrollContainer) -> void:
 		section.set_meta("section_height_policy", "content_measured_min_136px")
 		mark_ui_optimization(section, "F-532")
 		mark_ui_optimization(section, "F-227")
+	# Prevent any chapter jump from landing with the next chapter's heading sliced
+	# in half at the bottom of RulesContentScroll (e.g., Chapter 3 exposing half of
+	# Chapter 4's "牌型介绍" heading at 960x540 large_contrast).
+	var scroll_view_h_est: float = content_scroll.size.y
+	if scroll_view_h_est <= 1.0:
+		var panel_host_est_ch := content_scroll.get_parent() as Control
+		if panel_host_est_ch != null and panel_host_est_ch.size.y > 1.0:
+			scroll_view_h_est = panel_host_est_ch.size.y * maxf(0.20, content_scroll.anchor_bottom - content_scroll.anchor_top)
+	var rules_vbox_sep: float = float(content.get_theme_constant("separation")) if content is VBoxContainer else 12.0
+	if scroll_view_h_est > 100.0:
+		for ch_idx in range(RULES_SECTION_COUNT - 1):
+			var ch_node := content.get_node_or_null("RuleSection_%d" % ch_idx) as Control
+			var next_ch_node := content.get_node_or_null("RuleSection_%d" % (ch_idx + 1)) as Control
+			if ch_node == null or next_ch_node == null:
+				continue
+			var next_title := next_ch_node.find_child("RuleSectionTitle_%d" % (ch_idx + 1), true, false) as Label
+			var next_title_h: float = maxf(28.0, next_title.get_minimum_size().y + 12.0) if next_title != null else 40.0
+			var ch_h: float = maxf(ch_node.size.y, ch_node.custom_minimum_size.y)
+			var next_start: float = ch_h + rules_vbox_sep
+			if next_start < scroll_view_h_est and next_start + next_title_h > scroll_view_h_est - 2.0:
+				ch_node.custom_minimum_size.y = maxf(ch_node.custom_minimum_size.y, ceilf(scroll_view_h_est - rules_vbox_sep + 4.0))
 	# Give the final chapter enough trailing scroll tail so jumping to Chapter 6
 	# aligns "游戏操作" cleanly to the top of the reading viewport instead of clamping mid-Chapter 5.
 	var tail_spacer: Control = content.get_node_or_null("RulesBottomTailSpacer") as Control
 	var last_chapter: Control = content.get_node_or_null("RuleSection_%d" % (RULES_SECTION_COUNT - 1)) as Control
 	if tail_spacer != null and last_chapter != null:
-		var scroll_view_h: float = content_scroll.size.y
-		if scroll_view_h <= 1.0:
-			var panel_host_est := content_scroll.get_parent() as Control
-			if panel_host_est != null and panel_host_est.size.y > 1.0:
-				scroll_view_h = panel_host_est.size.y * maxf(0.20, content_scroll.anchor_bottom - content_scroll.anchor_top)
+		var scroll_view_h: float = scroll_view_h_est
 		var last_chapter_h: float = maxf(last_chapter.size.y, last_chapter.custom_minimum_size.y)
 		var desired_tail: float = ceilf(maxf(0.0, scroll_view_h - last_chapter_h - 20.0)) if scroll_view_h > 1.0 else 0.0
 		if absf(tail_spacer.custom_minimum_size.y - desired_tail) > 1.0:
@@ -4054,6 +4096,22 @@ func _show_shop_screen_impl() -> void:
 		if description_height > 34.0:
 			shop_row_height = maxf(shop_row_height, description_height + 48.0)
 	shop_row_height = minf(shop_row_height, shop_row_max_height)
+	# When a single-column catalogue overflows the viewport (e.g. 960x540 large_contrast),
+	# snap ShopItemsScroll cleanly to an integer number of complete rows so the next row is
+	# never bisected horizontally at the bottom edge.
+	if not shop_wide_layout:
+		var shop_total_h := float(shop_visual_rows) * shop_row_height + float(maxi(0, shop_visual_rows - 1)) * shop_row_gap
+		var shop_scroll_avail_h := shop_panel_size.y * (scroll.anchor_bottom - scroll.anchor_top)
+		if shop_total_h > shop_scroll_avail_h + 1.0 and shop_panel_size.y > 1.0:
+			var complete_rows := clampi(int(floor((shop_scroll_avail_h + shop_row_gap) / maxf(1.0, shop_row_height + shop_row_gap))), 1, shop_visual_rows)
+			var snapped_scroll_h := float(complete_rows) * shop_row_height + float(maxi(0, complete_rows - 1)) * shop_row_gap + 2.0
+			var snapped_bottom := minf(scroll.anchor_bottom, scroll.anchor_top + snapped_scroll_h / shop_panel_size.y)
+			scroll.anchor_bottom = snapped_bottom
+			shop_scroll_gutter.anchor_bottom = snapped_bottom - 0.007
+			shop_scroll_hit_target.anchor_bottom = snapped_bottom
+			apply_rect(shop_scroll_position, rect_full(0.750, snapped_bottom, 0.930, snapped_bottom))
+			shop_scroll_position.offset_top = 8.0
+			shop_scroll_position.offset_bottom = 8.0 + shop_scroll_position.get_combined_minimum_size().y
 
 	for item_id in shop_item_ids_shared():
 		var item_info = ITEM_TYPES[item_id]
@@ -4546,9 +4604,31 @@ func sync_shop_scroll_thumb(content_scroll: ScrollContainer, thumb: Control) -> 
 	if str(thumb.get_meta("shop_scroll_sync_token", "")) == sync_token:
 		return
 	thumb.set_meta("shop_scroll_sync_token", sync_token)
-	var visible_items := total_items if total_items <= 0 else clampi(int(ceil(float(total_items) * visible_ratio)), 1, total_items)
+	var visible_items := total_items if total_items <= 0 else clampi(int(floor(float(total_items) * visible_ratio + 0.05)), 1, total_items)
 	var first_item := 1 if total_items <= 0 else clampi(int(floor(progress * float(maxi(0, total_items - visible_items)))) + 1, 1, total_items)
 	var last_item := total_items if total_items <= 0 else mini(total_items, first_item + visible_items - 1)
+	var content_box := content_scroll.find_child("ShopItemsContent", true, false) as Control
+	var scroll_rect := content_scroll.get_global_rect()
+	if content_box != null and scroll_rect.size.y > 1.0:
+		var measured_first := 0
+		var measured_last := 0
+		var row_idx := 0
+		for child in content_box.get_children():
+			var row_ctrl := child as Control
+			if row_ctrl == null or not str(row_ctrl.name).begins_with("ShopItemRow_"):
+				continue
+			row_idx += 1
+			var row_rect := row_ctrl.get_global_rect()
+			if row_rect.size.y <= 1.0:
+				continue
+			var visible_h := row_rect.intersection(scroll_rect).size.y
+			if visible_h >= minf(row_rect.size.y * 0.60, scroll_rect.size.y * 0.60):
+				if measured_first == 0:
+					measured_first = row_idx
+				measured_last = row_idx
+		if measured_first > 0 and measured_last >= measured_first:
+			first_item = measured_first
+			last_item = measured_last
 	thumb.set_meta("shop_scroll_progress", progress)
 	thumb.set_meta("shop_scroll_boundary", "top" if progress <= 0.001 else ("bottom" if progress >= 0.999 else "middle"))
 	mark_ui_optimization(thumb, "F-601")
@@ -8384,10 +8464,12 @@ func _show_replay_import_screen_impl() -> void:
 	mark_ui_optimization(import_button, "F-508")
 	apply_rect(import_button, rect_full(0.755, input_row_top, 0.945, input_row_bottom))
 	panel.add_child(import_button)
+	var replay_paper_secondary_ink := Color(0.05, 0.12, 0.08) if high_contrast_enabled else Color(0.20, 0.30, 0.25)
 	var status := make_label(panel, "等待粘贴回放码", commercial_ui_font_size(14, 2), Color(0.24, 0.34, 0.28), false)
 	status.name = "ReplayImportStatus"
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	status.set_meta("preserve_semantic_color", true)
+	status.add_theme_color_override("font_color", replay_paper_secondary_ink)
 	status.add_theme_constant_override("outline_size", 0)
 	status.add_theme_constant_override("shadow_offset_x", 0)
 	status.add_theme_constant_override("shadow_offset_y", 0)
@@ -8399,6 +8481,10 @@ func _show_replay_import_screen_impl() -> void:
 	var code_summary := make_label(panel, "回放码 0/%d 字符 · 等待粘贴" % (REPLAY_SHARE_MAX_BYTES * 2), commercial_ui_font_size(12, 3), Color(0.26, 0.35, 0.30), false)
 	code_summary.name = "ReplayImportCodeSummary"
 	code_summary.set_meta("preserve_semantic_color", true)
+	code_summary.add_theme_color_override("font_color", replay_paper_secondary_ink)
+	code_summary.add_theme_constant_override("outline_size", 0)
+	code_summary.add_theme_constant_override("shadow_offset_x", 0)
+	code_summary.add_theme_constant_override("shadow_offset_y", 0)
 	apply_rect(code_summary, rect_full(0.055, 0.264 if wide_replay else 0.340, 0.735, 0.302 if wide_replay else 0.392))
 	code_summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	configure_clipped_label(code_summary)
@@ -8615,6 +8701,10 @@ func _show_replay_import_screen_impl() -> void:
 	var empty := make_label(timeline, "粘贴回放码并点击导入后显示已验证事件", commercial_ui_font_size(12, 3), Color(0.24, 0.33, 0.28), false)
 	empty.name = "ReplayImportTimelineEmpty"
 	empty.set_meta("preserve_semantic_color", true)
+	empty.add_theme_color_override("font_color", replay_paper_secondary_ink)
+	empty.add_theme_constant_override("outline_size", 0)
+	empty.add_theme_constant_override("shadow_offset_x", 0)
+	empty.add_theme_constant_override("shadow_offset_y", 0)
 	empty.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	apply_rect(empty, rect_full(0.060, 0.600 if empty_scroll_tex != null else 0.360, 0.940, 0.720 if empty_scroll_tex != null else 0.560))
 	configure_clipped_label(empty)

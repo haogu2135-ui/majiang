@@ -546,6 +546,28 @@ func run() -> void:
 	var recovery_after_sync_err: Dictionary = scene.online_recovery_view_model()
 	check(str(recovery_after_sync_err.get("phase", "")) == "retry_ready" and not bool(recovery_after_sync_err.get("reconnecting", true)), "synchronous reconnect failure becomes retryable once cooldown expires")
 
+	# F-14 regression: online_rule_model and discard validation follow online_game.ruleVariant
+	# (or default 34-tile model when omitted), independent of local single-player rule_variant.
+	var prev_rule_variant: String = str(scene.rule_variant)
+	scene.rule_variant = "sichuan"
+	scene.online_rule_model_cache.clear()
+	scene.online_rule_code_set_cache.clear()
+	var default_online_codes: Dictionary = scene.online_rule_code_set("")
+	check(default_online_codes.has("E"), "F-14: default online rule model keeps honor tiles even when local rule_variant is sichuan")
+	scene.mode = "online_game"
+	scene.tcp = StreamPeerTCP.new()
+	scene.tcp_status = StreamPeerTCP.STATUS_CONNECTED
+	scene.online_game = {"roomCode": "QA180", "phase": "awaitDiscard", "youSeat": 0, "currentSeat": 0, "hand": ["E", "3W"]}
+	var err_default_honor: String = scene.online_action_validation_error({"type": "discard", "tile": "E", "handIndex": 0})
+	check(err_default_honor == "", "F-14: discarding E succeeds in default online game despite local rule_variant=sichuan (err=%s)" % err_default_honor)
+	scene.online_game["ruleVariant"] = "yangzhou"
+	var err_yangzhou_honor: String = scene.online_action_validation_error({"type": "discard", "tile": "E", "handIndex": 0})
+	check(err_yangzhou_honor == "", "F-14: discarding E succeeds in yangzhou online game despite local rule_variant=sichuan (err=%s)" % err_yangzhou_honor)
+	scene.online_game["ruleVariant"] = "sichuan"
+	var err_sichuan_honor: String = scene.online_action_validation_error({"type": "discard", "tile": "E", "handIndex": 0})
+	check(err_sichuan_honor != "", "F-14: discarding E is rejected when online_game.ruleVariant is explicitly sichuan")
+	scene.rule_variant = prev_rule_variant
+
 	scene.shutdown_runtime()
 	scene.queue_free()
 	server.stop()

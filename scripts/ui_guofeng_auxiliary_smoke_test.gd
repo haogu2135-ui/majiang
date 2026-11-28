@@ -147,9 +147,14 @@ func check_update(scene: Node, output: String) -> void:
 	check(primary.disabled and primary.text == "下载中", "update downloading state explains the unavailable primary action")
 	var disabled_ink := primary.get_theme_color("font_disabled_color")
 	check(disabled_ink.r > 0.75 and disabled_ink.g > 0.75 and disabled_ink.b > 0.65, "disabled update action keeps readable ivory text on its ink face")
+	var secondary := reading_node(scene, "UpdateSecondaryButton") as Button
+	var sec_focus_plate := secondary.get_node_or_null("ButtonFocusPlate") as Control if secondary != null else null
+	var sec_face_plate := secondary.get_node_or_null("GptButtonFacePlate") as Control if secondary != null else null
+	check(secondary != null and sec_face_plate != null and (sec_focus_plate == null or sec_focus_plate.get_index() < sec_face_plate.get_index()) and secondary.get_theme_color("font_color").get_luminance() <= 0.24, "U-11: UpdateSecondaryButton keeps ButtonFocusPlate behind GptButtonFacePlate so cream paper stays visible behind dark ink")
 	await auxiliary_capture(scene, output, "update_downloading", {"state": "downloading", "progress_ratio": 0.43})
 	var hit := reading_node(scene, "UpdateReleaseNotesScrollHitTarget")
 	var scroll := reading_node(scene, "UpdateReleaseNotesScroll") as ScrollContainer
+	check(scroll != null and scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "U-11: UpdateReleaseNotesScroll hides the native scrollbar to avoid double scrollbars")
 	hit.grab_focus()
 	await send_key(KEY_END, 0)
 	await settle(0.05)
@@ -287,6 +292,9 @@ func check_replay(scene: Node, output: String) -> void:
 	var search := reading_node(scene, "ReplayArchiveSearchInput") as LineEdit
 	check(search.get_theme_font_size("font_size") >= (18 if scene.large_text_enabled else 14) and search.size.y >= 44.0, "archive search inherits the native readable font profile and full touch height")
 	check_reading_lanes(scene, "ReplayImportPanel", ["ReplayImportTitle", "ReplayImportInputLabel", "ReplayImportCodeInput", "ReplayImportStatus", "ReplayImportCodeSummary", "ReplayArchivePane"])
+	var replay_summary_lbl := reading_node(scene, "ReplayImportCodeSummary") as Label
+	var replay_empty_lbl := reading_node(scene, "ReplayImportTimelineEmpty") as Label
+	check(replay_summary_lbl != null and replay_empty_lbl != null and replay_summary_lbl.get_theme_color("font_color").get_luminance() <= 0.30 and replay_empty_lbl.get_theme_color("font_color").get_luminance() <= 0.30, "U-14: replay summary and empty timeline keep dark readable ink on Xuan paper including high-contrast mode")
 	await auxiliary_capture(scene, output, "replay_empty", {"events": 0})
 	scene.active_round_id = "AUXILIARY-REPLAY"
 	scene.round_event_history.clear()

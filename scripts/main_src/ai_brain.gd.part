@@ -769,7 +769,7 @@ func choose_ai_rob_gang(gang_seat: int, tile: String) -> Dictionary:
 		var seat = (gang_seat + offset) % 4
 		if seat == gang_seat or not is_ai_controlled_seat(seat):
 			continue
-		if can_ron_for_seat(seat, tile):
+		if can_ron_for_seat(seat, tile, "rob_gang"):
 			# 抢杠固定接受：额外番型 + 对手公开加杠信息。
 			return {"seat": seat, "claim": "hu", "score": 1100.0 - offset, "claim_report": {"accept": true, "reason": "抢杠", "fan": 0, "points": 0}}
 	return {}
@@ -4607,7 +4607,8 @@ func calculate_min_shanten_from_counts_with_memo(counts: Array, open_melds: int,
 		return standard
 	if open_melds == 0:
 		standard = min(standard, seven_pairs_shanten(counts))
-		standard = min(standard, thirteen_orphans_shanten(counts))
+		if rule_includes_honors():
+			standard = min(standard, thirteen_orphans_shanten(counts))
 	store_shanten_cache(cache_key, standard)
 	return standard
 
@@ -4626,7 +4627,8 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	# 将可见张快照纳入缓存键，避免牌河/副露变化后复用旧的 ukeire。
 	var visible_counts = visible_counts_snapshot if not visible_counts_snapshot.is_empty() else visible_tile_counts_shared()
 	var visible_key := visible_counts_key_override if visible_counts_key_override != "" else counts_compact_key(visible_counts)
-	var cache_key = "%d:%d:%s:%s" % [current_shanten, open_melds, hand_counts_key, visible_key]
+	var include_honors := rule_includes_honors()
+	var cache_key = "%d:%d:%d:%s:%s" % [current_shanten, open_melds, 1 if include_honors else 0, hand_counts_key, visible_key]
 	if effective_tiles_cache.has(cache_key):
 		effective_tiles_cache_hits += 1
 		touch_effective_tiles_cache_key(cache_key)
@@ -4671,11 +4673,12 @@ func effective_tile_metrics(hand: Array, open_melds: int, seat: int, known_shant
 	if open_melds == 0:
 		if unique_in_hand < 7 and seven_pairs_shanten(hand_counts) <= current_shanten + 1:
 			probe_all = true
-		elif thirteen_orphans_shanten(hand_counts) <= current_shanten + 1:
+		elif include_honors and thirteen_orphans_shanten(hand_counts) <= current_shanten + 1:
 			for orphan_index in thirteen_orphans_indices:
 				if orphan_index >= 0 and orphan_index < probe_mask.size():
 					probe_mask[orphan_index] = true
-	for i in range(TILE_CODES.size()):
+	var probe_limit := TILE_CODES.size() if include_honors else 27
+	for i in range(probe_limit):
 		if not probe_all and not probe_mask[i]:
 			continue
 		var tile = TILE_CODES[i]

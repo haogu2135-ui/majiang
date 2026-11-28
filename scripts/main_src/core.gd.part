@@ -189,6 +189,9 @@ func wall_state_text(wall_count: int = -1) -> String:
 func rule_allows_chi(variant: String = "") -> bool:
 	return bool(rule_profile(variant).get("allow_chi", true))
 
+func rule_includes_honors(variant: String = "") -> bool:
+	return bool(rule_profile(variant).get("include_honors", true))
+
 func rule_min_fan(variant: String = "") -> int:
 	return max(1, int(rule_profile(variant).get("min_fan", 1)))
 
@@ -1246,6 +1249,7 @@ func unlock_achievement(key: String) -> bool:
 	return true
 
 func update_task_progress(task_id: String, amount: int = 1) -> void:
+	reset_daily_tasks()
 	if amount <= 0 or not task_progress.has(task_id):
 		return
 	var target := 1
@@ -1265,10 +1269,19 @@ func update_task_progress(task_id: String, amount: int = 1) -> void:
 	save_tasks()
 
 func claim_task_reward(task: Dictionary) -> void:
+	reset_daily_tasks()
 	var task_id := str(task.get("id", "")).strip_edges()
 	if task_id != "" and bool(task_claimed.get(task_id, false)):
 		show_toast("任务奖励已领取。", 1600)
 		return
+	if task_id != "":
+		var required_target := maxi(1, int(task.get("target", 1)))
+		for task_def in DAILY_TASKS:
+			if str(task_def.get("id", "")) == task_id:
+				required_target = maxi(1, int(task_def.get("target", required_target)))
+				break
+		if int(task_progress.get(task_id, 0)) < required_target:
+			return
 	var reward = int(task.get("reward_coins", 0))
 	if reward <= 0:
 		return
@@ -1280,6 +1293,7 @@ func claim_task_reward(task: Dictionary) -> void:
 	show_toast("任务完成！+%d铜钱" % reward, 2500)
 
 func claim_available_task(task_id: String) -> bool:
+	reset_daily_tasks()
 	var status := get_task_status(task_id)
 	if status.is_empty() or not bool(status.get("claimable", false)):
 		return false
@@ -5766,10 +5780,9 @@ func ensure_update_dialog() -> void:
 	update_secondary_button.set_meta("ui_navigation_role", "page_back")
 	update_secondary_button.focus_mode = Control.FOCUS_ALL
 	update_secondary_button.custom_minimum_size = Vector2(roundf(112.0 * modal_scale), maxf(UI_MIN_TOUCH_TARGET, roundf(44.0 * modal_scale)))
-	style_guofeng_secondary_action(update_secondary_button, false)
-	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
-	# Preserve a chamfer-matched focus plate on UpdateSecondaryButton instead of a
-	# 90-degree outer rectangle that leaves corner gaps on chamfered Jiangnan buttons.
+	# Ensure the chamfer-matched focus plate exists BEFORE apply_guofeng_button_face runs,
+	# so it sits strictly behind GptButtonFacePlate and never covers the paper button face
+	# with dark focus/idle tint in high-contrast mode.
 	if update_secondary_button.get_node_or_null("ButtonFocusPlate") == null:
 		var sec_focus_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 		if sec_focus_tex != null:
@@ -5777,9 +5790,10 @@ func ensure_update_dialog() -> void:
 			if sec_focus != null:
 				sec_focus.name = "ButtonFocusPlate"
 				sec_focus.show_behind_parent = true
+				update_secondary_button.move_child(sec_focus, 0)
 				configure_guofeng_button_slice(sec_focus, true, 96, 0.125, sec_focus_tex, false)
-				update_secondary_button.set_meta("guofeng_chamfer_focus_enabled", true)
-				update_secondary_button.set_meta("guofeng_chamfer_focus_ink", false)
+	style_guofeng_secondary_action(update_secondary_button, false)
+	update_secondary_button.add_theme_font_size_override("font_size", upd_btn_fs)
 	row.add_child(update_secondary_button)
 	update_primary_button.focus_neighbor_left = update_secondary_button.get_path()
 	update_primary_button.focus_neighbor_right = update_secondary_button.get_path()
@@ -6306,7 +6320,7 @@ func complete_added_gang(seat: int, tile: String) -> bool:
 
 func begin_rob_gang_resolution(gang_seat: int, tile: String) -> bool:
 	var ai_claim = choose_ai_rob_gang(gang_seat, tile)
-	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_ron_for_seat(0, tile):
+	if (not is_ai_controlled_seat(0)) and gang_seat != 0 and can_ron_for_seat(0, tile, "rob_gang"):
 		offline_claim_sequence += 1
 		offline_pending_claim = {
 			"from_seat": gang_seat,
@@ -7456,7 +7470,7 @@ func is_isolated_shape_tile(counts: Array, index: int) -> bool:
 
 func shanten_cache_key(counts: Array, open_melds: int, counts_key_override: String = "") -> String:
 	var compact_key := counts_key_override if counts_key_override != "" else counts_compact_key(counts)
-	return "%d:%s" % [open_melds, compact_key]
+	return "%d:%d:%s" % [open_melds, 1 if rule_includes_honors() else 0, compact_key]
 
 func counts_compact_key(counts: Array) -> String:
 	# Shanten recursion asks for this key at every memo state. Reuse the temporary
@@ -7674,10 +7688,18 @@ func sort_effective_tiles_by_remaining(tiles: Array, remaining_by_tile: Dictiona
 func remaining_tile_count_from_counts(index: int, visible_counts: Array, hand_counts: Array) -> int:
 	if index < 0 or index >= TILE_CODES.size():
 		return 0
+	if index >= 27 and not rule_includes_honors():
+		return 0
 	return max(0, 4 - int(visible_counts[index]) - int(hand_counts[index]))
 
 func remaining_tile_count(tile: String, hand: Array) -> int:
-	return max(0, 4 - visible_tile_count(tile) - count_tile(hand, tile))
+	var normalized := normalize_tile_code(tile)
+	var index := tile_index_normalized(normalized)
+	if index < 0 or index >= TILE_CODES.size():
+		return 0
+	if index >= 27 and not rule_includes_honors():
+		return 0
+	return max(0, 4 - visible_tile_count(normalized) - count_tile(hand, normalized))
 
 
 func rank_mask_unique_count(mask: int) -> int:

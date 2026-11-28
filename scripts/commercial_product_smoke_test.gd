@@ -192,6 +192,28 @@ func run() -> void:
 	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == peek_before_empty, "F-09: peek_card refuses empty opponent hand without consuming an item")
 	scene.players[1]["hand"] = ["1W", "2W", "3W"]
 
+	# F-15 regression: daily tasks auto-reset across dates, unmet tasks refuse direct claim_task_reward,
+	# and record_game_result forwards wall_draw into season_points_for_result.
+	scene.task_date = "2020-01-01"
+	scene.task_progress["play_5"] = 5
+	scene.task_claimed["play_5"] = true
+	var rolled_status: Dictionary = scene.get_task_status("play_5")
+	check(int(rolled_status.get("progress", -1)) == 0 and not bool(rolled_status.get("claimed", true)) and scene.task_date == Time.get_date_string_from_system(), "F-15: get_task_status triggers automatic daily task reset across date boundary")
+	scene.task_date = "2020-01-01"
+	scene.task_progress["play_5"] = 5
+	scene.task_claimed["play_5"] = true
+	scene.update_task_progress("play_5", 1)
+	check(int(scene.task_progress.get("play_5", -1)) == 1 and not bool(scene.task_claimed.get("play_5", true)), "F-15: update_task_progress resets yesterday tasks before recording today progress")
+	var coins_before_unmet: int = int(scene.currency.get("coins", 0))
+	scene.claim_task_reward({"id": "play_5", "target": 5, "reward_coins": 50})
+	check(int(scene.currency.get("coins", 0)) == coins_before_unmet and not bool(scene.task_claimed.get("play_5", true)), "F-15: direct claim_task_reward rejects incomplete daily task without paying coins")
+	var season_pts_before_draw: int = int(scene.season_data.get("points", 0))
+	var expected_draw_delta: int = int(scene.season_points_for_result(false, 0, true))
+	var expected_loss_delta: int = int(scene.season_points_for_result(false, 0, false))
+	scene.record_game_result(false, 0, 12, {"wall_draw": true, "rule_variant": "yangzhou"})
+	var season_pts_after_draw: int = int(scene.season_data.get("points", 0))
+	check(expected_draw_delta != expected_loss_delta and season_pts_after_draw - season_pts_before_draw == expected_draw_delta, "F-15: record_game_result passes wall_draw=true to season_points_for_result (delta=%d expected=%d)" % [season_pts_after_draw - season_pts_before_draw, expected_draw_delta])
+
 	scene.mode = "online_game"
 	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == 1, "inventory cannot expose opponents in online matches")
 	scene.mode = "offline"

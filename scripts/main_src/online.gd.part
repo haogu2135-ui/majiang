@@ -586,21 +586,25 @@ func online_rule_flower_set(variant: String) -> Dictionary:
 
 
 func online_rule_model(variant: String) -> Dictionary:
-	var cache_key := variant if variant != "" else "__default__"
+	var resolved_variant := variant.strip_edges()
+	var cache_key := normalized_rule_variant(resolved_variant) if resolved_variant != "" else "__default__"
 	var cached: Variant = online_rule_model_cache.get(cache_key, null)
 	if typeof(cached) == TYPE_DICTIONARY:
 		return cached
 	var allowed: Dictionary = {}
+	var play_tiles: Dictionary = {}
 	var flowers: Dictionary = {}
-	var tile_codes: Array = rule_tile_codes(variant) if variant != "" else rule_tile_codes()
-	var flower_codes: Array = rule_flower_codes(variant) if variant != "" else FLOWER_CODES
+	var tile_codes: Array = rule_tile_codes(cache_key) if resolved_variant != "" else TILE_CODES
+	var flower_codes: Array = rule_flower_codes(cache_key) if resolved_variant != "" else FLOWER_CODES
 	for code in tile_codes:
-		allowed[normalize_tile_code(str(code))] = true
+		var normalized := normalize_tile_code(str(code))
+		allowed[normalized] = true
+		play_tiles[normalized] = true
 	for code in flower_codes:
 		var normalized := normalize_tile_code(str(code))
 		allowed[normalized] = true
 		flowers[normalized] = true
-	var model := {"allowed": allowed, "flowers": flowers}
+	var model := {"allowed": allowed, "tiles": play_tiles, "flowers": flowers}
 	online_rule_model_cache[cache_key] = model
 	online_rule_code_set_cache[cache_key] = allowed
 	return model
@@ -838,7 +842,8 @@ func online_action_validation_error(payload: Dictionary) -> String:
 		var tile := normalize_tile_code(str(payload.get("tile", "")))
 		if tile == "":
 			return "请选择一张牌。"
-		if not rule_tile_codes().has(normalize_tile_code(tile)):
+		var online_play_tiles: Dictionary = online_rule_model(str(online_game.get("ruleVariant", ""))).get("tiles", {}) as Dictionary
+		if not online_play_tiles.has(tile):
 			return "这张牌不在当前牌谱中。"
 		if mode != "online_game":
 			return "请先进入联机牌局。"
