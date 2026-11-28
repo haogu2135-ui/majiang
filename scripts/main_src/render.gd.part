@@ -11939,18 +11939,18 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 		soft.name = "DiscardRiverWarmWash_%d" % seat
 		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
 	var is_last_source = seat == current_latest_seat and discard_count > 0
-	var river_frame_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
+	var river_frame_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 	if river_frame_tex != null:
 		var river_frame := NinePatchRect.new()
 		river_frame.name = "DiscardRiverInlayFrame_%d" % seat
 		river_frame.texture = river_frame_tex
 		river_frame.draw_center = false
-		river_frame.patch_margin_left = 18
-		river_frame.patch_margin_right = 18
-		river_frame.patch_margin_top = 18
-		river_frame.patch_margin_bottom = 18
+		river_frame.patch_margin_left = 8
+		river_frame.patch_margin_right = 8
+		river_frame.patch_margin_top = 8
+		river_frame.patch_margin_bottom = 8
 		river_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		river_frame.modulate = Color(0.94, 0.82, 0.50, 0.24 if is_last_source else 0.11)
+		river_frame.modulate = Color(0.94, 0.84, 0.56, 0.20 if is_last_source else 0.09)
 		apply_rect(river_frame, rect_full(0.0, 0.0, 1.0, 1.0))
 		art.add_child(river_frame)
 	if is_last_source:
@@ -15722,18 +15722,18 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.set_meta("viewport_snapshot", viewport_size)
 	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(panel)
-	var claim_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	var claim_frame_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 	if claim_frame_tex != null:
 		var context_frame := NinePatchRect.new()
 		context_frame.name = "PendingClaimContextFrame"
 		context_frame.texture = claim_frame_tex
 		context_frame.draw_center = false
-		context_frame.patch_margin_left = 20
-		context_frame.patch_margin_right = 20
-		context_frame.patch_margin_top = 20
-		context_frame.patch_margin_bottom = 20
+		context_frame.patch_margin_left = 6
+		context_frame.patch_margin_right = 6
+		context_frame.patch_margin_top = 6
+		context_frame.patch_margin_bottom = 6
 		context_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		context_frame.modulate = Color(0.96, 0.86, 0.58, 0.86)
+		context_frame.modulate = Color(0.84, 0.70, 0.36, 0.86)
 		apply_rect(context_frame, rect_full(0.0, 0.0, 1.0, 1.0))
 		panel.add_child(context_frame)
 	var source_seat := int(pending.get("from_seat", -1))
@@ -15828,23 +15828,20 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	timer.set_meta("response_summary", pending_claim_focus_text())
 	timer.set_meta("timeout_result", "到0秒自动过")
 	parent.add_child(timer)
-	var timer_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	var timer_frame_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 	if timer_frame_tex != null:
 		var timer_frame := NinePatchRect.new()
 		timer_frame.name = "PendingClaimTimerFrame"
 		timer_frame.texture = timer_frame_tex
 		timer_frame.draw_center = false
-		timer_frame.patch_margin_left = 18
-		timer_frame.patch_margin_right = 18
-		timer_frame.patch_margin_top = 18
-		timer_frame.patch_margin_bottom = 18
+		timer_frame.patch_margin_left = 6
+		timer_frame.patch_margin_right = 6
+		timer_frame.patch_margin_top = 6
+		timer_frame.patch_margin_bottom = 6
 		timer_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		timer_frame.modulate = Color(0.96, 0.86, 0.58, 0.86)
+		timer_frame.modulate = Color(0.84, 0.70, 0.36, 0.86)
 		apply_rect(timer_frame, rect_full(0.0, 0.0, 1.0, 1.0))
 		timer.add_child(timer_frame)
-	var timer_top_rule := add_optional_gpt_illustration_texture(timer, "quiet_gold_accent", rect_full(0.040, 0.000, 0.960, 0.050), 0.72, false)
-	if timer_top_rule != null:
-		timer_top_rule.name = "PendingClaimTimerGoldTopRule"
 	var timer_label := make_label(timer, pending_claim_timer_text(), 12, Color.WHITE, true)
 	timer_label.name = "PendingClaimTimerText"
 	timer_label.add_theme_font_override("font", ui_heading_font())
@@ -16307,18 +16304,18 @@ func draw_round_summary(parent: Control) -> void:
 		owner.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	mark_ui_optimization(panel, "F-245")
 	parent.add_child(panel)
-	var summary_gold_tex := optional_gpt_illustration_texture("menu_hero_frame_gold_gpt")
+	var summary_gold_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 	if summary_gold_tex != null:
 		var summary_gold := NinePatchRect.new()
 		summary_gold.name = "RoundSummaryGoldFrame"
 		summary_gold.texture = summary_gold_tex
 		summary_gold.draw_center = false
-		summary_gold.patch_margin_left = 28
-		summary_gold.patch_margin_right = 28
-		summary_gold.patch_margin_top = 28
-		summary_gold.patch_margin_bottom = 28
+		summary_gold.patch_margin_left = 8
+		summary_gold.patch_margin_right = 8
+		summary_gold.patch_margin_top = 8
+		summary_gold.patch_margin_bottom = 8
 		summary_gold.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		summary_gold.modulate = Color(0.88, 0.74, 0.38, 0.56)
+		summary_gold.modulate = Color(0.86, 0.72, 0.36, 0.78)
 		apply_rect(summary_gold, rect_full(0.0, 0.0, 1.0, 1.0))
 		panel.add_child(summary_gold)
 	var layout := round_summary_paper_layout(Vector2(panel_width_px, panel_height_px))
@@ -17273,21 +17270,18 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	var player := get_player_info(seat)
 	var active := int(discard_snapshot.get("current_seat", get_current_seat())) == seat
 	if active:
-		var seat_gold_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
-		if seat_gold_tex == null:
-			seat_gold_tex = optional_gpt_illustration_texture("focus_ring_gold_gpt")
+		var seat_gold_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 		if seat_gold_tex != null:
 			var active_frame := NinePatchRect.new()
 			active_frame.name = "SeatActiveGoldFrame_%d" % seat
 			active_frame.texture = seat_gold_tex
 			active_frame.draw_center = false
-			var seat_margin := 18 if seat_gold_tex.get_size().x >= 256.0 else 10
-			active_frame.patch_margin_left = seat_margin
-			active_frame.patch_margin_right = seat_margin
-			active_frame.patch_margin_top = seat_margin
-			active_frame.patch_margin_bottom = seat_margin
+			active_frame.patch_margin_left = 8
+			active_frame.patch_margin_right = 8
+			active_frame.patch_margin_top = 8
+			active_frame.patch_margin_bottom = 8
 			active_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			active_frame.modulate = Color(1.0, 0.88, 0.44, 0.90)
+			active_frame.modulate = Color(1.0, 0.88, 0.44, 0.92)
 			apply_rect(active_frame, rect_full(0.0, 0.0, 1.0, 1.0))
 			panel.add_child(active_frame)
 	var last_seat := int(discard_snapshot.get("seat", get_last_discard_seat()))
@@ -22311,21 +22305,18 @@ func draw_tile_external_marker(parent: Control, highlighted: bool, edge_tint: Co
 		marker.offset_top -= vertical_lift
 		marker.offset_bottom -= vertical_lift
 	parent.add_child(marker)
-	var gold_frame_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
-	if gold_frame_tex == null:
-		gold_frame_tex = optional_gpt_illustration_texture("focus_ring_gold_gpt")
+	var gold_frame_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
 	if gold_frame_tex != null:
 		var rim := NinePatchRect.new()
 		rim.name = "TileGoldRimFrame"
 		rim.texture = gold_frame_tex
 		rim.draw_center = false
-		var rim_margin := 20 if gold_frame_tex.get_size().x >= 256.0 else 12
-		rim.patch_margin_left = rim_margin
-		rim.patch_margin_right = rim_margin
-		rim.patch_margin_top = rim_margin
-		rim.patch_margin_bottom = rim_margin
+		rim.patch_margin_left = 6
+		rim.patch_margin_right = 6
+		rim.patch_margin_top = 6
+		rim.patch_margin_bottom = 6
 		rim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rim.self_modulate = Color(1.0, 0.90, 0.56, 0.98) if edge_tint == Color.WHITE else edge_tint
+		rim.self_modulate = Color(1.0, 0.90, 0.52, 0.98) if edge_tint == Color.WHITE else edge_tint
 		apply_rect(rim, rect_full(0.0, 0.0, 1.0, 1.0))
 		rim.offset_left = -3.5
 		rim.offset_top = -3.5
