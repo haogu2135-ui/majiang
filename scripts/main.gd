@@ -11617,8 +11617,6 @@ func commit_discard(seat: int, tile: String, preferred_index: int = -1) -> bool:
 		hand_instance_serials.remove_at(index)
 	players[seat]["hand_instance_serials"] = hand_instance_serials
 	if seat == 0:
-		offline_last_draw = {}
-	if seat == 0:
 		clear_pending_danger_discard()
 	invalidate_self_draw_readiness()
 	players[seat]["discards"].append(tile)
@@ -13214,23 +13212,33 @@ func use_offline_inventory_item(item_id: String) -> bool:
 		var serial := int(offline_last_draw.get("serial", -1))
 		var instances: Array = players[0].get("hand_instance_serials", [])
 		var hand_index := instances.find(serial)
+		if hand_index < 0 or hand_index >= players[0]["hand"].size():
+			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+			return false
+		var old_tile := normalize_tile_code(str(players[0]["hand"][hand_index]))
 		var wall_index := -1
+		var has_any_non_flower := false
 		for index in range(wall.size() - 1, -1, -1):
-			if not is_flower_tile(wall[index]):
+			var candidate := normalize_tile_code(str(wall[index]))
+			if is_flower_tile(candidate):
+				continue
+			has_any_non_flower = true
+			if candidate != old_tile:
 				wall_index = index
 				break
-		if hand_index < 0 or wall_index < 0:
-			show_toast("当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
+		if wall_index < 0:
+			show_toast("余牌中已无与当前摸牌不同的牌，道具未消耗。" if has_any_non_flower else "当前没有可交换的摸牌或余牌，道具未消耗。", 2200)
 			return false
 		if not use_item(item_id):
 			return false
-		var old_tile := str(players[0]["hand"][hand_index])
 		var new_tile := str(wall[wall_index])
 		wall.remove_at(wall_index)
 		wall.push_front(old_tile)
 		players[0]["hand"][hand_index] = new_tile
 		offline_last_draw["tile"] = new_tile
 		offline_self_draw_ready["tile"] = new_tile
+		sort_player_hand(0)
+		hand_keyboard_selection = -1
 		record_round_event("item_swap", {"seat": 0, "old_tile": old_tile, "new_tile": new_tile})
 		mark_offline_progress_dirty()
 		request_game_render()
@@ -13842,9 +13850,9 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 	var is_danger := role == "danger_confirm" or bool(button.get_meta("ui_danger_action", false))
 	var face_key_meta := str(button.get_meta("guofeng_button_face_key", ""))
 	var has_cinnabar_face := face_key_meta == "button_face_danger_cinnabar_gpt" and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face := (not is_champagne_cta) and (face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt", "battle_ink_plaque_20261112"] or has_cinnabar_face or is_utility)
+	var ink_face := (not is_champagne_cta) and (face_key_meta in ["menu_ink_primary", "button_face_jiangnan_active_gpt", "battle_ink_plaque_20261112", "table_log_dark_jade_gpt"] or has_cinnabar_face or is_utility)
 	var on_ink := false if is_champagne_cta else ((not focused and group == "tools") if group != "" else (focused or ink_face))
-	var text_color := Color(0.08, 0.16, 0.10) if is_champagne_cta else (Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18))
+	var text_color := Color(0.12, 0.08, 0.03) if is_champagne_cta else (Color(0.97, 0.93, 0.78) if on_ink else Color(0.11, 0.23, 0.18))
 	if is_danger or (role == "win" and has_cinnabar_face):
 		if has_cinnabar_face:
 			text_color = Color(0.99, 0.95, 0.84)
@@ -13862,16 +13870,20 @@ func sync_action_button_focus_art(button: Button, focused: bool) -> void:
 		on_ink = false
 	elif is_utility and focused:
 		button.modulate = Color.WHITE
-	elif role in ["gang", "peng"] and not focused:
-		text_color = Color(0.09, 0.19, 0.13)
+	elif role == "gang" and not focused:
+		text_color = Color(0.14, 0.08, 0.03)
 		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
+	elif role == "peng" and not focused:
+		text_color = Color(0.98, 0.94, 0.80) if face_key_meta == "button_face_jiangnan_active_gpt" else Color(0.09, 0.19, 0.13)
+		button.add_theme_font_override("font", ui_heading_font())
+		on_ink = face_key_meta == "button_face_jiangnan_active_gpt"
 	elif role == "chi" and not focused:
 		text_color = Color(0.46, 0.17, 0.04)
 		button.add_theme_font_override("font", ui_heading_font())
 		on_ink = false
 	elif role == "pass" and not focused:
-		text_color = Color(0.96, 0.93, 0.80)
+		text_color = Color(0.88, 0.90, 0.84) if face_key_meta == "table_log_dark_jade_gpt" else Color(0.96, 0.93, 0.80)
 		button.add_theme_font_override("font", ui_cjk_font())
 		on_ink = true
 	elif group == "tools" and not focused:
@@ -14572,17 +14584,36 @@ func draw_actions(parent: Control) -> void:
 				next_hand_button.tooltip_text = "继续当前牌局，进入下一局"
 				var next_face := next_hand_button.get_node_or_null("GptButtonFacePlate") as TextureRect
 				if next_face != null:
-					var gold_tex := optional_gpt_illustration_texture("button_face_jiangnan_gpt")
+					var plaque_tex := optional_gpt_illustration_texture("yaku_chip_plaque_gpt")
+					var gold_tex := plaque_tex if plaque_tex != null else optional_gpt_illustration_texture("button_face_jiangnan_gpt")
 					if gold_tex != null:
 						next_face.texture = gold_tex
-						configure_guofeng_button_slice(next_face, true, 96, 0.125, gold_tex, false)
-					var next_edges := next_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
-					if next_edges != null:
-						next_edges.self_modulate = Color(1.0, 0.94, 0.74, 1.0)
-					else:
-						next_face.self_modulate = Color(1.0, 0.94, 0.74, 1.0)
+						if plaque_tex != null:
+							configure_guofeng_button_slice(next_face, false)
+							next_hand_button.set_meta("guofeng_button_face_key", "yaku_chip_plaque_gpt")
+							next_face.modulate = Color.WHITE
+							next_face.self_modulate = Color.WHITE
+						else:
+							configure_guofeng_button_slice(next_face, true, 96, 0.125, gold_tex, false)
+							next_hand_button.set_meta("guofeng_button_face_key", "button_face_jiangnan_gpt")
+							var next_edges := next_face.get_node_or_null("AuthoredBitmapEdges") as NinePatchRect
+							if next_edges != null:
+								next_edges.self_modulate = Color(1.0, 0.94, 0.74, 1.0)
+							else:
+								next_face.self_modulate = Color(1.0, 0.94, 0.74, 1.0)
+					if plaque_tex != null and fx_enabled_effective() and not high_contrast_enabled and DisplayServer.get_name().to_lower() != "headless":
+						var cta_shimmer := TextureRect.new()
+						cta_shimmer.name = "NextHandGoldShimmer"
+						cta_shimmer.texture = plaque_tex
+						cta_shimmer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+						cta_shimmer.stretch_mode = TextureRect.STRETCH_SCALE
+						cta_shimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+						cta_shimmer.modulate = Color(1.0, 0.95, 0.74, 0.42)
+						apply_rect(cta_shimmer, rect_full(0.06, 0.04, 0.94, 0.16))
+						next_face.add_child(cta_shimmer)
+						apply_gold_foil_shader(cta_shimmer, 0.55, 0.30)
 				for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
-					next_hand_button.add_theme_color_override(state, Color(0.08, 0.18, 0.12))
+					next_hand_button.add_theme_color_override(state, Color(0.12, 0.08, 0.03))
 				action_bar.add_child(next_hand_button)
 			var new_match_button = make_action_button("新赛", Color(0.86, 0.42, 0.32), func() -> void:
 				start_new_offline_match()
@@ -16105,6 +16136,27 @@ func draw_center(parent: Control) -> void:
 		wind.add_theme_color_override("font_outline_color", Color(0.015, 0.028, 0.018, 0.94))
 		wind.add_theme_constant_override("outline_size", 2 if is_active_wind else 1)
 		apply_rect(wind, CENTER_WIND_RECTS[i])
+		if is_active_wind:
+			var wind_glow := add_optional_gpt_illustration_texture(wind, "ui_soft_flash", rect_full(-0.22, -0.18, 1.22, 1.18), 0.26, false)
+			if wind_glow != null:
+				wind_glow.name = "CenterActiveWindGlow_%s" % str(CENTER_WIND_LABELS[i])
+				wind_glow.show_behind_parent = true
+				wind_glow.modulate = Color(1.0, 0.86, 0.40, 0.26)
+			var wind_ring_tex := optional_gpt_illustration_texture("focus_ring_gold_gpt")
+			if wind_ring_tex != null:
+				var wind_ring := NinePatchRect.new()
+				wind_ring.name = "CenterActiveWindRing_%s" % str(CENTER_WIND_LABELS[i])
+				wind_ring.texture = wind_ring_tex
+				wind_ring.draw_center = false
+				wind_ring.patch_margin_left = 10
+				wind_ring.patch_margin_right = 10
+				wind_ring.patch_margin_top = 10
+				wind_ring.patch_margin_bottom = 10
+				wind_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				wind_ring.show_behind_parent = true
+				wind_ring.modulate = Color(1.0, 0.88, 0.44, 0.72)
+				apply_rect(wind_ring, rect_full(-0.08, -0.04, 1.08, 1.04))
+				wind.add_child(wind_ring)
 		if compact_center and CENTER_WIND_RECTS[i].position.y <= 0.05:
 			wind.offset_top = 3.0
 			wind.offset_bottom = 3.0
@@ -25170,7 +25222,7 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 	art.set_meta("ui_page_generation", ui_page_generation)
 	parent.add_child(art)
 	# r187: slightly stronger warm GPT river bed so porcelain seats read against felt.
-	var wash_a := 0.070 if discard_count > 0 else 0.032
+	var wash_a := 0.088 if discard_count > 0 else 0.042
 	var soft = add_optional_gpt_illustration_texture(art, "ui_title_backplate", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
 	if soft == null:
 		soft = add_optional_gpt_illustration_texture(art, "ui_river_soft_wash", rect_full(-0.010, -0.040, 1.010, 1.040), wash_a, false)
@@ -25178,8 +25230,22 @@ func draw_discard_river_art(parent: Control, seat: int, zone_rect: Rect2, discar
 		soft.name = "DiscardRiverWarmWash_%d" % seat
 		soft.modulate = Color(1.12, 1.02, 0.88, soft.modulate.a)
 	var is_last_source = seat == current_latest_seat and discard_count > 0
+	var river_frame_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
+	if river_frame_tex != null:
+		var river_frame := NinePatchRect.new()
+		river_frame.name = "DiscardRiverInlayFrame_%d" % seat
+		river_frame.texture = river_frame_tex
+		river_frame.draw_center = false
+		river_frame.patch_margin_left = 18
+		river_frame.patch_margin_right = 18
+		river_frame.patch_margin_top = 18
+		river_frame.patch_margin_bottom = 18
+		river_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		river_frame.modulate = Color(0.94, 0.82, 0.50, 0.24 if is_last_source else 0.11)
+		apply_rect(river_frame, rect_full(0.0, 0.0, 1.0, 1.0))
+		art.add_child(river_frame)
 	if is_last_source:
-		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.18), "ui_soft_flash")
+		var last_edge = make_gpt_plate_rect(rect_full(0.020, 0.040, 0.980, 0.085), Color(0.96, 0.80, 0.38, 0.22), "ui_soft_flash")
 		last_edge.name = "DiscardRiverLastSourceEdge_%d" % seat
 		art.add_child(last_edge)
 	return art
@@ -25945,6 +26011,20 @@ func draw_game_top_hud(parent: Control) -> void:
 	hud.self_modulate = Color.WHITE
 	hud.set_meta("guofeng_surface_key", "battle_hud_jiangnan_gpt")
 	parent.add_child(hud)
+	var hud_shadow_tex := optional_gpt_illustration_texture("ui_dark_scrim")
+	if hud_shadow_tex != null:
+		var hud_shadow := TextureRect.new()
+		hud_shadow.name = "TopHudBottomSoftShadow"
+		hud_shadow.texture = hud_shadow_tex
+		hud_shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		hud_shadow.stretch_mode = TextureRect.STRETCH_SCALE
+		hud_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hud_shadow.show_behind_parent = true
+		hud_shadow.modulate = Color(0.01, 0.03, 0.02, 0.22)
+		apply_rect(hud_shadow, rect_full(0.0, 1.0, 1.0, 1.0))
+		hud_shadow.offset_top = -1.0
+		hud_shadow.offset_bottom = 6.0
+		hud.add_child(hud_shadow)
 	# Content owns its own clipped labels; the shell must leave the authored
 	# shadow/focus gutter visible at the edge.
 	hud.clip_contents = false
@@ -26538,7 +26618,7 @@ func draw_hand(parent: Control) -> void:
 	# Consume an announced draw on the first hand render even when reduced motion
 	# suppresses the visual tween; otherwise the same replacement draw is retried
 	# on every subsequent render.
-	var should_animate_drawn_tile = mode == "offline" and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
+	var should_animate_drawn_tile = mode == "offline" and stable_drawn_index >= 0 and bool(offline_last_draw.get("announce", false)) and int(offline_last_draw.get("seat", -1)) == 0 and drawn_tile != "" and drawn_serial != fx_last_animated_draw_serial
 	var draw_state_assigned := false
 	# Pure 2D hand: authored assets/tiles faces via make_tile_view (no realtime 3D stage).
 
@@ -28933,6 +29013,20 @@ func draw_pending_claim_illustration(parent: Control) -> void:
 	panel.set_meta("viewport_snapshot", viewport_size)
 	panel.set_meta("viewport_snapshot_policy", "one_viewport_snapshot_per_draw")
 	parent.add_child(panel)
+	var claim_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if claim_frame_tex != null:
+		var context_frame := NinePatchRect.new()
+		context_frame.name = "PendingClaimContextFrame"
+		context_frame.texture = claim_frame_tex
+		context_frame.draw_center = false
+		context_frame.patch_margin_left = 20
+		context_frame.patch_margin_right = 20
+		context_frame.patch_margin_top = 20
+		context_frame.patch_margin_bottom = 20
+		context_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		context_frame.modulate = Color(0.96, 0.86, 0.58, 0.86)
+		apply_rect(context_frame, rect_full(0.0, 0.0, 1.0, 1.0))
+		panel.add_child(context_frame)
 	var source_seat := int(pending.get("from_seat", -1))
 	var source_name := pending_claim_source_name(source_seat)
 	var narrow_context := viewport_size.x <= 960.0
@@ -29008,7 +29102,7 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 		var timer_viewport := effective_viewport_size()
 		var seat_rect := battle_seat_layout_rect(3, SEAT_LAYOUTS[1][1], timer_viewport)
 		var context_rect := pending_claim_context_layout_rect(content_size, timer_viewport)
-		var context_gap_px := 2.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 6.0
+		var context_gap_px := 2.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 4.0
 		var timer_top := context_rect.size.y + context_gap_px / content_size.y
 		var seat_gap_px := 2.0 if (large_text_enabled and timer_viewport.y <= 560.0) else 8.0
 		var est_countdown_h := ceilf(ui_heading_font().get_height(accessibility_font_size(12)))
@@ -29025,10 +29119,28 @@ func draw_pending_claim_timer_art(parent: Control, root_slot: bool = false) -> C
 	timer.set_meta("response_summary", pending_claim_focus_text())
 	timer.set_meta("timeout_result", "到0秒自动过")
 	parent.add_child(timer)
+	var timer_frame_tex := optional_gpt_illustration_texture("guofeng_card_frame_gpt")
+	if timer_frame_tex != null:
+		var timer_frame := NinePatchRect.new()
+		timer_frame.name = "PendingClaimTimerFrame"
+		timer_frame.texture = timer_frame_tex
+		timer_frame.draw_center = false
+		timer_frame.patch_margin_left = 18
+		timer_frame.patch_margin_right = 18
+		timer_frame.patch_margin_top = 18
+		timer_frame.patch_margin_bottom = 18
+		timer_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		timer_frame.modulate = Color(0.96, 0.86, 0.58, 0.86)
+		apply_rect(timer_frame, rect_full(0.0, 0.0, 1.0, 1.0))
+		timer.add_child(timer_frame)
+	var timer_top_rule := add_optional_gpt_illustration_texture(timer, "quiet_gold_accent", rect_full(0.040, 0.000, 0.960, 0.050), 0.72, false)
+	if timer_top_rule != null:
+		timer_top_rule.name = "PendingClaimTimerGoldTopRule"
 	var timer_label := make_label(timer, pending_claim_timer_text(), 12, Color.WHITE, true)
 	timer_label.name = "PendingClaimTimerText"
 	timer_label.add_theme_font_override("font", ui_heading_font())
 	style_guofeng_label(timer_label)
+	timer_label.add_theme_color_override("font_color", Color(0.58, 0.16, 0.12, 1.0))
 	apply_rect(timer_label, rect_full(0.035, 0.0, 0.450, 1.0))
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	timer_label.set_meta("status_hierarchy", "primary_pending_window")
@@ -29448,6 +29560,21 @@ func draw_round_summary(parent: Control) -> void:
 	modal_backdrop_scrim.set_meta("modal_backdrop_owner", "RoundSummaryPanel")
 	modal_backdrop_scrim.set_meta("backdrop_layer_count", 1)
 	modal_input_shield.add_child(modal_backdrop_scrim)
+	var summary_shadow_tex := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
+	if summary_shadow_tex != null:
+		var summary_shadow := TextureRect.new()
+		summary_shadow.name = "RoundSummaryPanelDropShadow"
+		summary_shadow.texture = summary_shadow_tex
+		summary_shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		summary_shadow.stretch_mode = TextureRect.STRETCH_SCALE
+		summary_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		summary_shadow.modulate = Color(0.01, 0.03, 0.02, 0.56)
+		apply_rect(summary_shadow, rect_full(panel_left, panel_top, panel_right, panel_bottom))
+		summary_shadow.offset_left = 6.0
+		summary_shadow.offset_top = 10.0
+		summary_shadow.offset_right = 12.0
+		summary_shadow.offset_bottom = 16.0
+		modal_input_shield.add_child(summary_shadow)
 	parent.add_child(modal_input_shield)
 	var panel := make_gpt_center_crop_plate_rect(rect_full(panel_left, panel_top, panel_right, panel_bottom), Color.WHITE, "settings_readable_gpt", 1.0)
 	panel.name = "RoundSummaryPanel"
@@ -29471,6 +29598,20 @@ func draw_round_summary(parent: Control) -> void:
 		owner.set_meta("round_summary_snapshot_policy", "one_viewport_and_content_snapshot_per_draw")
 	mark_ui_optimization(panel, "F-245")
 	parent.add_child(panel)
+	var summary_gold_tex := optional_gpt_illustration_texture("menu_hero_frame_gold_gpt")
+	if summary_gold_tex != null:
+		var summary_gold := NinePatchRect.new()
+		summary_gold.name = "RoundSummaryGoldFrame"
+		summary_gold.texture = summary_gold_tex
+		summary_gold.draw_center = false
+		summary_gold.patch_margin_left = 28
+		summary_gold.patch_margin_right = 28
+		summary_gold.patch_margin_top = 28
+		summary_gold.patch_margin_bottom = 28
+		summary_gold.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		summary_gold.modulate = Color(0.88, 0.74, 0.38, 0.56)
+		apply_rect(summary_gold, rect_full(0.0, 0.0, 1.0, 1.0))
+		panel.add_child(summary_gold)
 	var layout := round_summary_paper_layout(Vector2(panel_width_px, panel_height_px))
 	panel.set_meta("guofeng_summary_layout", layout)
 	var summary_title := "荒庄结算" if round_result_kind == "wall_draw" else ("全场结算" if is_offline_match_finished() else "本局结算")
@@ -30422,6 +30563,24 @@ func draw_seat(parent: Control, seat: int, rect: Rect2, side: String, seat_threa
 	parent.add_child(panel)
 	var player := get_player_info(seat)
 	var active := int(discard_snapshot.get("current_seat", get_current_seat())) == seat
+	if active:
+		var seat_gold_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
+		if seat_gold_tex == null:
+			seat_gold_tex = optional_gpt_illustration_texture("focus_ring_gold_gpt")
+		if seat_gold_tex != null:
+			var active_frame := NinePatchRect.new()
+			active_frame.name = "SeatActiveGoldFrame_%d" % seat
+			active_frame.texture = seat_gold_tex
+			active_frame.draw_center = false
+			var seat_margin := 18 if seat_gold_tex.get_size().x >= 256.0 else 10
+			active_frame.patch_margin_left = seat_margin
+			active_frame.patch_margin_right = seat_margin
+			active_frame.patch_margin_top = seat_margin
+			active_frame.patch_margin_bottom = seat_margin
+			active_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			active_frame.modulate = Color(1.0, 0.88, 0.44, 0.90)
+			apply_rect(active_frame, rect_full(0.0, 0.0, 1.0, 1.0))
+			panel.add_child(active_frame)
 	var last_seat := int(discard_snapshot.get("seat", get_last_discard_seat()))
 	var last_tile := str(discard_snapshot.get("tile", get_last_discard()))
 	var is_source := last_seat == seat and last_tile != ""
@@ -34414,11 +34573,14 @@ func make_action_button(text: String, color: Color, callback: Callable, claim_ch
 		button.set_meta("ui_danger_action", true)
 	var is_cinnabar_role: bool = role in ["win", "danger_confirm"]
 	var has_cinnabar: bool = is_cinnabar_role and optional_gpt_illustration_texture("button_face_danger_cinnabar_gpt") != null
-	var ink_face: bool = role in ["pass", "safe", "next"]
-	var has_active_ink: bool = ink_face and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
+	var has_gang_plaque: bool = role == "gang" and optional_gpt_illustration_texture("yaku_chip_plaque_gpt") != null
+	var has_peng_jade: bool = role == "peng" and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
+	var has_pass_slate: bool = role == "pass" and optional_gpt_illustration_texture("table_log_dark_jade_gpt") != null
+	var ink_face: bool = role in ["pass", "safe", "next"] or has_peng_jade
+	var has_active_ink: bool = ink_face and not has_pass_slate and optional_gpt_illustration_texture("button_face_jiangnan_active_gpt") != null
 	ensure_button_gpt_face_plate(button, Color.WHITE, "menu_ink_primary" if (ink_face or is_cinnabar_role) else "menu_card_readable_gpt")
 	apply_guofeng_button_face(button, ink_face or is_cinnabar_role)
-	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))
+	var face_key := "button_face_danger_cinnabar_gpt" if has_cinnabar else ("yaku_chip_plaque_gpt" if has_gang_plaque else ("table_log_dark_jade_gpt" if has_pass_slate else ("button_face_jiangnan_active_gpt" if has_active_ink else ("menu_ink_primary" if (ink_face or is_cinnabar_role) else "button_face_jiangnan_gpt"))))
 	var use_raw_pending_face: bool = role in ["chi", "peng", "gang", "win", "pass"]
 	var action_face := button.get_node_or_null("GptButtonFacePlate") as TextureRect
 	if action_face != null:
@@ -34896,6 +35058,23 @@ func make_menu_card(text: String, color: Color, callback: Callable, icon_name: S
 	button.add_theme_stylebox_override("hover", empty_card)
 	button.add_theme_stylebox_override("pressed", empty_card)
 	button.add_theme_stylebox_override("focus", empty_card)
+	var card_shadow_tex := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
+	if card_shadow_tex != null:
+		var card_shadow := TextureRect.new()
+		card_shadow.name = "MenuCardDropShadow"
+		card_shadow.texture = card_shadow_tex
+		card_shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		card_shadow.stretch_mode = TextureRect.STRETCH_SCALE
+		card_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card_shadow.show_behind_parent = true
+		card_shadow.modulate = Color(0.01, 0.04, 0.03, 0.44)
+		apply_rect(card_shadow, rect_full(0.0, 0.0, 1.0, 1.0))
+		card_shadow.offset_left = 4.0
+		card_shadow.offset_top = 6.0
+		card_shadow.offset_right = 7.0
+		card_shadow.offset_bottom = 10.0
+		button.add_child(card_shadow)
+		button.move_child(card_shadow, 0)
 	draw_menu_card_entry_art(button, color, icon_name)
 	var entry_focus := button.get_node_or_null("ButtonFocusPlate") as TextureRect
 	if entry_focus != null:
@@ -35423,6 +35602,28 @@ func draw_tile_external_marker(parent: Control, highlighted: bool, edge_tint: Co
 		marker.offset_top -= vertical_lift
 		marker.offset_bottom -= vertical_lift
 	parent.add_child(marker)
+	var gold_frame_tex := optional_gpt_illustration_texture("daily_milestone_gold_frame_gpt")
+	if gold_frame_tex == null:
+		gold_frame_tex = optional_gpt_illustration_texture("focus_ring_gold_gpt")
+	if gold_frame_tex != null:
+		var rim := NinePatchRect.new()
+		rim.name = "TileGoldRimFrame"
+		rim.texture = gold_frame_tex
+		rim.draw_center = false
+		var rim_margin := 20 if gold_frame_tex.get_size().x >= 256.0 else 12
+		rim.patch_margin_left = rim_margin
+		rim.patch_margin_right = rim_margin
+		rim.patch_margin_top = rim_margin
+		rim.patch_margin_bottom = rim_margin
+		rim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rim.self_modulate = Color(1.0, 0.90, 0.56, 0.98) if edge_tint == Color.WHITE else edge_tint
+		apply_rect(rim, rect_full(0.0, 0.0, 1.0, 1.0))
+		rim.offset_left = -3.5
+		rim.offset_top = -3.5
+		rim.offset_right = 3.5
+		rim.offset_bottom = 3.5
+		marker.add_child(rim)
+		return marker
 	var edges := [
 		["TileRecentMarkerTop", rect_full(0.0, 0.0, 1.0, 0.0), Rect2(-3.0, -3.0, 3.0, -0.5)],
 		["TileRecentMarkerBottom", rect_full(0.0, 1.0, 1.0, 1.0), Rect2(-3.0, 0.5, 3.0, 3.0)],
@@ -35710,6 +35911,40 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 
 	if tile_texture != null:
 		tile_body.clip_contents = false
+		var bleed = tile_texture_bleed(size, lightweight_static_tile)
+		var celadon_back := optional_gpt_illustration_texture("table_tile_back_celadon_gpt")
+		if celadon_back != null:
+			var shadow_dx: float = clampf(size.x * 0.045, 1.2, 3.2)
+			var shadow_dy: float = clampf(size.y * 0.068, 2.0, 5.0)
+			var contact_shadow := TextureRect.new()
+			contact_shadow.name = "TileContactShadow"
+			contact_shadow.texture = celadon_back
+			contact_shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			contact_shadow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			contact_shadow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			contact_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			contact_shadow.modulate = Color(0.02, 0.05, 0.04, 0.42 if not lightweight_static_tile else 0.36)
+			contact_shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
+			contact_shadow.offset_left = -bleed.x + shadow_dx * 0.35
+			contact_shadow.offset_top = -bleed.y + shadow_dy * 0.45
+			contact_shadow.offset_right = bleed.x + shadow_dx
+			contact_shadow.offset_bottom = bleed.y + shadow_dy
+			tile_body.add_child(contact_shadow)
+			var ped_dy: float = clampf(size.y * 0.048, 1.6, 3.4)
+			var jade_pedestal := TextureRect.new()
+			jade_pedestal.name = "TileJadePedestal"
+			jade_pedestal.texture = celadon_back
+			jade_pedestal.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			jade_pedestal.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			jade_pedestal.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			jade_pedestal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			jade_pedestal.modulate = Color(0.76, 0.91, 0.82, 0.96)
+			jade_pedestal.set_anchors_preset(Control.PRESET_FULL_RECT)
+			jade_pedestal.offset_left = -bleed.x - 0.4
+			jade_pedestal.offset_top = -bleed.y + ped_dy * 0.35
+			jade_pedestal.offset_right = bleed.x + 0.4
+			jade_pedestal.offset_bottom = bleed.y + ped_dy
+			tile_body.add_child(jade_pedestal)
 		var texture = TextureRect.new()
 		texture.name = "TileFaceTexture"
 		texture.texture = tile_texture
@@ -35721,7 +35956,6 @@ func make_tile_view(tile: String, size: Vector2, clickable: bool, callback: Call
 		texture.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture.set_anchors_preset(Control.PRESET_FULL_RECT)
-		var bleed = tile_texture_bleed(size, lightweight_static_tile)
 		texture.offset_left = -bleed.x
 		texture.offset_top = -bleed.y
 		texture.offset_right = bleed.x
@@ -38202,11 +38436,31 @@ func _show_menu_impl() -> void:
 		title.offset_right = clampf(ceilf(title_text_w) + (72.0 if content_size.x >= 1600.0 else 48.0), 180.0, content_size.x * 0.335)
 	title.offset_top = 8.0
 	title.offset_bottom = title.offset_top + title_height
-	title_rule.offset_top = title.offset_bottom + 8.0
+	var title_rule_tex := optional_gpt_illustration_texture("yaku_chip_plaque_gpt")
+	if title_rule_tex != null:
+		var title_gold_rule := TextureRect.new()
+		title_gold_rule.name = "MenuTitleGoldRule"
+		title_gold_rule.texture = title_rule_tex
+		title_gold_rule.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		title_gold_rule.stretch_mode = TextureRect.STRETCH_SCALE
+		title_gold_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_gold_rule.modulate = Color(1.0, 0.92, 0.64, 0.86)
+		title_gold_rule.anchor_left = 0.0
+		title_gold_rule.anchor_right = 0.0
+		title_gold_rule.anchor_top = 0.0
+		title_gold_rule.anchor_bottom = 0.0
+		title_gold_rule.offset_left = 2.0
+		title_gold_rule.offset_right = 116.0 if compact_home else 148.0
+		title_gold_rule.offset_top = title.offset_bottom + 2.0
+		title_gold_rule.offset_bottom = title.offset_bottom + 5.0
+		header.add_child(title_gold_rule)
+		if fx_enabled_effective() and not high_contrast_enabled and DisplayServer.get_name().to_lower() != "headless":
+			apply_gold_foil_shader(title_gold_rule, 0.45, 0.25)
+	title_rule.offset_top = title.offset_bottom + 9.0
 	title_rule.offset_bottom = title_rule.offset_top + rule_height
 	header.anchor_bottom = header.anchor_top
 	header.offset_bottom = title_rule.offset_bottom + 8.0
-	header.set_meta("title_rule_gap_px", 8.0)
+	header.set_meta("title_rule_gap_px", 9.0)
 	header.set_meta("reading_surface_contract", "ivory_type_over_dark_authored_garden")
 
 	# 教学入口始终可见；完成或跳过后只保留轻量复习入口，不打扰老用户。
@@ -49696,8 +49950,19 @@ func handle_online_message(line: String) -> void:
 		if snapshot_error != "":
 			set_online_feedback("服务器状态无效：%s" % snapshot_error, false)
 			return
+		var next_game_room := bounded_online_input(str(next_game.get("roomCode", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		if next_game_room != "":
+			selected_room = next_game_room
+		var resumed_room := bounded_online_input(str(online_resume_context.get("room", "")), ONLINE_ROOM_CODE_MAX_LENGTH)
+		var resumed_from_game_state := false
+		if online_resume_pending and (resumed_room == "" or next_game_room == "" or next_game_room == resumed_room):
+			online_resume_pending = false
+			online_resume_join_sent = false
+			online_reconnect_attempts = 0
+			online_next_reconnect_msec = 0
+			resumed_from_game_state = true
 		var game_fingerprint := online_snapshot_fingerprint("gameState", next_game)
-		if game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
+		if not resumed_from_game_state and game_fingerprint != "" and game_fingerprint == online_last_snapshot_fingerprint:
 			return
 		if str(next_game.get("roomCode", "")) != online_chat_room_context():
 			online_pending_chat_requests.clear()
@@ -63659,11 +63924,13 @@ func digest_is_missing_or_invalid(event: Dictionary) -> bool:
 	var digest := str(event.get("digest", ""))
 	return digest == "" or digest != replay_event_digest(event)
 
-func round_replay_digest(events: Array = []) -> String:
-	if events.is_empty():
+func round_replay_digest(events: Variant = null) -> String:
+	if events == null:
 		ensure_round_replay_view_cache()
 		return str(replay_view_cache.get("digest", ""))
-	var source := events if not events.is_empty() else round_event_history
+	if typeof(events) != TYPE_ARRAY:
+		return ""
+	var source: Array = events as Array
 	if source.is_empty():
 		return ""
 	var last = source.back()
@@ -64356,13 +64623,17 @@ func import_round_replay_share_code(code: String) -> Dictionary:
 		return {}
 	var payload: Dictionary = parsed
 	var events = payload.get("events", [])
-	if typeof(events) != TYPE_ARRAY or not validate_round_replay(events as Array):
+	if typeof(events) != TYPE_ARRAY:
+		return {}
+	var event_list: Array = events as Array
+	if event_list.is_empty() or not validate_round_replay(event_list):
 		return {}
 	if int(payload.get("schema", 0)) != REPLAY_SCHEMA_VERSION:
 		return {}
-	if str(payload.get("digest", "")) != round_replay_digest(events as Array):
+	var payload_digest := str(payload.get("digest", "")).strip_edges()
+	if payload_digest == "" or payload_digest != round_replay_digest(event_list):
 		return {}
-	telemetry_record_event("replay_imported", {"verified": true, "event_count": (events as Array).size()})
+	telemetry_record_event("replay_imported", {"verified": true, "event_count": event_list.size()})
 	return payload.duplicate(true)
 
 func match_progress_report() -> Dictionary:

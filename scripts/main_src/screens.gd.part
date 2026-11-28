@@ -559,11 +559,31 @@ func _show_menu_impl() -> void:
 		title.offset_right = clampf(ceilf(title_text_w) + (72.0 if content_size.x >= 1600.0 else 48.0), 180.0, content_size.x * 0.335)
 	title.offset_top = 8.0
 	title.offset_bottom = title.offset_top + title_height
-	title_rule.offset_top = title.offset_bottom + 8.0
+	var title_rule_tex := optional_gpt_illustration_texture("yaku_chip_plaque_gpt")
+	if title_rule_tex != null:
+		var title_gold_rule := TextureRect.new()
+		title_gold_rule.name = "MenuTitleGoldRule"
+		title_gold_rule.texture = title_rule_tex
+		title_gold_rule.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		title_gold_rule.stretch_mode = TextureRect.STRETCH_SCALE
+		title_gold_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title_gold_rule.modulate = Color(1.0, 0.92, 0.64, 0.86)
+		title_gold_rule.anchor_left = 0.0
+		title_gold_rule.anchor_right = 0.0
+		title_gold_rule.anchor_top = 0.0
+		title_gold_rule.anchor_bottom = 0.0
+		title_gold_rule.offset_left = 2.0
+		title_gold_rule.offset_right = 116.0 if compact_home else 148.0
+		title_gold_rule.offset_top = title.offset_bottom + 2.0
+		title_gold_rule.offset_bottom = title.offset_bottom + 5.0
+		header.add_child(title_gold_rule)
+		if fx_enabled_effective() and not high_contrast_enabled and DisplayServer.get_name().to_lower() != "headless":
+			apply_gold_foil_shader(title_gold_rule, 0.45, 0.25)
+	title_rule.offset_top = title.offset_bottom + 9.0
 	title_rule.offset_bottom = title_rule.offset_top + rule_height
 	header.anchor_bottom = header.anchor_top
 	header.offset_bottom = title_rule.offset_bottom + 8.0
-	header.set_meta("title_rule_gap_px", 8.0)
+	header.set_meta("title_rule_gap_px", 9.0)
 	header.set_meta("reading_surface_contract", "ivory_type_over_dark_authored_garden")
 
 	# 教学入口始终可见；完成或跳过后只保留轻量复习入口，不打扰老用户。

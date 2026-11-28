@@ -2039,6 +2039,19 @@ func add_battle_background(parent: Control) -> void:
 		table = add_optional_gpt_illustration_texture(parent, "table_gpt_backdrop_bright", rect_full(0.0, 0.0, 1.0, 1.0), 1.0, false)
 	if table != null:
 		table.name = "OfflineBattleBrightGPTTable"
+		if TABLE_CINEMATIC_LIGHTING_SHADER != null and not high_contrast_enabled:
+			var table_mat := ShaderMaterial.new()
+			table_mat.shader = TABLE_CINEMATIC_LIGHTING_SHADER
+			table_mat.set_shader_parameter("exposure", 1.03)
+			table_mat.set_shader_parameter("center_lift", 0.11)
+			table_mat.set_shader_parameter("edge_falloff", 0.14)
+			table_mat.set_shader_parameter("key_light_pos", Vector2(0.50, 0.36))
+			table_mat.set_shader_parameter("key_light_radius", 0.56)
+			table_mat.set_shader_parameter("key_tint", Vector3(1.0, 0.95, 0.84))
+			table_mat.set_shader_parameter("felt_saturation", 1.05)
+			table_mat.set_shader_parameter("shadow_tint", Vector3(0.02, 0.05, 0.04))
+			table.material = table_mat
+			table.set_meta("cinematic_lighting_shader", true)
 		return
 	var battle_key := "gpt_jade_felt" if optional_gpt_illustration_texture("gpt_jade_felt") != null else "table_gpt_backdrop"
 	var battle_scene = make_gpt_center_crop_plate_rect(rect_full(0.0, 0.0, 1.0, 1.0), Color(0.62, 0.82, 0.62, 0.84), battle_key, 0.82)
@@ -3456,11 +3469,11 @@ func sync_guofeng_button_face_state(button: Button) -> void:
 	var base_modulate: Color = button.get_meta("guofeng_button_base_modulate", Color.WHITE)
 	var ink_face := str(button.get_meta("guofeng_button_face_key", "")) == "menu_ink_primary"
 	if button.disabled:
-		var disabled_alpha := 0.90 if high_contrast_enabled else (0.76 if ink_face else 0.74)
+		var disabled_alpha := 0.92 if high_contrast_enabled else (0.78 if ink_face else 0.86)
 		face.modulate = Color(
-			base_modulate.r * (0.88 if ink_face else 0.93),
-			base_modulate.g * (0.90 if ink_face else 0.92),
-			base_modulate.b * (0.88 if ink_face else 0.89),
+			base_modulate.r * (0.88 if ink_face else 0.95),
+			base_modulate.g * (0.90 if ink_face else 0.93),
+			base_modulate.b * (0.88 if ink_face else 0.87),
 			disabled_alpha
 		)
 	else:
@@ -3613,7 +3626,7 @@ func apply_guofeng_button_face(button: Button, ink_face: bool = false) -> void:
 	var text_color := danger_ivory_color if filled_danger_visual else (danger_paper_color if is_danger_action else (ink_text_color if ink_face else paper_ink_color))
 	var hover_text_color := Color(1.0, 0.99, 0.92) if filled_danger_visual else (Color(0.42, 0.06, 0.05) if is_danger_action else text_color)
 	var disabled_ink_color := Color(0.86, 0.85, 0.76) if high_contrast_enabled else Color(0.80, 0.79, 0.69)
-	var disabled_paper_color := Color(0.18, 0.24, 0.20) if high_contrast_enabled else Color(0.30, 0.36, 0.32)
+	var disabled_paper_color := Color(0.16, 0.22, 0.18) if high_contrast_enabled else Color(0.24, 0.30, 0.26)
 	var disabled_text_color := disabled_ink_color if (ink_face or filled_danger_visual) else (Color(0.50, 0.26, 0.23) if is_danger_action else disabled_paper_color)
 	var base_face_modulate := Color.WHITE
 	if is_danger_action and danger_cinnabar_tex == null:

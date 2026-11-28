@@ -163,6 +163,13 @@ func check_guofeng_battle_inputs(scene: Node, output_dir: String) -> void:
 				check(gap <= face.get_global_rect().size.x / 3.0 + 0.1 and gap >= 0.0, "horizontal original wall backs stay separate with at most one-third-face gaps")
 			previous_face = face
 	check(not scene.find_children("WallTileBack_*", "TextureRect", true, false).is_empty(), "production wall has actual bitmap children, beyond layout metadata")
+	check(not scene.find_children("WallStackShadows", "Control", true, false).is_empty(), "V-01: production wall renders double-stack celadon shadows behind WallTileBack_*")
+	var tile_pedestals := scene.find_children("TileJadePedestal", "TextureRect", true, false)
+	var tile_shadows := scene.find_children("TileContactShadow", "TextureRect", true, false)
+	check(not tile_pedestals.is_empty() and not tile_shadows.is_empty(), "V-01: rendered mahjong tiles include celadon jade pedestals and soft contact shadows")
+	var table_backdrop := scene.find_child("OfflineBattleBrightGPTTable", true, false) as TextureRect
+	if table_backdrop != null and not scene.high_contrast_enabled:
+		check(table_backdrop.material is ShaderMaterial and bool(table_backdrop.get_meta("cinematic_lighting_shader", false)), "V-02: battle felt applies table_cinematic_lighting shader in standard theme")
 	check_battle_surfaces(scene)
 	check_advisor_obstacles(scene)
 	var live_state := battle_capture_state(scene)

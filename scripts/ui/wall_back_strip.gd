@@ -6,6 +6,7 @@ extends Control
 const WALL_STRIP_TEXTURE_PATH := "res://assets/illustrations/wall_strip_landscape_v2.png"
 const WALL_STRIP_FALLBACK_TEXTURE_PATH := "res://assets/illustrations/wall_strip_landscape.png"
 const WALL_BACK_TEXTURE_PATH := "res://assets/tiles/tile_back.png"
+const WALL_STACK_PEDESTAL_PATH := "res://assets/illustrations/table_tile_back_celadon_gpt.png"
 const SOFT_FLASH_PATH := "res://assets/illustrations/ui_soft_flash.png"
 const WARNING_PATH := "res://assets/illustrations/center_wall_gpt_warning.png"
 const WARNING_FALLBACK_PATH := "res://assets/illustrations/top_hud_wall_gpt_warning.png"
@@ -32,6 +33,10 @@ var break_color := Color(0.96, 0.82, 0.42, 0.24)
 var count_mark_color := Color(0.18, 0.12, 0.07, 0.20)
 var wall_strip_texture_cache: Texture2D
 var wall_back_texture_cache: Texture2D
+var wall_stack_pedestal_cache: Texture2D
+var wall_shadow_host: Control
+var wall_shadow_pool: Array[TextureRect] = []
+var wall_pedestal_pool: Array[TextureRect] = []
 var wall_face_pool: Array[TextureRect] = []
 var soft_flash_texture_cache: Texture2D
 var warning_texture_cache: Texture2D
@@ -84,10 +89,42 @@ static func face_center_for_layout(index: int, capacity: int, is_horizontal: boo
 
 
 func sync_wall_faces() -> void:
-	# Reuse original untinted 2D bitmaps. No generated slot, rail, shadow or
-	# texture painting: each remaining wall marker is an ordinary TextureRect.
+	# Reuse original untinted 2D bitmaps. Double-stack jade pedestal and soft
+	# contact shadows live inside a non-TextureRect Control behind the faces so
+	# every direct WallTileBack_* child stays a clean untinted tile_back face.
 	var back := get_wall_back_texture()
+	var pedestal_tex := get_wall_stack_pedestal_texture()
 	var visible_count := tile_count if back != null and capacity_count > 0 else 0
+	if pedestal_tex != null:
+		if wall_shadow_host == null or not is_instance_valid(wall_shadow_host):
+			wall_shadow_host = Control.new()
+			wall_shadow_host.name = "WallStackShadows"
+			wall_shadow_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			wall_shadow_host.set_anchors_preset(Control.PRESET_FULL_RECT)
+			add_child(wall_shadow_host)
+		move_child(wall_shadow_host, 0)
+		while wall_shadow_pool.size() < visible_count:
+			var sh := TextureRect.new()
+			sh.name = "WallTileShadow_%d" % wall_shadow_pool.size()
+			sh.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			sh.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			sh.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			sh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			sh.texture = pedestal_tex
+			sh.modulate = Color(0.02, 0.05, 0.04, 0.42)
+			wall_shadow_host.add_child(sh)
+			wall_shadow_pool.append(sh)
+		while wall_pedestal_pool.size() < visible_count:
+			var ped := TextureRect.new()
+			ped.name = "WallTileLowerStack_%d" % wall_pedestal_pool.size()
+			ped.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			ped.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			ped.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			ped.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			ped.texture = pedestal_tex
+			ped.modulate = Color(0.60, 0.78, 0.68, 0.94)
+			wall_shadow_host.add_child(ped)
+			wall_pedestal_pool.append(ped)
 	while wall_face_pool.size() < visible_count:
 		var face := TextureRect.new()
 		face.name = "WallTileBack_%d" % wall_face_pool.size()
@@ -98,17 +135,37 @@ func sync_wall_faces() -> void:
 		face.texture = back
 		add_child(face)
 		wall_face_pool.append(face)
+	var ped_offset := Vector2(clampf(tile_size.x * 0.04, 0.6, 1.4), clampf(tile_size.y * 0.08, 1.4, 2.4))
+	var shadow_offset := Vector2(clampf(tile_size.x * 0.11, 1.4, 2.8), clampf(tile_size.y * 0.15, 2.4, 4.2))
 	for index in range(wall_face_pool.size()):
 		var face := wall_face_pool[index]
 		face.visible = index < visible_count
+		if index < wall_shadow_pool.size():
+			wall_shadow_pool[index].visible = face.visible
+		if index < wall_pedestal_pool.size():
+			wall_pedestal_pool[index].visible = face.visible
 		if not face.visible:
 			continue
 		# Center remaining stacks along the wall track around the table compass.
 		var center := face_center_for_layout(index, capacity_count, horizontal, size, tile_size, visible_count)
-		face.position = center - tile_size * 0.5
+		var base_pos := center - tile_size * 0.5
+		face.position = base_pos
 		face.size = tile_size
+		if index < wall_shadow_pool.size():
+			wall_shadow_pool[index].position = base_pos + shadow_offset
+			wall_shadow_pool[index].size = tile_size
+		if index < wall_pedestal_pool.size():
+			wall_pedestal_pool[index].position = base_pos + ped_offset
+			wall_pedestal_pool[index].size = tile_size
 	set_meta("wall_bitmap_face_count", visible_count)
 	set_meta("wall_bitmap_source", WALL_BACK_TEXTURE_PATH)
+
+
+func get_wall_stack_pedestal_texture() -> Texture2D:
+	if wall_stack_pedestal_cache != null:
+		return wall_stack_pedestal_cache
+	wall_stack_pedestal_cache = load_wall_texture(WALL_STACK_PEDESTAL_PATH)
+	return wall_stack_pedestal_cache
 
 
 func get_wall_back_texture() -> Texture2D:

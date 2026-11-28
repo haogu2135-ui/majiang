@@ -214,6 +214,40 @@ func run() -> void:
 	var season_pts_after_draw: int = int(scene.season_data.get("points", 0))
 	check(expected_draw_delta != expected_loss_delta and season_pts_after_draw - season_pts_before_draw == expected_draw_delta, "F-15: record_game_result passes wall_draw=true to season_points_for_result (delta=%d expected=%d)" % [season_pts_after_draw - season_pts_before_draw, expected_draw_delta])
 
+	# F-18 regression: round_replay_digest([]) must return "" and import_round_replay_share_code
+	# must reject empty-event / empty-digest payloads without inheriting local active round digest.
+	check(scene.round_replay_digest([]) == "", "F-18: round_replay_digest([]) returns empty string instead of local round digest")
+	var empty_replay_b64_empty_digest: String = Marshalls.utf8_to_base64(JSON.stringify({"schema": scene.REPLAY_SCHEMA_VERSION, "digest": "", "events": []}))
+	var import_empty_digest: Dictionary = scene.import_round_replay_share_code(empty_replay_b64_empty_digest)
+	check(import_empty_digest.is_empty(), "F-18: import_round_replay_share_code rejects empty events with empty digest")
+	var local_digest_f18: String = scene.round_replay_digest()
+	if local_digest_f18 != "":
+		var empty_replay_b64_local_digest: String = Marshalls.utf8_to_base64(JSON.stringify({"schema": scene.REPLAY_SCHEMA_VERSION, "digest": local_digest_f18, "events": []}))
+		var import_empty_local: Dictionary = scene.import_round_replay_share_code(empty_replay_b64_local_digest)
+		check(import_empty_local.is_empty(), "F-18: import_round_replay_share_code rejects empty events carrying local active round digest")
+
+	# F-19 regression: swap_card skips identical top wall tile, sorts hand keeping serial/draw index synced,
+	# and refuses to consume item if all remaining live wall tiles equal old_tile.
+	scene.mode = "offline"
+	scene.offline_phase = "await_discard"
+	scene.current_seat = 0
+	scene.inventory["swap_card"] = 3
+	scene.players[0]["hand"] = ["9W", "1W", "5W"]
+	scene.players[0]["hand_instance_serials"] = [101, 102, 103]
+	scene.offline_last_draw = {"seat": 0, "tile": "5W", "hand_index": 2, "serial": 103}
+	var wall_f19_dup: Array[String] = ["2W", "5W"]
+	scene.wall = wall_f19_dup
+	var swap_before_dup: int = int(scene.get_item_count("swap_card"))
+	check(scene.use_offline_inventory_item("swap_card"), "F-19: swap_card succeeds by skipping wall tile identical to old_tile")
+	check(scene.get_item_count("swap_card") == swap_before_dup - 1, "F-19: swap_card consumes exactly one item on valid swap")
+	check(scene.players[0]["hand"] == ["1W", "2W", "9W"], "F-19: swap_card replaces 5W with 2W (skipping duplicate 5W) and keeps hand sorted")
+	var synced_draw_idx: int = int(scene.offline_last_draw.get("hand_index", -1))
+	check(synced_draw_idx == 1 and str(scene.players[0]["hand"][synced_draw_idx]) == "2W" and int(scene.players[0]["hand_instance_serials"][synced_draw_idx]) == int(scene.offline_last_draw.get("serial", -2)), "F-19: swap_card keeps offline_last_draw hand_index and serial synced after sorting")
+	var wall_f19_same: Array[String] = ["2W", "H1"]
+	scene.wall = wall_f19_same
+	var swap_before_all_same: int = int(scene.get_item_count("swap_card"))
+	check(not scene.use_offline_inventory_item("swap_card") and scene.get_item_count("swap_card") == swap_before_all_same, "F-19: swap_card refuses without consuming item when all non-flower wall tiles equal old_tile")
+
 	scene.mode = "online_game"
 	check(not scene.use_offline_inventory_item("peek_card") and scene.get_item_count("peek_card") == 1, "inventory cannot expose opponents in online matches")
 	scene.mode = "offline"

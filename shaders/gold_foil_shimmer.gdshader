@@ -72,5 +72,6 @@ void fragment() {
 	float edge = edge_x * edge_y;
 	gold_color = mix(shadow_gold.rgb * 0.7, gold_color, edge);
 
-	COLOR = vec4(gold_color, base_gold.a);
+	float tex_a = texture(TEXTURE, UV).a;
+	COLOR = vec4(gold_color, base_gold.a * tex_a);
 }

@@ -526,6 +526,41 @@ func run() -> void:
 	scene.mode = prev_mode_f14
 	scene.rule_variant = prev_rule_variant
 
+	# F-17 regression: receiving a valid gameState directly while online_resume_pending == true
+	# must clear online_resume_pending / disconnect banner immediately so discarding is not blocked.
+	var prev_mode_f17: String = scene.mode
+	var prev_game_f17: Dictionary = scene.online_game.duplicate(true)
+	var prev_selected_f17: String = scene.selected_room
+	scene.mode = "online_game"
+	scene.selected_room = "QA180"
+	scene.online_resume_pending = true
+	scene.online_resume_join_sent = true
+	scene.online_reconnect_attempts = 2
+	scene.online_last_game_fingerprint = ""
+	scene.online_last_state_revision = 0
+	var f17_game_msg: Dictionary = {
+		"type": "gameState",
+		"revision": 200,
+		"game": {
+			"roomCode": "QA180",
+			"phase": "awaitDiscard",
+			"youSeat": 0,
+			"currentSeat": 0,
+			"remaining": 48,
+			"hand": ["3W", "4W"],
+			"players": [{"seat": 0, "name": "协议测试者", "handCount": 2}]
+		}
+	}
+	await send_fragmented(f17_game_msg)
+	await pump(scene, 12)
+	check(not scene.online_resume_pending and not scene.online_resume_join_sent and scene.online_reconnect_attempts == 0, "F-17: direct valid gameState clears online_resume_pending and reconnect attempts")
+	check(not scene.online_game_disconnected(), "F-17: online_game_disconnected becomes false immediately upon valid gameState")
+	var err_f17_discard: String = scene.online_action_validation_error({"type": "discard", "tile": "3W", "handIndex": 0})
+	check(err_f17_discard == "", "F-17: discarding succeeds after direct gameState recovery (err=%s)" % err_f17_discard)
+	scene.online_game = prev_game_f17
+	scene.mode = prev_mode_f17
+	scene.selected_room = prev_selected_f17
+
 	var oversized_partial := ("{\"type\":\"log\",\"text\":\"" + "X".repeat(scene.ONLINE_MESSAGE_MAX_BYTES + 32)).to_utf8_buffer()
 	check(server_peer.put_data(oversized_partial) == OK, "server queues an oversized unterminated frame")
 	await pump(scene, 80)
